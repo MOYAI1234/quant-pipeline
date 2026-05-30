@@ -1,0 +1,36 @@
+from .base_adapter import BaseAdapter
+
+
+class JasonKBAdapter(BaseAdapter):
+
+    def __init__(self, config):
+        super().__init__(config)
+
+    def connect(self):
+        self.connected = True
+
+    def health_check(self) -> bool:
+        return self.connected
+
+    def get_market_sentiment(self) -> dict:
+        return {
+            'sentiment': 'neutral',
+            'score': 50,
+            'factors': []
+        }
+
+    def get_industry_analysis(self, industry: str) -> dict:
+        return {
+            'industry': industry,
+            'outlook': 'positive',
+            'reasons': []
+        }
+
+    def get_risk_warning(self) -> list:
+        return []
+
+    def get_investment_advice(self, portfolio: dict) -> dict:
+        return {
+            'suggestions': [],
+            'warnings': []
+        }
