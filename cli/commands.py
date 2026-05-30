@@ -22,6 +22,17 @@ def cmd_start(args):
             'capital_per_grid': args.capital or 10000,
         })
         system.add_strategy(strategy)
+    elif args.strategy == 'rotation':
+        etf_pool = args.etf_pool.split(',') if args.etf_pool else ['510300', '510500', '159915', '512100']
+        strategy = RotationStrategy({
+            'name': '行业轮动',
+            'symbol': etf_pool[0],  # 主 symbol
+            'etf_pool': etf_pool,
+            'lookback': args.lookback or 20,
+            'top_n': args.top_n or 2,
+            'rebalance_days': args.rebalance_days or 30,
+        })
+        system.add_strategy(strategy)
 
     system.run()
 
@@ -52,6 +63,10 @@ def main():
     start_parser.add_argument('--grid-size', type=float)
     start_parser.add_argument('--grid-count', type=int)
     start_parser.add_argument('--capital', type=float)
+    start_parser.add_argument('--etf-pool', type=str, help='ETF池，逗号分隔')
+    start_parser.add_argument('--lookback', type=int, help='回看周期')
+    start_parser.add_argument('--top-n', type=int, help='选择ETF数量')
+    start_parser.add_argument('--rebalance-days', type=int, help='再平衡天数')
 
     status_parser = subparsers.add_parser('status', help='查看状态')
 

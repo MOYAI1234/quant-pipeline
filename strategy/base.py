@@ -7,11 +7,11 @@ class BaseStrategy(ABC):
         self.config = config
         self.name = config.get('name', 'Unknown')
         self.symbol = config.get('symbol')
-        self.position = 0
         self.trades = []
 
     @abstractmethod
-    def generate_signal(self, data: dict) -> list:
+    def generate_signal(self, data: dict, portfolio: dict = None) -> list:
+        """生成交易信号，portfolio 为当前组合状态"""
         pass
 
     @abstractmethod
@@ -34,3 +34,12 @@ class BaseStrategy(ABC):
             'total_profit': sum(profits),
             'max_loss': min(losses) if losses else 0,
         }
+
+    def get_current_shares(self, portfolio: dict) -> int:
+        """从 portfolio 获取当前持仓股数"""
+        if not portfolio:
+            return 0
+        positions = portfolio.get('positions', {})
+        if self.symbol in positions:
+            return positions[self.symbol].get('shares', 0)
+        return 0

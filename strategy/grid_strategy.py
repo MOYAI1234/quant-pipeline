@@ -21,34 +21,41 @@ class GridStrategy(BaseStrategy):
         self.buy_grids.sort(reverse=True)
         self.sell_grids.sort()
 
-    def generate_signal(self, data: dict) -> list:
+    def generate_signal(self, data: dict, portfolio: dict = None) -> list:
         current_price = data.get('price', 0)
+        if current_price <= 0:
+            return []
+
         signals = []
-        for buy_price in self.buy_grids:
-            if current_price <= buy_price and self.can_buy():
-                signals.append({
-                    'action': 'buy',
-                    'price': buy_price,
-                    'amount': self.capital_per_grid,
-                    'reason': f'网格买入，价格{buy_price}'
-                })
-                break
-        for sell_price in self.sell_grids:
-            if current_price >= sell_price and self.can_sell():
-                signals.append({
-                    'action': 'sell',
-                    'price': sell_price,
-                    'amount': self.capital_per_grid,
-                    'reason': f'网格卖出，价格{sell_price}'
-                })
-                break
+        current_shares = self.get_current_shares(portfolio)
+
+        # 检查买入信号（当前无持仓或持仓未满）
+        if current_shares == 0:
+            for buy_price in self.buy_grids:
+                if current_price <= buy_price:
+                    signals.append({
+                        'action': 'buy',
+                        'symbol': self.symbol,
+                        'price': buy_price,
+                        'amount': self.capital_per_grid,
+                        'reason': f'网格买入，价格{buy_price}'
+                    })
+                    break
+
+        # 检查卖出信号（有持仓才能卖）
+        if current_shares > 0:
+            for sell_price in self.sell_grids:
+                if current_price >= sell_price:
+                    signals.append({
+                        'action': 'sell',
+                        'symbol': self.symbol,
+                        'price': sell_price,
+                        'amount': self.capital_per_grid,
+                        'reason': f'网格卖出，价格{sell_price}'
+                    })
+                    break
+
         return signals
-
-    def can_buy(self) -> bool:
-        return self.position < self.max_position
-
-    def can_sell(self) -> bool:
-        return self.position > 0
 
     def calc_position_size(self, capital: float, price: float) -> int:
         amount = self.capital_per_grid

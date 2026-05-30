@@ -42,6 +42,44 @@ class RiskManager:
             'checks': checks
         }
 
+    def check_portfolio_stop_loss(self, portfolio: dict) -> list:
+        """检查所有持仓的止损条件，返回需要执行的卖出信号"""
+        stop_loss_signals = []
+        positions = portfolio.get('positions', {})
+
+        for symbol, pos in positions.items():
+            current_price = pos.get('current_price', 0)
+            avg_price = pos.get('avg_price', 0)
+
+            if current_price <= 0 or avg_price <= 0:
+                continue
+
+            # 检查固定止损
+            stop_check = self.stop_loss.check_stop_loss(symbol, current_price, avg_price)
+            if stop_check['triggered']:
+                stop_loss_signals.append({
+                    'action': 'sell',
+                    'symbol': symbol,
+                    'price': current_price,
+                    'amount': pos.get('shares', 0) * current_price,
+                    'reason': stop_check['reason']
+                })
+                continue
+
+            # 检查跟踪止损
+            self.stop_loss.update_high_price(symbol, current_price)
+            trailing_check = self.stop_loss.check_trailing_stop(symbol, current_price)
+            if trailing_check['triggered']:
+                stop_loss_signals.append({
+                    'action': 'sell',
+                    'symbol': symbol,
+                    'price': current_price,
+                    'amount': pos.get('shares', 0) * current_price,
+                    'reason': trailing_check['reason']
+                })
+
+        return stop_loss_signals
+
     def check_portfolio_risk(self, portfolio: dict) -> dict:
         alerts = []
 

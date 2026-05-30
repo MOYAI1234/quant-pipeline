@@ -66,14 +66,41 @@ class QuantPipeline:
 
         while self.running:
             try:
+                # 先获取当前组合状态
+                portfolio = self.executor.get_portfolio()
+
+                # 检查持仓止损
+                stop_loss_signals = self.risk_manager.check_portfolio_stop_loss(portfolio)
+                for sig in stop_loss_signals:
+                    risk_check = self.risk_manager.check_order(sig, portfolio)
+                    if risk_check['passed']:
+                        success = self.executor.execute_order(sig)
+                        if success:
+                            self.logger.info(f"[止损] 执行卖出: {sig['symbol']} {sig.get('price', 0)}")
+
+                # 更新组合状态
+                portfolio = self.executor.get_portfolio()
+
                 for name, strategy in self.strategy_manager.get_all().items():
-                    data = self.data_manager.get_etf_realtime(strategy.symbol)
-                    signals = strategy.generate_signal(data)
+                    # 获取市场数据
+                    if hasattr(strategy, 'etf_pool'):
+                        # 轮动策略需要多个 ETF 数据
+                        data = {}
+                        for symbol in strategy.etf_pool:
+                            data[symbol] = self.data_manager.get_etf_realtime(symbol)
+                            # 添加历史价格用于计算动量
+                            history = self.data_manager.get_etf_history(symbol, '', '')
+                            if history:
+                                data[symbol]['prices'] = [h.get('close', 0) for h in history]
+                    else:
+                        data = self.data_manager.get_etf_realtime(strategy.symbol)
+
+                    # 传递 portfolio 给策略
+                    signals = strategy.generate_signal(data, portfolio)
 
                     for sig in signals:
-                        sig['symbol'] = strategy.symbol
                         risk_check = self.risk_manager.check_order(
-                            sig, self.executor.get_portfolio()
+                            sig, portfolio
                         )
 
                         if risk_check['passed']:

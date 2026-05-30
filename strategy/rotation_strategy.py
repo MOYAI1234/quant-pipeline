@@ -13,7 +13,7 @@ class RotationStrategy(BaseStrategy):
         self.selected_etfs = []
         self.last_rebalance = None
 
-    def generate_signal(self, data: dict) -> list:
+    def generate_signal(self, data: dict, portfolio: dict = None) -> list:
         signals = []
         if self.need_rebalance():
             momentum = self.calculate_momentum(data)
