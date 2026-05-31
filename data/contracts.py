@@ -23,7 +23,7 @@ class ETFNav:
     symbol: str
     nav: float            # 单位净值（元）
     price: float          # 市场价格（元）
-    premium: float        # 溢价率（%，正数为溢价，负数为折价）
+    premium: float        # 溢价率（小数，0.05 = 5%，正数为溢价，负数为折价）
     timestamp: str
 
 

@@ -17,9 +17,14 @@ class RotationStrategy(BaseStrategy):
         signals = []
         if self.need_rebalance():
             momentum = self.calculate_momentum(data)
+            if not momentum:
+                return []
             self.selected_etfs = self.select_top_etfs(momentum)
-            signals = self.generate_rebalance_signals()
-            self.last_rebalance = datetime.now()
+            if not self.selected_etfs:
+                return []
+            signals = self.generate_rebalance_signals(data)
+            if signals:
+                self.last_rebalance = datetime.now()
         return signals
 
     def calculate_momentum(self, data: dict) -> dict:
@@ -36,16 +41,21 @@ class RotationStrategy(BaseStrategy):
         sorted_etfs = sorted(momentum.items(), key=lambda x: x[1], reverse=True)
         return [etf[0] for etf in sorted_etfs[:self.top_n]]
 
-    def generate_rebalance_signals(self) -> list:
+    def generate_rebalance_signals(self, data: dict = None) -> list:
         signals = []
         weight = 1.0 / len(self.selected_etfs) if self.selected_etfs else 0
         for symbol in self.selected_etfs:
-            signals.append({
-                'action': 'rebalance',
-                'symbol': symbol,
-                'target_weight': weight,
-                'reason': '行业轮动调仓'
-            })
+            price = 0
+            if data and symbol in data:
+                price = data[symbol].get('price', 0)
+            if price > 0:
+                signals.append({
+                    'action': 'rebalance',
+                    'symbol': symbol,
+                    'target_weight': weight,
+                    'price': price,
+                    'reason': '行业轮动调仓'
+                })
         return signals
 
     def need_rebalance(self) -> bool:

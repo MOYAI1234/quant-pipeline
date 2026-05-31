@@ -66,8 +66,15 @@ class QuantPipeline:
 
         while self.running:
             try:
-                # 先获取当前组合状态
-                portfolio = self.executor.get_portfolio()
+                # 获取所有持仓的实时行情
+                current_prices = {}
+                for symbol in self.executor.positions:
+                    quote = self.data_manager.get_etf_realtime(symbol)
+                    if quote and quote.get('price', 0) > 0:
+                        current_prices[symbol] = quote['price']
+
+                # 获取组合状态（使用实时价格估值）
+                portfolio = self.executor.get_portfolio(current_prices)
 
                 # 检查持仓止损
                 stop_loss_signals = self.risk_manager.check_portfolio_stop_loss(portfolio)
@@ -79,16 +86,14 @@ class QuantPipeline:
                             self.logger.info(f"[止损] 执行卖出: {sig['symbol']} {sig.get('price', 0)}")
 
                 # 更新组合状态
-                portfolio = self.executor.get_portfolio()
+                portfolio = self.executor.get_portfolio(current_prices)
 
                 for name, strategy in self.strategy_manager.get_all().items():
                     # 获取市场数据
                     if hasattr(strategy, 'etf_pool'):
-                        # 轮动策略需要多个 ETF 数据
                         data = {}
                         for symbol in strategy.etf_pool:
                             data[symbol] = self.data_manager.get_etf_realtime(symbol)
-                            # 添加历史价格用于计算动量
                             history = self.data_manager.get_etf_history(symbol, '', '')
                             if history:
                                 data[symbol]['prices'] = [h.get('close', 0) for h in history]
