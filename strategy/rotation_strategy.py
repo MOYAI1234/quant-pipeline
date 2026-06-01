@@ -76,13 +76,12 @@ class RotationStrategy(BaseStrategy):
 
         if valid_buy_symbols:
             buy_weight = 1.0 / len(valid_buy_symbols)
-            # 计算可用于买入的总金额
-            total_value = portfolio.get('total_value', 0) if portfolio else 0
-            # 减去已卖出的金额（卖出信号在前，会释放现金）
+            # 计算可用于买入的总金额 = 当前现金 + 预计卖出所得
+            capital = portfolio.get('capital', 0) if portfolio else 0
             sold_value = sum(
                 s.get('amount', 0) for s in signals if s.get('action') == 'sell'
             )
-            available_capital = total_value + sold_value
+            available_capital = capital + sold_value
 
             for symbol in valid_buy_symbols:
                 target_amount = available_capital * buy_weight

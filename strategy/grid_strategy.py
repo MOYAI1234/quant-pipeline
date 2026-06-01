@@ -40,10 +40,10 @@ class GridStrategy(BaseStrategy):
                     self.grid_ledger[grid_price]['bought'] = True
                     break
         elif action == 'sell':
-            # 找到对应的网格价格并标记卖出
+            # 找到对应的网格价格并重置状态（允许再次买入）
             for grid_price in self.buy_grids:
                 if self.grid_ledger[grid_price]['bought'] and not self.grid_ledger[grid_price]['sold']:
-                    self.grid_ledger[grid_price]['sold'] = True
+                    self.grid_ledger[grid_price] = {'bought': False, 'sold': False}
                     break
 
     def generate_signal(self, data: dict, portfolio: dict = None) -> list:
