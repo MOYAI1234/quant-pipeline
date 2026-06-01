@@ -1,5 +1,6 @@
 import signal
 import sys
+import time
 from datetime import datetime
 
 from config.settings import SYSTEM_CONFIG
@@ -66,88 +67,94 @@ class QuantPipeline:
 
         while self.running:
             try:
-                # 获取所有持仓的实时行情
-                current_prices = {}
-                for symbol in self.executor.positions:
-                    quote = self.data_manager.get_etf_realtime(symbol)
-                    if quote and quote.get('price', 0) > 0:
-                        current_prices[symbol] = quote['price']
-
-                # 获取组合状态（使用实时价格估值）
-                portfolio = self.executor.get_portfolio(current_prices)
-
-                # 检查持仓止损
-                stop_loss_signals = self.risk_manager.check_portfolio_stop_loss(portfolio)
-                for sig in stop_loss_signals:
-                    risk_check = self.risk_manager.check_order(sig, portfolio)
-                    if risk_check['passed']:
-                        success = self.executor.execute_order(sig)
-                        if success:
-                            # 通知所有持有该 symbol 的策略
-                            for name, strategy in self.strategy_manager.get_all().items():
-                                if hasattr(strategy, 'on_trade_confirmed'):
-                                    strategy.on_trade_confirmed(sig)
-                            self.logger.info(f"[止损] 执行卖出: {sig['symbol']} {sig.get('price', 0)}")
-
-                # 更新组合状态
-                portfolio = self.executor.get_portfolio(current_prices)
-
-                for name, strategy in self.strategy_manager.get_all().items():
-                    # 获取市场数据
-                    if hasattr(strategy, 'etf_pool'):
-                        data = {}
-                        for symbol in strategy.etf_pool:
-                            data[symbol] = self.data_manager.get_etf_realtime(symbol)
-                            history = self.data_manager.get_etf_history(symbol, '', '')
-                            if history:
-                                data[symbol]['prices'] = [h.get('close', 0) for h in history]
-                    else:
-                        data = self.data_manager.get_etf_realtime(strategy.symbol)
-
-                    # 传递 portfolio 给策略
-                    signals = strategy.generate_signal(data, portfolio)
-
-                    for sig in signals:
-                        risk_check = self.risk_manager.check_order(
-                            sig, portfolio
-                        )
-
-                        if risk_check['passed']:
-                            success = self.executor.execute_order(sig)
-                            if success:
-                                strategy.record_trade(sig)
-                                if hasattr(strategy, 'on_trade_confirmed'):
-                                    strategy.on_trade_confirmed(sig)
-                                self.logger.info(
-                                    f"[{name}] 执行交易: {sig['action']} {sig.get('price', 0)}"
-                                )
-                            else:
-                                if hasattr(strategy, 'on_trade_failed'):
-                                    strategy.on_trade_failed(sig)
-                                self.logger.warning(
-                                    f"[{name}] 执行失败: {sig['action']} {sig.get('price', 0)}"
-                                )
-                        else:
-                            if hasattr(strategy, 'on_trade_failed'):
-                                strategy.on_trade_failed(sig)
-                            self.logger.warning(
-                                f"[{name}] 风险检查未通过: {risk_check['checks']}"
-                            )
-
-                self.monitor.update_metrics(
-                    self.executor.get_portfolio(current_prices),
-                    self._get_strategy_summary()
-                )
-
-                import time
+                self.run_once()
                 time.sleep(check_interval)
 
             except Exception as e:
                 self.logger.error(f"错误: {e}")
-                import time
                 time.sleep(check_interval)
 
         self.stop()
+
+    def run_once(self):
+        """执行一轮行情获取、风控检查、策略信号和监控更新。"""
+        # 获取所有持仓的实时行情
+        current_prices = {}
+        for symbol in self.executor.positions:
+            quote = self.data_manager.get_etf_realtime(symbol)
+            if quote and quote.get('price', 0) > 0:
+                current_prices[symbol] = quote['price']
+
+        # 获取组合状态（使用实时价格估值）
+        portfolio = self.executor.get_portfolio(current_prices)
+
+        # 检查持仓止损
+        stop_loss_signals = self.risk_manager.check_portfolio_stop_loss(portfolio)
+        for sig in stop_loss_signals:
+            risk_check = self.risk_manager.check_order(sig, portfolio)
+            if risk_check['passed']:
+                success = self.executor.execute_order(sig)
+                if success:
+                    # 通知所有持有该 symbol 的策略
+                    for name, strategy in self.strategy_manager.get_all().items():
+                        if hasattr(strategy, 'on_trade_confirmed'):
+                            strategy.on_trade_confirmed(sig)
+                    self.logger.info(f"[止损] 执行卖出: {sig['symbol']} {sig.get('price', 0)}")
+
+        # 更新组合状态
+        portfolio = self.executor.get_portfolio(current_prices)
+
+        for name, strategy in self.strategy_manager.get_all().items():
+            # 获取市场数据
+            if hasattr(strategy, 'etf_pool'):
+                data = {}
+                for symbol in strategy.etf_pool:
+                    data[symbol] = self.data_manager.get_etf_realtime(symbol)
+                    history = self.data_manager.get_etf_history(symbol, '', '')
+                    if history:
+                        data[symbol]['prices'] = [h.get('close', 0) for h in history]
+            else:
+                data = self.data_manager.get_etf_realtime(strategy.symbol)
+
+            # 传递 portfolio 给策略
+            signals = strategy.generate_signal(data, portfolio)
+
+            for sig in signals:
+                risk_check = self.risk_manager.check_order(
+                    sig, portfolio
+                )
+
+                if risk_check['passed']:
+                    success = self.executor.execute_order(sig)
+                    if success:
+                        strategy.record_trade(sig)
+                        if hasattr(strategy, 'on_trade_confirmed'):
+                            strategy.on_trade_confirmed(sig)
+                        self.logger.info(
+                            f"[{name}] 执行交易: {sig['action']} {sig.get('price', 0)}"
+                        )
+                    else:
+                        if hasattr(strategy, 'on_trade_failed'):
+                            strategy.on_trade_failed(sig)
+                        self.logger.warning(
+                            f"[{name}] 执行失败: {sig['action']} {sig.get('price', 0)}"
+                        )
+                else:
+                    if hasattr(strategy, 'on_trade_failed'):
+                        strategy.on_trade_failed(sig)
+                    self.logger.warning(
+                        f"[{name}] 风险检查未通过: {risk_check['checks']}"
+                    )
+
+        portfolio = self.executor.get_portfolio(current_prices)
+        strategy_summary = self._get_strategy_summary()
+        self.monitor.update_metrics(portfolio, strategy_summary)
+
+        return {
+            'portfolio': portfolio,
+            'strategies': strategy_summary,
+            'metrics': self.monitor.get_metrics()
+        }
 
     def _get_strategy_summary(self) -> dict:
         summary = {}

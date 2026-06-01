@@ -1,7 +1,4 @@
 import pytest
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from strategy.grid_strategy import GridStrategy
 from execution.simulator import Simulator
@@ -126,6 +123,35 @@ class TestGridE2E:
         portfolio = self.simulator.get_portfolio()
         assert portfolio['realized_pnl'] > 0
         assert '510300' not in self.simulator.positions
+
+    def test_stop_loss_sell_resets_grid_ledger_and_allows_reentry(self):
+        # 买入一格 (3.9 网格)
+        data_buy = {'price': 3.95, 'volume': 1000000, 'amount': 4000000}
+        portfolio = self.simulator.get_portfolio()
+        signals = self.strategy.generate_signal(data_buy, portfolio)
+        self._execute_and_confirm(signals)
+
+        assert self.strategy.grid_ledger[3.9]['bought'] is True
+
+        # 跌破止损后由风控清仓
+        portfolio = self.simulator.get_portfolio({'510300': 3.6})
+        stop_signals = self.risk_manager.check_portfolio_stop_loss(portfolio)
+        assert len(stop_signals) == 1
+        assert stop_signals[0]['action'] == 'sell'
+
+        success = self.simulator.execute_order(stop_signals[0])
+        assert success is True
+        self.strategy.on_trade_confirmed(stop_signals[0])
+
+        assert '510300' not in self.simulator.positions
+        assert self.strategy.grid_ledger[3.9]['bought'] is False
+
+        # 回到同一买入网格后，可以再次生成买入信号
+        portfolio = self.simulator.get_portfolio()
+        reentry_signals = self.strategy.generate_signal(data_buy, portfolio)
+        assert len(reentry_signals) == 1
+        assert reentry_signals[0]['action'] == 'buy'
+        assert reentry_signals[0]['price'] == 3.9
 
     def test_max_grids_limit(self):
         # 买入3格（达到上限）
