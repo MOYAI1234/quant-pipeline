@@ -121,7 +121,7 @@ class QuantPipeline:
                             )
 
                 self.monitor.update_metrics(
-                    self.executor.get_portfolio(),
+                    self.executor.get_portfolio(current_prices),
                     self._get_strategy_summary()
                 )
 

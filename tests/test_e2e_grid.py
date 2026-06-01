@@ -55,9 +55,12 @@ class TestGridE2E:
         assert len(signals) > 0
         assert signals[0]['action'] == 'buy'
         assert signals[0]['price'] == 3.8
+        # 执行第二个信号
+        for sig in signals:
+            self.simulator.execute_order(sig)
 
-        # 验证持仓增加
-        assert self.simulator.positions.get('510300', {}).get('shares', 0) == 1000  # 还没执行
+        # 验证持仓增加到 2000
+        assert self.simulator.positions.get('510300', {}).get('shares', 0) == 2000
 
     def test_no_duplicate_buy_same_grid(self):
         # 第一格买入 (3.9 网格)

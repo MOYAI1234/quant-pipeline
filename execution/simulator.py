@@ -32,6 +32,8 @@ class Simulator(BaseExecutor):
         return False
 
     def _execute_buy_by_shares(self, symbol: str, price: float, shares: int) -> bool:
+        if not symbol or not symbol.strip():
+            return False
         if price <= 0 or shares <= 0:
             return False
 

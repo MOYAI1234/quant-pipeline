@@ -43,19 +43,28 @@ class RotationStrategy(BaseStrategy):
 
     def generate_rebalance_signals(self, data: dict = None) -> list:
         signals = []
-        weight = 1.0 / len(self.selected_etfs) if self.selected_etfs else 0
+        # 只计算有价格数据的 symbol
+        valid_symbols = []
+        symbol_prices = {}
         for symbol in self.selected_etfs:
-            price = 0
             if data and symbol in data:
                 price = data[symbol].get('price', 0)
-            if price > 0:
-                signals.append({
-                    'action': 'rebalance',
-                    'symbol': symbol,
-                    'target_weight': weight,
-                    'price': price,
-                    'reason': '行业轮动调仓'
-                })
+                if price > 0:
+                    valid_symbols.append(symbol)
+                    symbol_prices[symbol] = price
+
+        if not valid_symbols:
+            return []
+
+        weight = 1.0 / len(valid_symbols)
+        for symbol in valid_symbols:
+            signals.append({
+                'action': 'rebalance',
+                'symbol': symbol,
+                'target_weight': weight,
+                'price': symbol_prices[symbol],
+                'reason': '行业轮动调仓'
+            })
         return signals
 
     def need_rebalance(self) -> bool:

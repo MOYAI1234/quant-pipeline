@@ -12,7 +12,6 @@ class GridStrategy(BaseStrategy):
         self.max_grids = config.get('max_grids', self.grid_count)
         self.buy_grids = []
         self.sell_grids = []
-        self.bought_grids = set()
         self.calc_grids()
 
     def calc_grids(self):
@@ -22,6 +21,27 @@ class GridStrategy(BaseStrategy):
         self.buy_grids.sort(reverse=True)
         self.sell_grids.sort()
 
+    def _get_bought_grid_prices(self, portfolio: dict) -> set:
+        """从 portfolio 推算已买入的网格价格"""
+        if not portfolio:
+            return set()
+        positions = portfolio.get('positions', {})
+        if self.symbol not in positions:
+            return set()
+        pos = positions[self.symbol]
+        avg_price = pos.get('avg_price', 0)
+        shares = pos.get('shares', 0)
+        if shares <= 0 or avg_price <= 0:
+            return set()
+        # 根据均价反推已买的网格价格
+        bought_prices = set()
+        for grid_price in self.buy_grids:
+            upper_bound = grid_price + self.grid_size
+            if grid_price <= avg_price < upper_bound:
+                bought_prices.add(grid_price)
+                break
+        return bought_prices
+
     def generate_signal(self, data: dict, portfolio: dict = None) -> list:
         current_price = data.get('price', 0)
         if current_price <= 0:
@@ -30,15 +50,16 @@ class GridStrategy(BaseStrategy):
         signals = []
         current_shares = self.get_current_shares(portfolio)
         current_grids = current_shares // self.shares_per_grid
+        bought_prices = self._get_bought_grid_prices(portfolio)
 
-        # 检查买入信号：找到最接近当前价且价格在网格区间内的未买入网格
+        # 检查买入信号：找到最接近当前价且未买入的网格
         if current_grids < self.max_grids:
-            for i, buy_price in enumerate(self.buy_grids):
-                if buy_price in self.bought_grids:
+            for buy_price in self.buy_grids:
+                if buy_price in bought_prices:
                     continue
-                # 计算这个网格的上限（下一个更高网格的价格）
                 upper_bound = buy_price + self.grid_size
-                if buy_price < current_price <= upper_bound:
+                # 下界包含，上界排除
+                if buy_price <= current_price < upper_bound:
                     signals.append({
                         'action': 'buy',
                         'symbol': self.symbol,
@@ -46,7 +67,6 @@ class GridStrategy(BaseStrategy):
                         'shares': self.shares_per_grid,
                         'reason': f'网格买入，价格{buy_price}'
                     })
-                    self.bought_grids.add(buy_price)
                     break
 
         # 检查卖出信号：有持仓时，找最近的卖出网格
@@ -60,11 +80,6 @@ class GridStrategy(BaseStrategy):
                         'shares': self.shares_per_grid,
                         'reason': f'网格卖出，价格{sell_price}'
                     })
-                    # 找回对应的买入网格并清除
-                    for buy_price in self.buy_grids:
-                        if buy_price in self.bought_grids:
-                            self.bought_grids.discard(buy_price)
-                            break
                     break
 
         return signals
