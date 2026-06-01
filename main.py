@@ -83,6 +83,10 @@ class QuantPipeline:
                     if risk_check['passed']:
                         success = self.executor.execute_order(sig)
                         if success:
+                            # 通知所有持有该 symbol 的策略
+                            for name, strategy in self.strategy_manager.get_all().items():
+                                if hasattr(strategy, 'on_trade_confirmed'):
+                                    strategy.on_trade_confirmed(sig)
                             self.logger.info(f"[止损] 执行卖出: {sig['symbol']} {sig.get('price', 0)}")
 
                 # 更新组合状态

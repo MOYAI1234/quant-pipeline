@@ -76,12 +76,24 @@ class RotationStrategy(BaseStrategy):
 
         if valid_buy_symbols:
             buy_weight = 1.0 / len(valid_buy_symbols)
+            # 计算可用于买入的总金额
+            total_value = portfolio.get('total_value', 0) if portfolio else 0
+            # 减去已卖出的金额（卖出信号在前，会释放现金）
+            sold_value = sum(
+                s.get('amount', 0) for s in signals if s.get('action') == 'sell'
+            )
+            available_capital = total_value + sold_value
+
             for symbol in valid_buy_symbols:
+                target_amount = available_capital * buy_weight
+                price = symbol_prices[symbol]
+                shares = int(target_amount / price / 100) * 100
                 signals.append({
                     'action': 'buy',
                     'symbol': symbol,
-                    'price': symbol_prices[symbol],
-                    'amount': 0,  # 金额由执行器根据 portfolio 计算
+                    'price': price,
+                    'shares': shares,
+                    'amount': shares * price,
                     'reason': '行业轮动调仓(买入)'
                 })
 
