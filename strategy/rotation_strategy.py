@@ -12,6 +12,7 @@ class RotationStrategy(BaseStrategy):
         self.rebalance_days = config.get('rebalance_days', 30)
         self.selected_etfs = []
         self.last_rebalance = None
+        self.pending_rebalance_count = 0
 
     def generate_signal(self, data: dict, portfolio: dict = None) -> list:
         signals = []
@@ -24,8 +25,15 @@ class RotationStrategy(BaseStrategy):
                 return []
             signals = self.generate_rebalance_signals(data, portfolio)
             if signals:
-                self.last_rebalance = datetime.now()
+                self.pending_rebalance_count = len(signals)
         return signals
+
+    def on_trade_confirmed(self, trade: dict):
+        """交易确认后更新 rebalance 状态"""
+        if self.pending_rebalance_count > 0:
+            self.pending_rebalance_count -= 1
+            if self.pending_rebalance_count == 0:
+                self.last_rebalance = datetime.now()
 
     def calculate_momentum(self, data: dict) -> dict:
         momentum = {}
@@ -99,6 +107,8 @@ class RotationStrategy(BaseStrategy):
         return signals
 
     def need_rebalance(self) -> bool:
+        if self.pending_rebalance_count > 0:
+            return False
         if self.last_rebalance is None:
             return True
         days_since = (datetime.now() - self.last_rebalance).days
