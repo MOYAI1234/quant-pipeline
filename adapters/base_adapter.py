@@ -1,10 +1,10 @@
-from abc import ABC
+from typing import ClassVar
 
 
-class BaseAdapter(ABC):
-    SUPPORTED_MODES = {'mock', 'real'}
+class BaseAdapter:
+    SUPPORTED_MODES: ClassVar[frozenset[str]] = frozenset({'mock', 'real'})
 
-    def __init__(self, config):
+    def __init__(self, config) -> None:
         self.config = config
         self.mode = config.get('mode', 'mock')
         if self.mode not in self.SUPPORTED_MODES:
@@ -23,6 +23,7 @@ class BaseAdapter(ABC):
 
     def disconnect(self):
         self.connected = False
+        self.last_error = ''
 
     def health_check(self) -> dict:
         return {
@@ -34,7 +35,7 @@ class BaseAdapter(ABC):
             'error': self.last_error,
         }
 
-    def _ensure_available(self):
+    def _ensure_available(self) -> None:
         from data.contracts import ServiceUnavailableError
 
         if self.mode != 'mock':

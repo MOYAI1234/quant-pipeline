@@ -26,7 +26,7 @@ class JasonKBAdapter(BaseAdapter):
         self._ensure_available()
         return []
 
-    def get_investment_advice(self, portfolio: dict) -> dict:
+    def get_investment_advice(self, _portfolio: dict) -> dict:
         self._ensure_available()
         return {
             'suggestions': [],

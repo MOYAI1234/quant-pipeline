@@ -71,6 +71,7 @@ def test_data_manager_surfaces_real_mode_as_unavailable():
 
     assert status['mx_data']['available'] is False
     assert status['mx_data']['error'] == 'real mode not implemented'
+    assert manager.is_mock_mode() is False
     with pytest.raises(ServiceUnavailableError):
         manager.get_etf_realtime('510300')
 

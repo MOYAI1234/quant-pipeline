@@ -72,7 +72,7 @@ class DataManager:
         }
 
     def is_mock_mode(self) -> bool:
-        return any(
+        return all(
             status.get('mock', False)
             for status in self.health_check().values()
         )
