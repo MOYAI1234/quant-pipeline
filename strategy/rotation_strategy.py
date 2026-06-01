@@ -22,7 +22,7 @@ class RotationStrategy(BaseStrategy):
             self.selected_etfs = self.select_top_etfs(momentum)
             if not self.selected_etfs:
                 return []
-            signals = self.generate_rebalance_signals(data)
+            signals = self.generate_rebalance_signals(data, portfolio)
             if signals:
                 self.last_rebalance = datetime.now()
         return signals
@@ -41,30 +41,54 @@ class RotationStrategy(BaseStrategy):
         sorted_etfs = sorted(momentum.items(), key=lambda x: x[1], reverse=True)
         return [etf[0] for etf in sorted_etfs[:self.top_n]]
 
-    def generate_rebalance_signals(self, data: dict = None) -> list:
+    def generate_rebalance_signals(self, data: dict = None, portfolio: dict = None) -> list:
         signals = []
-        # 只计算有价格数据的 symbol
-        valid_symbols = []
+        # 收集有价格数据的选中 symbol
+        valid_buy_symbols = []
         symbol_prices = {}
         for symbol in self.selected_etfs:
             if data and symbol in data:
                 price = data[symbol].get('price', 0)
                 if price > 0:
-                    valid_symbols.append(symbol)
+                    valid_buy_symbols.append(symbol)
                     symbol_prices[symbol] = price
 
-        if not valid_symbols:
+        if not valid_buy_symbols:
             return []
 
-        weight = 1.0 / len(valid_symbols)
-        for symbol in valid_symbols:
+        # 计算买入权重
+        buy_weight = 1.0 / len(valid_buy_symbols)
+
+        # 生成买入信号
+        for symbol in valid_buy_symbols:
             signals.append({
                 'action': 'rebalance',
                 'symbol': symbol,
-                'target_weight': weight,
+                'target_weight': buy_weight,
                 'price': symbol_prices[symbol],
-                'reason': '行业轮动调仓'
+                'reason': '行业轮动调仓(买入)'
             })
+
+        # 生成卖出信号：已持有但不在 selected_etfs 中的
+        if portfolio:
+            positions = portfolio.get('positions', {})
+            for symbol, pos in positions.items():
+                if symbol not in self.selected_etfs and pos.get('shares', 0) > 0:
+                    price = 0
+                    if data and symbol in data:
+                        price = data[symbol].get('price', 0)
+                    if price <= 0:
+                        price = pos.get('current_price', pos.get('avg_price', 0))
+                    if price > 0:
+                        signals.append({
+                            'action': 'sell',
+                            'symbol': symbol,
+                            'price': price,
+                            'shares': pos['shares'],
+                            'amount': pos['shares'] * price,
+                            'reason': '行业轮动调仓(卖出跌出top_n)'
+                        })
+
         return signals
 
     def need_rebalance(self) -> bool:

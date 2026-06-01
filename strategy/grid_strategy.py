@@ -65,6 +65,7 @@ class GridStrategy(BaseStrategy):
                         'symbol': self.symbol,
                         'price': buy_price,
                         'shares': self.shares_per_grid,
+                        'amount': self.shares_per_grid * buy_price,
                         'reason': f'网格买入，价格{buy_price}'
                     })
                     break
@@ -78,6 +79,7 @@ class GridStrategy(BaseStrategy):
                         'symbol': self.symbol,
                         'price': sell_price,
                         'shares': self.shares_per_grid,
+                        'amount': self.shares_per_grid * sell_price,
                         'reason': f'网格卖出，价格{sell_price}'
                     })
                     break
