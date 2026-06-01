@@ -35,6 +35,11 @@ class RotationStrategy(BaseStrategy):
             if self.pending_rebalance_count == 0:
                 self.last_rebalance = datetime.now()
 
+    def on_trade_failed(self, trade: dict):
+        """交易失败后递减 pending，允许重试"""
+        if self.pending_rebalance_count > 0:
+            self.pending_rebalance_count -= 1
+
     def calculate_momentum(self, data: dict) -> dict:
         momentum = {}
         for symbol in self.etf_pool:

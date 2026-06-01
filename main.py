@@ -116,13 +116,20 @@ class QuantPipeline:
                             success = self.executor.execute_order(sig)
                             if success:
                                 strategy.record_trade(sig)
-                                # 通知策略交易确认（更新 grid ledger 等）
                                 if hasattr(strategy, 'on_trade_confirmed'):
                                     strategy.on_trade_confirmed(sig)
                                 self.logger.info(
                                     f"[{name}] 执行交易: {sig['action']} {sig.get('price', 0)}"
                                 )
+                            else:
+                                if hasattr(strategy, 'on_trade_failed'):
+                                    strategy.on_trade_failed(sig)
+                                self.logger.warning(
+                                    f"[{name}] 执行失败: {sig['action']} {sig.get('price', 0)}"
+                                )
                         else:
+                            if hasattr(strategy, 'on_trade_failed'):
+                                strategy.on_trade_failed(sig)
                             self.logger.warning(
                                 f"[{name}] 风险检查未通过: {risk_check['checks']}"
                             )
