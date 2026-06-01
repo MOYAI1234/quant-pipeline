@@ -43,33 +43,8 @@ class RotationStrategy(BaseStrategy):
 
     def generate_rebalance_signals(self, data: dict = None, portfolio: dict = None) -> list:
         signals = []
-        # 收集有价格数据的选中 symbol
-        valid_buy_symbols = []
-        symbol_prices = {}
-        for symbol in self.selected_etfs:
-            if data and symbol in data:
-                price = data[symbol].get('price', 0)
-                if price > 0:
-                    valid_buy_symbols.append(symbol)
-                    symbol_prices[symbol] = price
 
-        if not valid_buy_symbols:
-            return []
-
-        # 计算买入权重
-        buy_weight = 1.0 / len(valid_buy_symbols)
-
-        # 生成买入信号
-        for symbol in valid_buy_symbols:
-            signals.append({
-                'action': 'rebalance',
-                'symbol': symbol,
-                'target_weight': buy_weight,
-                'price': symbol_prices[symbol],
-                'reason': '行业轮动调仓(买入)'
-            })
-
-        # 生成卖出信号：已持有但不在 selected_etfs 中的
+        # 先生成卖出信号：已持有但不在 selected_etfs 中的
         if portfolio:
             positions = portfolio.get('positions', {})
             for symbol, pos in positions.items():
@@ -88,6 +63,27 @@ class RotationStrategy(BaseStrategy):
                             'amount': pos['shares'] * price,
                             'reason': '行业轮动调仓(卖出跌出top_n)'
                         })
+
+        # 再生成买入信号：新选中的 ETF
+        valid_buy_symbols = []
+        symbol_prices = {}
+        for symbol in self.selected_etfs:
+            if data and symbol in data:
+                price = data[symbol].get('price', 0)
+                if price > 0:
+                    valid_buy_symbols.append(symbol)
+                    symbol_prices[symbol] = price
+
+        if valid_buy_symbols:
+            buy_weight = 1.0 / len(valid_buy_symbols)
+            for symbol in valid_buy_symbols:
+                signals.append({
+                    'action': 'buy',
+                    'symbol': symbol,
+                    'price': symbol_prices[symbol],
+                    'amount': 0,  # 金额由执行器根据 portfolio 计算
+                    'reason': '行业轮动调仓(买入)'
+                })
 
         return signals
 

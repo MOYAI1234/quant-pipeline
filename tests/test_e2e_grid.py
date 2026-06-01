@@ -11,7 +11,6 @@ from risk.risk_manager import RiskManager
 class TestGridE2E:
 
     def setup_method(self):
-        # 网格: buy_grids = [3.9, 3.8, 3.7], sell_grids = [4.1, 4.2, 4.3]
         self.strategy = GridStrategy({
             'name': '测试网格',
             'symbol': '510300',
@@ -29,8 +28,14 @@ class TestGridE2E:
             'min_size': 0,
         })
 
+    def _execute_and_confirm(self, signals):
+        """执行信号并确认交易"""
+        for sig in signals:
+            success = self.simulator.execute_order(sig)
+            if success:
+                self.strategy.on_trade_confirmed(sig)
+
     def test_buy_at_grid_39(self):
-        # 价格 3.95 应触发 3.9 网格买入
         data = {'price': 3.95, 'volume': 1000000, 'amount': 4000000}
         portfolio = self.simulator.get_portfolio()
         signals = self.strategy.generate_signal(data, portfolio)
@@ -44,8 +49,7 @@ class TestGridE2E:
         data = {'price': 3.95, 'volume': 1000000, 'amount': 4000000}
         portfolio = self.simulator.get_portfolio()
         signals = self.strategy.generate_signal(data, portfolio)
-        for sig in signals:
-            self.simulator.execute_order(sig)
+        self._execute_and_confirm(signals)
         assert self.simulator.positions.get('510300', {}).get('shares', 0) == 1000
 
         # 第二格买入 (3.8 网格)
@@ -55,9 +59,7 @@ class TestGridE2E:
         assert len(signals) > 0
         assert signals[0]['action'] == 'buy'
         assert signals[0]['price'] == 3.8
-        # 执行第二个信号
-        for sig in signals:
-            self.simulator.execute_order(sig)
+        self._execute_and_confirm(signals)
 
         # 验证持仓增加到 2000
         assert self.simulator.positions.get('510300', {}).get('shares', 0) == 2000
@@ -67,8 +69,7 @@ class TestGridE2E:
         data = {'price': 3.95, 'volume': 1000000, 'amount': 4000000}
         portfolio = self.simulator.get_portfolio()
         signals = self.strategy.generate_signal(data, portfolio)
-        for sig in signals:
-            self.simulator.execute_order(sig)
+        self._execute_and_confirm(signals)
 
         # 同一网格区间再次调用，不应再生成买入信号
         data = {'price': 3.92, 'volume': 1000000, 'amount': 4000000}
@@ -78,9 +79,10 @@ class TestGridE2E:
 
     def test_sell_full_grid(self):
         # 买入一格 (3.9 网格)
-        self.simulator.execute_order({
-            'action': 'buy', 'symbol': '510300', 'price': 3.9, 'shares': 1000
-        })
+        data = {'price': 3.95, 'volume': 1000000, 'amount': 4000000}
+        portfolio = self.simulator.get_portfolio()
+        signals = self.strategy.generate_signal(data, portfolio)
+        self._execute_and_confirm(signals)
 
         # 价格涨到卖出网格 (4.1)
         data = {'price': 4.15, 'volume': 1000000, 'amount': 4000000}
@@ -92,14 +94,15 @@ class TestGridE2E:
 
     def test_sell_no_residual(self):
         # 买入1000股
-        self.simulator.execute_order({
-            'action': 'buy', 'symbol': '510300', 'price': 3.9, 'shares': 1000
-        })
+        data = {'price': 3.95, 'volume': 1000000, 'amount': 4000000}
+        portfolio = self.simulator.get_portfolio()
+        signals = self.strategy.generate_signal(data, portfolio)
+        self._execute_and_confirm(signals)
 
         # 卖出一格（1000股）
-        self.simulator.execute_order({
-            'action': 'sell', 'symbol': '510300', 'price': 4.1, 'shares': 1000
-        })
+        sell_sig = {'action': 'sell', 'symbol': '510300', 'price': 4.1, 'shares': 1000}
+        self.simulator.execute_order(sell_sig)
+        self.strategy.on_trade_confirmed(sell_sig)
 
         # 验证无残仓
         assert '510300' not in self.simulator.positions
@@ -109,8 +112,7 @@ class TestGridE2E:
         data_buy = {'price': 3.95, 'volume': 1000000, 'amount': 4000000}
         portfolio = self.simulator.get_portfolio()
         signals = self.strategy.generate_signal(data_buy, portfolio)
-        for sig in signals:
-            self.simulator.execute_order(sig)
+        self._execute_and_confirm(signals)
 
         assert self.simulator.positions.get('510300', {}).get('shares', 0) == 1000
 
@@ -118,8 +120,7 @@ class TestGridE2E:
         data_sell = {'price': 4.15, 'volume': 1000000, 'amount': 4000000}
         portfolio = self.simulator.get_portfolio()
         signals = self.strategy.generate_signal(data_sell, portfolio)
-        for sig in signals:
-            self.simulator.execute_order(sig)
+        self._execute_and_confirm(signals)
 
         # 3. 验证盈利
         portfolio = self.simulator.get_portfolio()
@@ -132,8 +133,7 @@ class TestGridE2E:
             data = {'price': price, 'volume': 1000000, 'amount': 4000000}
             portfolio = self.simulator.get_portfolio()
             signals = self.strategy.generate_signal(data, portfolio)
-            for sig in signals:
-                self.simulator.execute_order(sig)
+            self._execute_and_confirm(signals)
 
         # 第4格不应买入
         data = {'price': 3.65, 'volume': 1000000, 'amount': 4000000}
