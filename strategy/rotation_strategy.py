@@ -12,15 +12,33 @@ class RotationStrategy(BaseStrategy):
         self.rebalance_days = config.get('rebalance_days', 30)
         self.selected_etfs = []
         self.last_rebalance = None
+        self.pending_rebalance_count = 0
 
     def generate_signal(self, data: dict, portfolio: dict = None) -> list:
         signals = []
         if self.need_rebalance():
             momentum = self.calculate_momentum(data)
+            if not momentum:
+                return []
             self.selected_etfs = self.select_top_etfs(momentum)
-            signals = self.generate_rebalance_signals()
-            self.last_rebalance = datetime.now()
+            if not self.selected_etfs:
+                return []
+            signals = self.generate_rebalance_signals(data, portfolio)
+            if signals:
+                self.pending_rebalance_count = len(signals)
         return signals
+
+    def on_trade_confirmed(self, trade: dict):
+        """交易确认后更新 rebalance 状态"""
+        if self.pending_rebalance_count > 0:
+            self.pending_rebalance_count -= 1
+            if self.pending_rebalance_count == 0:
+                self.last_rebalance = datetime.now()
+
+    def on_trade_failed(self, trade: dict):
+        """交易失败后递减 pending，允许重试"""
+        if self.pending_rebalance_count > 0:
+            self.pending_rebalance_count -= 1
 
     def calculate_momentum(self, data: dict) -> dict:
         momentum = {}
@@ -36,19 +54,66 @@ class RotationStrategy(BaseStrategy):
         sorted_etfs = sorted(momentum.items(), key=lambda x: x[1], reverse=True)
         return [etf[0] for etf in sorted_etfs[:self.top_n]]
 
-    def generate_rebalance_signals(self) -> list:
+    def generate_rebalance_signals(self, data: dict = None, portfolio: dict = None) -> list:
         signals = []
-        weight = 1.0 / len(self.selected_etfs) if self.selected_etfs else 0
+
+        # 先生成卖出信号：已持有但不在 selected_etfs 中的
+        if portfolio:
+            positions = portfolio.get('positions', {})
+            for symbol, pos in positions.items():
+                if symbol not in self.selected_etfs and pos.get('shares', 0) > 0:
+                    price = 0
+                    if data and symbol in data:
+                        price = data[symbol].get('price', 0)
+                    if price <= 0:
+                        price = pos.get('current_price', pos.get('avg_price', 0))
+                    if price > 0:
+                        signals.append({
+                            'action': 'sell',
+                            'symbol': symbol,
+                            'price': price,
+                            'shares': pos['shares'],
+                            'amount': pos['shares'] * price,
+                            'reason': '行业轮动调仓(卖出跌出top_n)'
+                        })
+
+        # 再生成买入信号：新选中的 ETF
+        valid_buy_symbols = []
+        symbol_prices = {}
         for symbol in self.selected_etfs:
-            signals.append({
-                'action': 'rebalance',
-                'symbol': symbol,
-                'target_weight': weight,
-                'reason': '行业轮动调仓'
-            })
+            if data and symbol in data:
+                price = data[symbol].get('price', 0)
+                if price > 0:
+                    valid_buy_symbols.append(symbol)
+                    symbol_prices[symbol] = price
+
+        if valid_buy_symbols:
+            buy_weight = 1.0 / len(valid_buy_symbols)
+            # 计算可用于买入的总金额 = 当前现金 + 预计卖出所得
+            capital = portfolio.get('capital', 0) if portfolio else 0
+            sold_value = sum(
+                s.get('amount', 0) for s in signals if s.get('action') == 'sell'
+            )
+            available_capital = capital + sold_value
+
+            for symbol in valid_buy_symbols:
+                target_amount = available_capital * buy_weight
+                price = symbol_prices[symbol]
+                shares = int(target_amount / price / 100) * 100
+                signals.append({
+                    'action': 'buy',
+                    'symbol': symbol,
+                    'price': price,
+                    'shares': shares,
+                    'amount': shares * price,
+                    'reason': '行业轮动调仓(买入)'
+                })
+
         return signals
 
     def need_rebalance(self) -> bool:
+        if self.pending_rebalance_count > 0:
+            return False
         if self.last_rebalance is None:
             return True
         days_since = (datetime.now() - self.last_rebalance).days

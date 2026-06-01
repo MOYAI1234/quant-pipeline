@@ -1,5 +1,8 @@
 from adapters.mx_data_adapter import MXDataAdapter
 
+PREMIUM_HIGH = 0.02   # 2%
+PREMIUM_LOW = -0.02   # -2%
+
 
 class ETFAnalyzer:
 
@@ -27,17 +30,17 @@ class ETFAnalyzer:
         return sorted(results, key=lambda x: abs(x.get('premium', 0)))
 
     def _get_premium_level(self, premium: float) -> str:
-        if premium > 2:
+        if premium > PREMIUM_HIGH:
             return "高溢价"
-        elif premium < -2:
+        elif premium < PREMIUM_LOW:
             return "高折价"
         else:
             return "正常"
 
     def _get_recommendation(self, premium: float) -> str:
-        if premium > 2:
+        if premium > PREMIUM_HIGH:
             return "溢价过高，建议谨慎买入"
-        elif premium < -2:
+        elif premium < PREMIUM_LOW:
             return "折价明显，可考虑买入"
         else:
             return "价格正常"

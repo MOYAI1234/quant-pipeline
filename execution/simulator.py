@@ -8,7 +8,7 @@ class Simulator(BaseExecutor):
         super().__init__(config)
         self.initial_capital = config.get('initial_capital', 100000)
         self.capital = self.initial_capital
-        self.positions = {}  # {symbol: {'shares': int, 'avg_price': float, 'cost': float}}
+        self.positions = {}
         self.trades = []
         self.commission_rate = config.get('commission_rate', 0.0003)
 
@@ -16,41 +16,42 @@ class Simulator(BaseExecutor):
         action = order.get('action')
         symbol = order.get('symbol', '')
         price = order.get('price', 0)
+        shares = order.get('shares', 0)
         amount = order.get('amount', 0)
 
         if action == 'buy':
+            if shares > 0:
+                return self._execute_buy_by_shares(symbol, price, shares)
             return self._execute_buy(symbol, price, amount)
         elif action == 'sell':
+            if shares > 0:
+                return self._execute_sell_by_shares(symbol, price, shares)
             return self._execute_sell(symbol, price, amount)
         elif action == 'rebalance':
             return self._execute_rebalance(order)
         return False
 
-    def _execute_buy(self, symbol: str, price: float, amount: float) -> bool:
-        if price <= 0:
+    def _execute_buy_by_shares(self, symbol: str, price: float, shares: int) -> bool:
+        if not symbol or not symbol.strip():
+            return False
+        if price <= 0 or shares <= 0:
             return False
 
-        # 计算可买股数（整手，100股为一手）
-        shares = int(amount / price / 100) * 100
+        shares = (shares // 100) * 100
         if shares <= 0:
             return False
 
-        # 计算实际成本
         actual_amount = shares * price
         commission = actual_amount * self.commission_rate
         total_cost = actual_amount + commission
 
-        # 检查资金是否充足
         if total_cost > self.capital:
             return False
 
-        # 扣除资金
         self.capital -= total_cost
 
-        # 更新持仓
         if symbol in self.positions:
             pos = self.positions[symbol]
-            # 加仓：重新计算均价
             old_cost = pos['shares'] * pos['avg_price']
             new_total_shares = pos['shares'] + shares
             new_avg_price = (old_cost + actual_amount) / new_total_shares
@@ -64,7 +65,6 @@ class Simulator(BaseExecutor):
                 'cost': actual_amount
             }
 
-        # 记录交易
         self.trades.append({
             'action': 'buy',
             'symbol': symbol,
@@ -76,7 +76,17 @@ class Simulator(BaseExecutor):
         })
         return True
 
-    def _execute_sell(self, symbol: str, price: float, amount: float) -> bool:
+    def _execute_buy(self, symbol: str, price: float, amount: float) -> bool:
+        if price <= 0:
+            return False
+
+        shares = int(amount / price / 100) * 100
+        if shares <= 0:
+            return False
+
+        return self._execute_buy_by_shares(symbol, price, shares)
+
+    def _execute_sell_by_shares(self, symbol: str, price: float, shares: int) -> bool:
         if symbol not in self.positions:
             return False
 
@@ -84,36 +94,26 @@ class Simulator(BaseExecutor):
         if price <= 0 or pos['shares'] <= 0:
             return False
 
-        # 计算卖出股数（整手）
-        shares_to_sell = int(amount / price / 100) * 100
+        shares_to_sell = min(shares, pos['shares'])
+        shares_to_sell = (shares_to_sell // 100) * 100
         if shares_to_sell <= 0:
             return False
 
-        # 不能卖出超过持仓
-        shares_to_sell = min(shares_to_sell, pos['shares'])
-
-        # 计算卖出金额
         sell_amount = shares_to_sell * price
         commission = sell_amount * self.commission_rate
         net_amount = sell_amount - commission
 
-        # 计算盈亏（基于均价）
         cost_basis = shares_to_sell * pos['avg_price']
         profit = net_amount - cost_basis
 
-        # 更新资金
         self.capital += net_amount
 
-        # 更新持仓（按比例扣减成本）
-        remaining_ratio = (pos['shares'] - shares_to_sell) / pos['shares']
         pos['shares'] -= shares_to_sell
-        pos['cost'] *= remaining_ratio
+        pos['cost'] = pos['shares'] * pos['avg_price']
 
-        # 清理空持仓
         if pos['shares'] <= 0:
             del self.positions[symbol]
 
-        # 记录交易
         self.trades.append({
             'action': 'sell',
             'symbol': symbol,
@@ -126,20 +126,57 @@ class Simulator(BaseExecutor):
         })
         return True
 
+    def _execute_sell(self, symbol: str, price: float, amount: float) -> bool:
+        if price <= 0:
+            return False
+        shares = int(amount / price / 100) * 100
+        return self._execute_sell_by_shares(symbol, price, shares)
+
     def _execute_rebalance(self, order: dict) -> bool:
-        # 简化实现：先卖后买
         symbol = order.get('symbol', '')
         target_weight = order.get('target_weight', 0)
-        # TODO: 完整实现再平衡逻辑
+        reason = order.get('reason', 'rebalance')
+
+        if not symbol or target_weight <= 0:
+            return False
+
+        current_prices = {}
+        if symbol in self.positions:
+            current_prices[symbol] = self.positions[symbol]['avg_price']
+
+        portfolio = self.get_portfolio(current_prices)
+        total_value = portfolio['total_value']
+        target_value = total_value * target_weight
+        current_value = 0
+
+        if symbol in self.positions:
+            current_value = self.positions[symbol]['shares'] * self.positions[symbol]['avg_price']
+
+        diff = target_value - current_value
+        price = order.get('price', 0)
+
+        if price <= 0:
+            if symbol in self.positions:
+                price = self.positions[symbol]['avg_price']
+            else:
+                return False
+
+        if diff > 0:
+            shares = int(diff / price / 100) * 100
+            if shares > 0:
+                return self._execute_buy_by_shares(symbol, price, shares)
+        elif diff < 0:
+            shares = int(abs(diff) / price / 100) * 100
+            if shares > 0:
+                return self._execute_sell_by_shares(symbol, price, shares)
+
         return True
 
     def get_portfolio(self, current_prices: dict = None) -> dict:
-        """获取组合状态，使用 mark-to-market 估值"""
         total_market_value = self.capital
 
         positions_with_value = {}
         for symbol, pos in self.positions.items():
-            # 使用当前市价，如果没有则用均价
             if current_prices and symbol in current_prices:
                 current_price = current_prices[symbol]
             else:
@@ -158,7 +195,6 @@ class Simulator(BaseExecutor):
             }
             total_market_value += market_value
 
-        # 计算已实现盈亏
         realized_pnl = sum(t.get('profit', 0) for t in self.trades if t.get('action') == 'sell')
 
         return {
