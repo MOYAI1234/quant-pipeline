@@ -5,6 +5,7 @@ class ETFRiskChecker:
 
     def __init__(self, config):
         self.mx_data = MXDataAdapter(config.get('mx_data', {}))
+        self.mx_data.connect()
         self.min_volume = config.get('min_volume', 10000000)
         self.min_size = config.get('min_size', 1000000000)
         self.max_tracking_error = config.get('max_tracking_error', 0.005)

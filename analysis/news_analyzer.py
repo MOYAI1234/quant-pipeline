@@ -5,6 +5,7 @@ class NewsAnalyzer:
 
     def __init__(self, config):
         self.mx_search = MX_SearchAdapter(config.get('mx_search', {}))
+        self.mx_search.connect()
 
     def analyze_etf_news(self, symbol: str, days: int = 7) -> dict:
         news = self.mx_search.search_etf_news(symbol, days)

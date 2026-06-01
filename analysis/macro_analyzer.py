@@ -5,6 +5,7 @@ class MacroAnalyzer:
 
     def __init__(self, config):
         self.jason_kb = JasonKBAdapter(config.get('jason_kb', {}))
+        self.jason_kb.connect()
 
     def connect(self):
         self.jason_kb.connect()

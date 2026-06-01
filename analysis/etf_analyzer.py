@@ -8,6 +8,7 @@ class ETFAnalyzer:
 
     def __init__(self, config):
         self.mx_data = MXDataAdapter(config.get('mx_data', {}))
+        self.mx_data.connect()
 
     def analyze_etf(self, symbol: str) -> dict:
         realtime = self.mx_data.get_etf_realtime(symbol)

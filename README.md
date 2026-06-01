@@ -9,6 +9,7 @@ ETF 量化助手 Pipeline，目标是把数据适配、策略生成、风控检�
 重要边界：
 
 - `adapters/` 中的 `mx-data`、`mx-xuangu`、`mx-search`、`jason-kb` 适配器目前仍是占位实现，未接真实外部服务。
+- adapter 支持 `mode=mock|real`。默认 `mock` 会返回占位数据；`real` 当前会明确标记为不可用并抛出 `ServiceUnavailableError`，避免把 0 或空列表误认为真实行情。
 - `execution/Simulator` 是简化成交模型，支持整手、手续费、均价、持仓和市值估算，但不包含真实撮合、滑点、订单状态同步。
 - 策略状态目前以内存为主，重启后不会自动恢复网格 ledger、轮动 pending 状态或成交流水。
 - QMT/实盘执行、API、Web、完整回测引擎仍未实现。
@@ -74,6 +75,7 @@ python -m compileall -q .
 
 当前测试重点覆盖：
 
+- adapter 的 mock/real 模式、结构化健康检查和未实现 real 模式错误
 - `Simulator` 买入、卖出、均价、部分卖出和市值估算
 - `GridStrategy` 多格买入、同格防重复、卖出、止损后 ledger 重置
 - `RotationStrategy` 首次调仓、卖旧买新、失败 pending 清理和重试

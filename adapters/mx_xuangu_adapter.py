@@ -6,13 +6,8 @@ class MX_XuanguAdapter(BaseAdapter):
     def __init__(self, config):
         super().__init__(config)
 
-    def connect(self):
-        self.connected = True
-
-    def health_check(self) -> bool:
-        return self.connected
-
     def filter_etfs(self, conditions: dict) -> list:
+        self._ensure_available()
         query = self._build_query(conditions)
         results = self._call_api(query)
         return self._parse_results(results)
