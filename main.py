@@ -1,5 +1,6 @@
 import signal
 import sys
+import time
 from datetime import datetime
 
 from config.settings import SYSTEM_CONFIG
@@ -67,13 +68,10 @@ class QuantPipeline:
         while self.running:
             try:
                 self.run_once()
-
-                import time
                 time.sleep(check_interval)
 
             except Exception as e:
                 self.logger.error(f"错误: {e}")
-                import time
                 time.sleep(check_interval)
 
         self.stop()
@@ -148,12 +146,15 @@ class QuantPipeline:
                         f"[{name}] 风险检查未通过: {risk_check['checks']}"
                     )
 
-        self.monitor.update_metrics(
-            self.executor.get_portfolio(current_prices),
-            self._get_strategy_summary()
-        )
+        portfolio = self.executor.get_portfolio(current_prices)
+        strategy_summary = self._get_strategy_summary()
+        self.monitor.update_metrics(portfolio, strategy_summary)
 
-        return self.get_status()
+        return {
+            'portfolio': portfolio,
+            'strategies': strategy_summary,
+            'metrics': self.monitor.get_metrics()
+        }
 
     def _get_strategy_summary(self) -> dict:
         summary = {}

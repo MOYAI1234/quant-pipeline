@@ -1,18 +1,17 @@
-import os
-import sys
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from main import QuantPipeline
 from strategy.grid_strategy import GridStrategy
 
 
 class FakeDataManager:
 
+    def __init__(self, prices=None):
+        self.prices = prices or {'510300': 3.95}
+
     def get_etf_realtime(self, symbol):
+        price = self.prices.get(symbol, 3.95)
         return {
             'symbol': symbol,
-            'price': 3.95,
+            'price': price,
             'open': 4.0,
             'high': 4.0,
             'low': 3.9,
@@ -32,7 +31,7 @@ class FakeDataManager:
         pass
 
 
-def test_run_once_executes_grid_signal_and_updates_metrics():
+def _build_system(data_manager=None):
     system = QuantPipeline({
         'data': {},
         'account': {
@@ -51,7 +50,12 @@ def test_run_once_executes_grid_signal_and_updates_metrics():
             'alert_threshold': -10,
         },
     })
-    system.data_manager = FakeDataManager()
+    system.data_manager = data_manager or FakeDataManager()
+    return system
+
+
+def test_run_once_executes_grid_signal_and_updates_metrics():
+    system = _build_system()
     strategy = GridStrategy({
         'name': '测试网格',
         'symbol': '510300',
@@ -71,3 +75,19 @@ def test_run_once_executes_grid_signal_and_updates_metrics():
     assert status['metrics']['position'] == 1
     assert '测试网格' in status['strategies']
 
+
+def test_run_once_returns_repriced_portfolio_for_existing_positions():
+    system = _build_system(FakeDataManager({'510300': 4.5}))
+    system.executor.execute_order({
+        'action': 'buy',
+        'symbol': '510300',
+        'price': 4.0,
+        'shares': 1000,
+    })
+
+    status = system.run_once()
+
+    position = status['portfolio']['positions']['510300']
+    assert position['current_price'] == 4.5
+    assert position['market_value'] == 4500
+    assert status['portfolio']['total_value'] == status['metrics']['total_value']
