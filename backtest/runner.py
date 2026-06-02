@@ -33,6 +33,8 @@ class BacktestRunner:
             signals = self.strategy.generate_signal(quote, portfolio)
 
             for signal in signals:
+                if not self._signal_executable(signal, quote):
+                    continue
                 if self.executor.execute_order(signal):
                     self.strategy.record_trade(signal)
                     if hasattr(self.strategy, 'on_trade_confirmed'):
@@ -96,6 +98,10 @@ class BacktestRunner:
             'timestamp': bar.get('date', bar.get('timestamp', '')),
         }
 
+    def _signal_executable(self, signal: dict, quote: dict) -> bool:
+        price = signal.get('price', 0)
+        return quote['low'] <= price <= quote['high']
+
     def _max_drawdown(self) -> float:
         peak = self.executor.initial_capital
         max_drawdown = 0.0
@@ -144,7 +150,7 @@ def load_history_csv(path: str) -> list:
 def sample_grid_history() -> list:
     return [
         _bar('2026-01-01', 4.00, 4.05, 3.95, 4.00),
-        _bar('2026-01-02', 4.00, 4.02, 3.92, 3.95),
+        _bar('2026-01-02', 4.00, 4.02, 3.88, 3.95),
         _bar('2026-01-03', 3.95, 4.16, 3.94, 4.15),
     ]
 

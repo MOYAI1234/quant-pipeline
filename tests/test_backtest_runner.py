@@ -38,6 +38,29 @@ def test_backtest_runner_executes_grid_buy_sell_cycle():
     assert '510300' not in result['portfolio']['positions']
 
 
+def test_backtest_runner_skips_grid_order_when_bar_does_not_touch_limit_price():
+    runner = BacktestRunner(_grid_strategy(), {
+        'initial_capital': 100000,
+        'commission_rate': 0.0003,
+    })
+
+    result = runner.run([{
+        'date': '2026-01-01',
+        'open': 4.00,
+        'high': 4.02,
+        'low': 3.92,
+        'close': 3.95,
+        'volume': 1000000,
+        'amount': 3950000,
+    }])
+
+    assert result['trade_count'] == 0
+    assert result['final_value'] == result['initial_capital']
+    assert '510300' not in result['portfolio']['positions']
+    assert runner.strategy.grid_ledger[3.9]['bought'] is False
+    assert len(runner.strategy.trades) == 0
+
+
 def test_backtest_runner_resets_state_between_runs():
     runner = BacktestRunner(_grid_strategy(), {
         'initial_capital': 100000,
