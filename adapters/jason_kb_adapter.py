@@ -6,13 +6,8 @@ class JasonKBAdapter(BaseAdapter):
     def __init__(self, config):
         super().__init__(config)
 
-    def connect(self):
-        self.connected = True
-
-    def health_check(self) -> bool:
-        return self.connected
-
     def get_market_sentiment(self) -> dict:
+        self._ensure_available()
         return {
             'sentiment': 'neutral',
             'score': 50,
@@ -20,6 +15,7 @@ class JasonKBAdapter(BaseAdapter):
         }
 
     def get_industry_analysis(self, industry: str) -> dict:
+        self._ensure_available()
         return {
             'industry': industry,
             'outlook': 'positive',
@@ -27,9 +23,11 @@ class JasonKBAdapter(BaseAdapter):
         }
 
     def get_risk_warning(self) -> list:
+        self._ensure_available()
         return []
 
-    def get_investment_advice(self, portfolio: dict) -> dict:
+    def get_investment_advice(self, _portfolio: dict) -> dict:
+        self._ensure_available()
         return {
             'suggestions': [],
             'warnings': []

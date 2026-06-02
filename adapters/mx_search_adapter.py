@@ -6,13 +6,8 @@ class MX_SearchAdapter(BaseAdapter):
     def __init__(self, config):
         super().__init__(config)
 
-    def connect(self):
-        self.connected = True
-
-    def health_check(self) -> bool:
-        return self.connected
-
     def search_news(self, keyword: str, days: int = 7) -> list:
+        self._ensure_available()
         return []
 
     def search_etf_news(self, symbol: str, days: int = 7) -> list:

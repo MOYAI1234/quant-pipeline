@@ -1,12 +1,15 @@
 SYSTEM_CONFIG = {
     'data': {
         'mx_data': {
+            'mode': 'mock',
             'timeout': 10,
         },
         'mx_xuangu': {
+            'mode': 'mock',
             'timeout': 10,
         },
         'mx_search': {
+            'mode': 'mock',
             'timeout': 10,
         },
     },

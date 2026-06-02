@@ -6,13 +6,8 @@ class MXDataAdapter(BaseAdapter):
     def __init__(self, config):
         super().__init__(config)
 
-    def connect(self):
-        self.connected = True
-
-    def health_check(self) -> bool:
-        return self.connected
-
     def get_etf_realtime(self, symbol: str) -> dict:
+        self._ensure_available()
         return {
             'symbol': symbol,
             'price': 0.0,
@@ -25,9 +20,11 @@ class MXDataAdapter(BaseAdapter):
         }
 
     def get_etf_history(self, symbol: str, start_date: str, end_date: str) -> list:
+        self._ensure_available()
         return []
 
     def get_etf_nav(self, symbol: str) -> dict:
+        self._ensure_available()
         return {
             'symbol': symbol,
             'nav': 0.0,
@@ -36,4 +33,5 @@ class MXDataAdapter(BaseAdapter):
         }
 
     def get_etf_list(self, etf_type: str = None) -> list:
+        self._ensure_available()
         return []

@@ -70,3 +70,9 @@ class DataManager:
             'mx_xuangu': self.mx_xuangu.health_check(),
             'mx_search': self.mx_search.health_check(),
         }
+
+    def is_mock_mode(self) -> bool:
+        return all(
+            status.get('mock', False)
+            for status in self.health_check().values()
+        )

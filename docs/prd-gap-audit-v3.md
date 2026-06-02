@@ -158,6 +158,8 @@ PRD 将“可回测策略系统”列为阶段二交付物，但当前只有实�
 
 ### M1：数据适配契约和 mock/real 模式
 
+状态：已启动。当前 adapter 已支持显式 `mode=mock|real`，并通过结构化健康检查暴露 `mode`、`connected`、`available`、`mock` 和 `error`。`real` 模式尚未接入真实外部服务，会明确返回不可用并在数据调用时抛出 `ServiceUnavailableError`。
+
 目标：让系统能清楚地区分“真实数据可用”和“当前只是模拟数据”。
 
 任务：
