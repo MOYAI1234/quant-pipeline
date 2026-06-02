@@ -11,15 +11,15 @@ class BacktestRunner:
 
     def __init__(self, strategy, account_config: dict = None):
         self.strategy = strategy
-        self.account_config = account_config or {}
-        self.executor = Simulator(self.account_config)
+        self._account_config = dict(account_config or {})
+        self.executor = None
         self.equity_curve = []
 
     def run(self, history: list) -> dict:
         if not history:
             raise ValueError('history 不能为空')
 
-        self.executor = Simulator(self.account_config)
+        self.executor = Simulator(dict(self._account_config))
         self.equity_curve = []
         last_quote = None
         for bar in history:
