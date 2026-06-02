@@ -4,8 +4,15 @@ from pathlib import Path
 
 import pytest
 
-from backtest.runner import BacktestRunner, load_history_csv, sample_grid_history
+from backtest.runner import (
+    BacktestRunner,
+    RotationBacktestRunner,
+    load_history_csv,
+    sample_grid_history,
+    sample_rotation_history,
+)
 from strategy.grid_strategy import GridStrategy
+from strategy.rotation_strategy import RotationStrategy
 
 
 def _grid_strategy():
@@ -17,6 +24,17 @@ def _grid_strategy():
         'grid_count': 3,
         'shares_per_grid': 1000,
         'max_grids': 3,
+    })
+
+
+def _rotation_strategy():
+    return RotationStrategy({
+        'name': '测试轮动回测',
+        'symbol': '510300',
+        'etf_pool': ['510300', '510500', '159915'],
+        'lookback': 3,
+        'top_n': 1,
+        'rebalance_days': 0,
     })
 
 
@@ -36,6 +54,86 @@ def test_backtest_runner_executes_grid_buy_sell_cycle():
     assert result['max_drawdown'] >= 0
     assert len(result['equity_curve']) == 3
     assert '510300' not in result['portfolio']['positions']
+
+
+def test_rotation_backtest_runner_buys_then_rotates_to_new_leader():
+    runner = RotationBacktestRunner(_rotation_strategy(), {
+        'initial_capital': 100000,
+        'commission_rate': 0.0003,
+    })
+
+    result = runner.run(sample_rotation_history())
+
+    assert result['strategy'] == '测试轮动回测'
+    assert result['symbol'] == '510300,510500,159915'
+    # day1 买入 leader1；day2 卖出 leader1 并买入 leader2。
+    assert result['trade_count'] == 3
+    assert len(result['equity_curve']) == 2
+    assert '510300' not in result['portfolio']['positions']
+    assert '510500' in result['portfolio']['positions']
+    assert runner.strategy.selected_etfs == ['510500']
+    assert len(runner.strategy.trades) == 3
+
+
+def test_rotation_backtest_runner_uses_snapshot_dates_for_rebalance_windows():
+    strategy = RotationStrategy({
+        'name': '测试轮动日期',
+        'symbol': '510300',
+        'etf_pool': ['510300', '510500'],
+        'lookback': 3,
+        'top_n': 1,
+        'rebalance_days': 10,
+    })
+    runner = RotationBacktestRunner(strategy, {
+        'initial_capital': 100000,
+        'commission_rate': 0.0003,
+    })
+    history = [
+        {
+            'date': '2026-01-01',
+            'symbols': {
+                '510300': {'close': 12.0, 'prices': [10.0, 11.0, 12.0]},
+                '510500': {'close': 9.0, 'prices': [10.0, 9.5, 9.0]},
+            },
+        },
+        {
+            'date': '2026-01-05',
+            'symbols': {
+                '510300': {'close': 11.5, 'prices': [11.0, 12.0, 11.5]},
+                '510500': {'close': 12.0, 'prices': [9.0, 10.0, 12.0]},
+            },
+        },
+        {
+            'date': '2026-01-20',
+            'symbols': {
+                '510300': {'close': 11.0, 'prices': [12.0, 11.5, 11.0]},
+                '510500': {'close': 13.0, 'prices': [10.0, 12.0, 13.0]},
+            },
+        },
+    ]
+
+    result = runner.run(history)
+
+    assert result['trade_count'] == 3
+    assert '510300' not in result['portfolio']['positions']
+    assert '510500' in result['portfolio']['positions']
+    assert runner.strategy.last_rebalance.isoformat() == '2026-01-20T00:00:00'
+
+
+def test_rotation_backtest_runner_rejects_missing_symbol_price():
+    runner = RotationBacktestRunner(_rotation_strategy(), {
+        'initial_capital': 100000,
+        'commission_rate': 0.0003,
+    })
+
+    with pytest.raises(ValueError, match='rotation history 中 510300 缺少有效价格'):
+        runner.run([{
+            'date': '2026-01-01',
+            'symbols': {
+                '510300': {'prices': [10.0, 11.0, 12.0]},
+                '510500': {'close': 9.0, 'prices': [10.0, 9.5, 9.0]},
+            },
+        }])
 
 
 def test_backtest_runner_skips_grid_order_when_bar_does_not_touch_limit_price():
@@ -262,6 +360,65 @@ def test_cli_backtest_smoke_outputs_markdown_report():
 
     assert '# 回测报告 - 网格回测' in completed.stdout
     assert '- 交易次数: 2' in completed.stdout
+
+
+def test_cli_rotation_backtest_smoke_outputs_markdown_report():
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'rotation',
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert '# 回测报告 - 轮动回测' in completed.stdout
+    assert '- 标的池: 510300,510500,159915' in completed.stdout
+    assert '- 交易次数: 3' in completed.stdout
+
+
+def test_cli_rotation_backtest_rejects_unknown_sample_symbol():
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'rotation',
+            '--etf-pool',
+            '510300,UNKNOWN',
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 2
+    assert 'rotation 内置样例不包含 ETF: UNKNOWN' in completed.stderr
+
+
+def test_cli_rotation_backtest_explains_history_is_not_supported_yet():
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'rotation',
+            '--history',
+            str(Path('history.csv')),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 2
+    assert 'CSV 历史行情将在后续版本支持' in completed.stderr
 
 
 @pytest.mark.parametrize('option,value', [
