@@ -38,6 +38,54 @@ def test_backtest_runner_executes_grid_buy_sell_cycle():
     assert '510300' not in result['portfolio']['positions']
 
 
+def test_backtest_runner_resets_state_between_runs():
+    runner = BacktestRunner(_grid_strategy(), {
+        'initial_capital': 100000,
+        'commission_rate': 0.0003,
+    })
+
+    first_result = runner.run(sample_grid_history())
+    second_result = runner.run(sample_grid_history())
+
+    assert first_result['trade_count'] == 2
+    assert second_result['trade_count'] == 2
+    assert len(second_result['equity_curve']) == 3
+    assert second_result['start_date'] == '2026-01-01'
+    assert second_result['final_value'] == first_result['final_value']
+
+
+def test_backtest_runner_drawdown_starts_from_initial_capital():
+    strategy = GridStrategy({
+        'name': '测试亏损网格',
+        'symbol': '510300',
+        'center_price': 4.00,
+        'grid_size': 0.10,
+        'grid_count': 3,
+        'shares_per_grid': 1000,
+        'max_grids': 3,
+    })
+    runner = BacktestRunner(strategy, {
+        'initial_capital': 100000,
+        'commission_rate': 0.0003,
+    })
+
+    result = runner.run([
+        {
+            'date': '2026-01-01',
+            'open': 3.90,
+            'high': 3.90,
+            'low': 3.90,
+            'close': 3.90,
+            'volume': 1000000,
+            'amount': 3900000,
+        },
+    ])
+
+    assert result['trade_count'] == 1
+    assert result['equity_curve'][0]['total_value'] < result['initial_capital']
+    assert result['max_drawdown'] > 0
+
+
 def test_backtest_runner_rejects_empty_history():
     runner = BacktestRunner(_grid_strategy())
 
@@ -113,6 +161,18 @@ def test_load_history_csv_rejects_invalid_numeric_fields(tmp_path):
     )
 
     with pytest.raises(ValueError, match='字段 close 不是有效数字'):
+        load_history_csv(str(history_file))
+
+
+def test_load_history_csv_rejects_fractional_integer_fields(tmp_path):
+    history_file = tmp_path / 'history.csv'
+    history_file.write_text(
+        'date,open,high,low,close,volume,amount\n'
+        '2026-01-01,4.0,4.1,3.9,4.05,1000.9,4050\n',
+        encoding='utf-8',
+    )
+
+    with pytest.raises(ValueError, match='字段 volume 不是有效整数'):
         load_history_csv(str(history_file))
 
 

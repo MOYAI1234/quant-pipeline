@@ -11,13 +11,16 @@ class BacktestRunner:
 
     def __init__(self, strategy, account_config: dict = None):
         self.strategy = strategy
-        self.executor = Simulator(account_config or {})
+        self.account_config = account_config or {}
+        self.executor = Simulator(self.account_config)
         self.equity_curve = []
 
     def run(self, history: list) -> dict:
         if not history:
             raise ValueError('history 不能为空')
 
+        self.executor = Simulator(self.account_config)
+        self.equity_curve = []
         last_quote = None
         for bar in history:
             quote = self._bar_to_quote(bar)
@@ -91,11 +94,11 @@ class BacktestRunner:
         }
 
     def _max_drawdown(self) -> float:
-        peak = None
+        peak = self.executor.initial_capital
         max_drawdown = 0.0
         for point in self.equity_curve:
             value = point['total_value']
-            peak = value if peak is None else max(peak, value)
+            peak = max(peak, value)
             if peak > 0:
                 max_drawdown = max(max_drawdown, (peak - value) / peak)
         return max_drawdown
@@ -180,7 +183,10 @@ def _to_int(value, field: str, line_number: int) -> int:
     if value in (None, ''):
         raise ValueError(f"历史行情 CSV 第 {line_number} 行字段 {field} 不能为空")
     try:
-        return int(float(value))
+        number = float(value)
+        if not number.is_integer():
+            raise ValueError
+        return int(number)
     except ValueError as exc:
         raise ValueError(
             f"历史行情 CSV 第 {line_number} 行字段 {field} 不是有效整数: {value}"
