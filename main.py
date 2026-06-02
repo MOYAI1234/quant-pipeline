@@ -59,10 +59,14 @@ class QuantPipeline:
     def restore_state(self) -> dict:
         if not self.state_store:
             return {}
-        restored_state = self.state_store.restore(
-            self.executor,
-            self.strategy_manager.get_all(),
-        )
+        try:
+            restored_state = self.state_store.restore(
+                self.executor,
+                dict(self.strategy_manager.get_all()),
+            )
+        except Exception as e:
+            self.logger.warning(f"状态恢复失败，使用默认状态: {e}")
+            return {}
         if restored_state:
             self.logger.info(f"已恢复状态: {self.state_store.path}")
         return restored_state
@@ -72,7 +76,7 @@ class QuantPipeline:
             return {}
         saved_state = self.state_store.save(
             self.executor,
-            self.strategy_manager.get_all(),
+            dict(self.strategy_manager.get_all()),
         )
         self.logger.info(f"已保存状态: {self.state_store.path}")
         return saved_state

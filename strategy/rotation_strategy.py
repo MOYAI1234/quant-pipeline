@@ -1,3 +1,4 @@
+from copy import deepcopy
 from datetime import datetime
 from .base import BaseStrategy
 
@@ -149,6 +150,7 @@ class RotationStrategy(BaseStrategy):
             'type': 'RotationStrategy',
             'name': self.name,
             'symbol': self.symbol,
+            'config': deepcopy(self.config),
             'selected_etfs': list(self.selected_etfs),
             'last_rebalance': (
                 self.last_rebalance.isoformat()

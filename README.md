@@ -87,6 +87,8 @@ python cli\commands.py start --strategy grid --state-path data\demo-state.json
 python cli\commands.py start --strategy grid --no-state
 ```
 
+状态文件相对路径会按项目根目录解析，避免从不同工作目录启动时写到意外位置。
+
 注意：当前默认数据适配器返回 mock/空数据，`start` 命令主要用于验证程序链路，不代表真实行情运行。
 
 ## 测试

@@ -1,4 +1,5 @@
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 
@@ -235,3 +236,57 @@ def test_json_state_store_rejects_strategy_type_mismatch(tmp_path):
                 },
             },
         })
+
+
+def test_json_state_store_rejects_strategy_symbol_mismatch_before_account_restore(tmp_path):
+    store = JsonStateStore(str(tmp_path / 'state.json'))
+    source_simulator = Simulator({'initial_capital': 100000})
+    source_simulator.execute_order({
+        'action': 'buy',
+        'symbol': '510300',
+        'price': 4.0,
+        'shares': 1000,
+    })
+    source_strategy = _grid_strategy()
+    state = store.save(source_simulator, {'grid': source_strategy})
+
+    target_simulator = Simulator({'initial_capital': 100000})
+    target_strategy = GridStrategy({
+        'name': '网格状态',
+        'symbol': '510500',
+        'center_price': 4.00,
+        'grid_size': 0.10,
+        'grid_count': 3,
+        'shares_per_grid': 1000,
+        'max_grids': 3,
+    })
+
+    with pytest.raises(ValueError, match='策略状态标的不匹配'):
+        store.restore(target_simulator, {'grid': target_strategy}, state)
+
+    assert target_simulator.positions == {}
+
+
+def test_json_state_store_rejects_strategy_config_mismatch(tmp_path):
+    store = JsonStateStore(str(tmp_path / 'state.json'))
+    simulator = Simulator({'initial_capital': 100000})
+    strategy = _grid_strategy()
+    state = store.save(simulator, {'grid': strategy})
+    changed_strategy = GridStrategy({
+        'name': '网格状态',
+        'symbol': '510300',
+        'center_price': 4.10,
+        'grid_size': 0.10,
+        'grid_count': 3,
+        'shares_per_grid': 1000,
+        'max_grids': 3,
+    })
+
+    with pytest.raises(ValueError, match='策略状态配置不匹配'):
+        store.restore(Simulator({'initial_capital': 100000}), {'grid': changed_strategy}, state)
+
+
+def test_json_state_store_anchors_relative_path_to_project_root():
+    store = JsonStateStore('data/state.json')
+
+    assert store.path == Path(__file__).resolve().parent.parent / 'data' / 'state.json'
