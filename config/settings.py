@@ -29,5 +29,11 @@ SYSTEM_CONFIG = {
     'monitor': {
         'check_interval': 60,
         'alert_threshold': -10,
+    },
+    'state': {
+        'enabled': True,
+        'path': 'data/state.json',
+        'restore_on_start': True,
+        'save_on_stop': True,
     }
 }

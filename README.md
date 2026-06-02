@@ -13,7 +13,7 @@ ETF 量化助手 Pipeline，目标是把数据适配、策略生成、风控检�
 - `DataManager` 会校验实时行情、净值和历史行情的基础字段契约；字段缺失或返回 shape 错误会抛出 `DataFetchError`，避免脏数据继续进入策略链路。
 - `execution/Simulator` 是简化成交模型，支持整手、手续费、均价、持仓和市值估算，但不包含真实撮合、滑点、订单状态同步。
 - `backtest/BacktestRunner` 已支持最小 grid 历史样例回测，`RotationBacktestRunner` 已支持内置多 ETF 轮动样例回测，并复用 `Simulator`；当前还不是完整回测系统，不含交易日历、滑点、复杂组合和真实历史数据源。
-- `persistence/JsonStateStore` 已支持手动保存和恢复 `Simulator`、`GridStrategy`、`RotationStrategy` 的 JSON 快照；当前还未接入启动自动恢复和退出自动保存。
+- `persistence/JsonStateStore` 已支持保存和恢复 `Simulator`、`GridStrategy`、`RotationStrategy` 的 JSON 快照；`QuantPipeline` 默认会在启动时恢复、停止时保存到 `data/state.json`，但订单状态和迁移策略仍未实现。
 - QMT/实盘执行、API、Web、完整回测引擎仍未实现。
 
 更多差距和路线图见 [docs/prd-gap-audit-v3.md](docs/prd-gap-audit-v3.md)。
@@ -80,6 +80,13 @@ CSV 字段：`date,open,high,low,close,volume,amount`。
 python cli\commands.py start --strategy grid --symbol 510300
 ```
 
+使用指定状态文件启动，或临时禁用状态持久化：
+
+```powershell
+python cli\commands.py start --strategy grid --state-path data\demo-state.json
+python cli\commands.py start --strategy grid --no-state
+```
+
 注意：当前默认数据适配器返回 mock/空数据，`start` 命令主要用于验证程序链路，不代表真实行情运行。
 
 ## 测试
@@ -105,7 +112,7 @@ python -m compileall -q .
 - `GridStrategy` 多格买入、同格防重复、卖出、止损后 ledger 重置
 - `RotationStrategy` 首次调仓、卖旧买新、失败 pending 清理和重试
 - `JsonStateStore` 对账户、网格 ledger、轮动调仓状态和成交快照的保存/恢复
-- `QuantPipeline.run_once()` 单轮策略执行与监控更新
+- `QuantPipeline.run_once()` 单轮策略执行、监控更新，以及启动/停止状态恢复保存
 
 ## 下一步路线
 

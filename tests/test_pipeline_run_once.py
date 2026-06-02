@@ -31,7 +31,15 @@ class FakeDataManager:
         pass
 
 
-def _build_system(data_manager=None):
+def _build_system(data_manager=None, state_path=None):
+    state_config = {'enabled': False}
+    if state_path:
+        state_config = {
+            'enabled': True,
+            'path': str(state_path),
+            'restore_on_start': True,
+            'save_on_stop': True,
+        }
     system = QuantPipeline({
         'data': {},
         'account': {
@@ -49,14 +57,14 @@ def _build_system(data_manager=None):
         'monitor': {
             'alert_threshold': -10,
         },
+        'state': state_config,
     })
     system.data_manager = data_manager or FakeDataManager()
     return system
 
 
-def test_run_once_executes_grid_signal_and_updates_metrics():
-    system = _build_system()
-    strategy = GridStrategy({
+def _grid_strategy():
+    return GridStrategy({
         'name': '测试网格',
         'symbol': '510300',
         'center_price': 4.00,
@@ -65,6 +73,11 @@ def test_run_once_executes_grid_signal_and_updates_metrics():
         'shares_per_grid': 1000,
         'max_grids': 3,
     })
+
+
+def test_run_once_executes_grid_signal_and_updates_metrics():
+    system = _build_system()
+    strategy = _grid_strategy()
     system.add_strategy(strategy)
 
     status = system.run_once()
@@ -91,3 +104,33 @@ def test_run_once_returns_repriced_portfolio_for_existing_positions():
     assert position['current_price'] == 4.5
     assert position['market_value'] == 4500
     assert status['portfolio']['total_value'] == status['metrics']['total_value']
+
+
+def test_stop_saves_state_and_restore_state_loads_account_and_strategy(tmp_path):
+    state_path = tmp_path / 'state.json'
+    system = _build_system(state_path=state_path)
+    strategy = _grid_strategy()
+    system.add_strategy(strategy)
+    system.executor.execute_order({
+        'action': 'buy',
+        'symbol': '510300',
+        'price': 4.0,
+        'shares': 1000,
+    })
+    strategy.on_trade_confirmed({
+        'action': 'buy',
+        'symbol': '510300',
+        'price': 3.9,
+        'shares': 1000,
+    })
+
+    system.stop()
+
+    restored = _build_system(state_path=state_path)
+    restored_strategy = _grid_strategy()
+    restored.add_strategy(restored_strategy)
+    loaded_state = restored.restore_state()
+
+    assert loaded_state
+    assert restored.executor.positions['510300']['shares'] == 1000
+    assert restored_strategy.grid_ledger[3.9]['bought'] is True
