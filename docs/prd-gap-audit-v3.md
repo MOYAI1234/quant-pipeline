@@ -27,7 +27,7 @@ python cli\commands.py backtest --strategy grid
 结果：
 
 - `compileall` 通过
-- `pytest` 通过，`51 passed`
+- `pytest` 通过，`54 passed`
 - CLI help 可用
 - CLI daily report 可生成空组合报告
 - CLI grid backtest 可生成样例回测报告
@@ -48,7 +48,7 @@ python cli\commands.py backtest --strategy grid
 | 监控告警 | 部分完成 | 状态指标、报告和告警类存在；未形成可运行的通知通道和监控验收 |
 | CLI | 基础可用 | `start/status/report/backtest` 已有；缺少 health-check、config validate 等关键命令 |
 | API/Web | 未完成 | PRD 中规划了 API 和 Web 界面，当前仓库没有对应模块 |
-| 测试体系 | 不足 | 现有 51 个测试覆盖 simulator、grid e2e、rotation、backtest runner、CLI smoke 等；risk、main loop、adapter、report 仍有缺口 |
+| 测试体系 | 不足 | 现有 54 个测试覆盖 simulator、grid e2e、rotation、backtest runner、CLI smoke 等；risk、main loop、adapter、report 仍有缺口 |
 | 文档入口 | 不足 | 仓库当前缺少 `README.md`，不利于交付、验收和新一轮开发协作 |
 
 ## 主要风险

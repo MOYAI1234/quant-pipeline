@@ -30,7 +30,7 @@ class BacktestRunner:
             last_quote = quote
             current_prices = {self.strategy.symbol: quote['price']}
             portfolio = self.executor.get_portfolio(current_prices)
-            signals = self.strategy.generate_signal(quote, portfolio)
+            signals = self._generate_signals(quote, portfolio)
 
             for signal in signals:
                 if not self._signal_executable(signal, quote):
@@ -97,6 +97,34 @@ class BacktestRunner:
             'amount': bar.get('amount', 0.0),
             'timestamp': bar.get('date', bar.get('timestamp', '')),
         }
+
+    def _generate_signals(self, quote: dict, portfolio: dict) -> list:
+        signals = []
+        seen = set()
+        for price in self._candidate_signal_prices(quote):
+            candidate_quote = dict(quote)
+            candidate_quote['price'] = price
+            for signal in self.strategy.generate_signal(candidate_quote, portfolio):
+                key = (
+                    signal.get('action'),
+                    signal.get('symbol'),
+                    signal.get('price'),
+                    signal.get('shares'),
+                    signal.get('amount'),
+                )
+                if key in seen or not self._signal_executable(signal, quote):
+                    continue
+                seen.add(key)
+                signals.append(signal)
+        return signals
+
+    def _candidate_signal_prices(self, quote: dict) -> list:
+        prices = [quote['price']]
+        for attr in ('buy_grids', 'sell_grids'):
+            for price in getattr(self.strategy, attr, []):
+                if quote['low'] <= price <= quote['high']:
+                    prices.append(price)
+        return prices
 
     def _signal_executable(self, signal: dict, quote: dict) -> bool:
         price = signal.get('price', 0)

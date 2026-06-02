@@ -7,6 +7,8 @@ class Simulator(BaseExecutor):
     def __init__(self, config):
         super().__init__(config)
         self.initial_capital = config.get('initial_capital', 100000)
+        if self.initial_capital <= 0:
+            raise ValueError('initial_capital 必须大于 0')
         self.capital = self.initial_capital
         self.positions = {}
         self.trades = []

@@ -61,6 +61,27 @@ def test_backtest_runner_skips_grid_order_when_bar_does_not_touch_limit_price():
     assert len(runner.strategy.trades) == 0
 
 
+def test_backtest_runner_executes_grid_order_when_bar_wicks_through_limit_price():
+    runner = BacktestRunner(_grid_strategy(), {
+        'initial_capital': 100000,
+        'commission_rate': 0.0003,
+    })
+
+    result = runner.run([{
+        'date': '2026-01-01',
+        'open': 4.00,
+        'high': 4.05,
+        'low': 3.90,
+        'close': 4.05,
+        'volume': 1000000,
+        'amount': 4050000,
+    }])
+
+    assert result['trade_count'] == 1
+    assert result['portfolio']['positions']['510300']['avg_price'] == 3.9
+    assert runner.strategy.grid_ledger[3.9]['bought'] is True
+
+
 def test_backtest_runner_resets_state_between_runs():
     runner = BacktestRunner(_grid_strategy(), {
         'initial_capital': 100000,
@@ -139,6 +160,13 @@ def test_backtest_runner_rejects_empty_history():
 
     with pytest.raises(ValueError, match='history 不能为空'):
         runner.run([])
+
+
+def test_backtest_runner_rejects_non_positive_initial_capital():
+    runner = BacktestRunner(_grid_strategy(), {'initial_capital': 0})
+
+    with pytest.raises(ValueError, match='initial_capital 必须大于 0'):
+        runner.run(sample_grid_history())
 
 
 def test_load_history_csv_reads_basic_bar_fields(tmp_path):
