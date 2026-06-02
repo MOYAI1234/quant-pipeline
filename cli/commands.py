@@ -4,6 +4,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from backtest.runner import BacktestRunner, load_history_csv, sample_grid_history
 from main import QuantPipeline
 from strategy.grid_strategy import GridStrategy
 from strategy.rotation_strategy import RotationStrategy
@@ -52,6 +53,27 @@ def cmd_report(args):
     print(report)
 
 
+def cmd_backtest(args):
+    if args.strategy != 'grid':
+        raise ValueError('当前最小回测仅支持 grid 策略')
+
+    strategy = GridStrategy({
+        'name': '网格回测',
+        'symbol': args.symbol or '510300',
+        'center_price': args.center_price or 4.00,
+        'grid_size': args.grid_size or 0.10,
+        'grid_count': args.grid_count or 5,
+        'shares_per_grid': args.shares_per_grid or 1000,
+        'max_grids': args.max_grids or args.grid_count or 5,
+    })
+    history = load_history_csv(args.history) if args.history else sample_grid_history()
+    runner = BacktestRunner(strategy, {
+        'initial_capital': args.initial_capital or 100000,
+        'commission_rate': args.commission_rate or 0.0003,
+    })
+    print(runner.render_markdown(runner.run(history)))
+
+
 def main():
     parser = argparse.ArgumentParser(description='量化助手 Pipeline CLI')
     subparsers = parser.add_subparsers(dest='command')
@@ -73,6 +95,18 @@ def main():
     report_parser = subparsers.add_parser('report', help='生成报告')
     report_parser.add_argument('--type', default='daily', choices=['daily', 'weekly'])
 
+    backtest_parser = subparsers.add_parser('backtest', help='运行回测')
+    backtest_parser.add_argument('--strategy', default='grid', choices=['grid'])
+    backtest_parser.add_argument('--symbol', type=str, default='510300')
+    backtest_parser.add_argument('--history', type=str, help='历史行情 CSV，字段: date,open,high,low,close,volume,amount')
+    backtest_parser.add_argument('--center-price', type=float)
+    backtest_parser.add_argument('--grid-size', type=float)
+    backtest_parser.add_argument('--grid-count', type=int)
+    backtest_parser.add_argument('--shares-per-grid', type=int)
+    backtest_parser.add_argument('--max-grids', type=int)
+    backtest_parser.add_argument('--initial-capital', type=float)
+    backtest_parser.add_argument('--commission-rate', type=float)
+
     args = parser.parse_args()
 
     if args.command == 'start':
@@ -81,6 +115,8 @@ def main():
         cmd_status(args)
     elif args.command == 'report':
         cmd_report(args)
+    elif args.command == 'backtest':
+        cmd_backtest(args)
     else:
         parser.print_help()
 
