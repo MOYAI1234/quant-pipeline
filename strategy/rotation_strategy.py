@@ -16,7 +16,7 @@ class RotationStrategy(BaseStrategy):
 
     def generate_signal(self, data: dict, portfolio: dict = None) -> list:
         signals = []
-        if self.need_rebalance():
+        if self.need_rebalance(data):
             momentum = self.calculate_momentum(data)
             if not momentum:
                 return []
@@ -33,7 +33,7 @@ class RotationStrategy(BaseStrategy):
         if self.pending_rebalance_count > 0:
             self.pending_rebalance_count -= 1
             if self.pending_rebalance_count == 0:
-                self.last_rebalance = datetime.now()
+                self.last_rebalance = self._resolve_datetime(trade) or datetime.now()
 
     def on_trade_failed(self, trade: dict):
         """交易失败后递减 pending，允许重试"""
@@ -56,6 +56,7 @@ class RotationStrategy(BaseStrategy):
 
     def generate_rebalance_signals(self, data: dict = None, portfolio: dict = None) -> list:
         signals = []
+        signal_time = self._resolve_datetime(data)
 
         # 先生成卖出信号：已持有但不在 selected_etfs 中的
         if portfolio:
@@ -74,7 +75,8 @@ class RotationStrategy(BaseStrategy):
                             'price': price,
                             'shares': pos['shares'],
                             'amount': pos['shares'] * price,
-                            'reason': '行业轮动调仓(卖出跌出top_n)'
+                            'reason': '行业轮动调仓(卖出跌出top_n)',
+                            'timestamp': signal_time,
                         })
 
         # 再生成买入信号：新选中的 ETF
@@ -106,18 +108,35 @@ class RotationStrategy(BaseStrategy):
                     'price': price,
                     'shares': shares,
                     'amount': shares * price,
-                    'reason': '行业轮动调仓(买入)'
+                    'reason': '行业轮动调仓(买入)',
+                    'timestamp': signal_time,
                 })
 
         return signals
 
-    def need_rebalance(self) -> bool:
+    def need_rebalance(self, data: dict = None) -> bool:
         if self.pending_rebalance_count > 0:
             return False
         if self.last_rebalance is None:
             return True
-        days_since = (datetime.now() - self.last_rebalance).days
+        current_time = self._resolve_datetime(data) or datetime.now()
+        days_since = (current_time - self.last_rebalance).days
         return days_since >= self.rebalance_days
+
+    def _resolve_datetime(self, payload: dict = None):
+        if not isinstance(payload, dict):
+            return None
+        value = (
+            payload.get('timestamp')
+            or payload.get('date')
+            or payload.get('_timestamp')
+            or payload.get('_date')
+        )
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, str) and value:
+            return datetime.fromisoformat(value)
+        return None
 
     def calc_position_size(self, capital: float, price: float) -> int:
         target_capital = capital * (1.0 / len(self.selected_etfs)) if self.selected_etfs else 0

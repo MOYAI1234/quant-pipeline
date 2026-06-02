@@ -130,7 +130,7 @@ def _run_grid_backtest(args, initial_capital: float, commission_rate: float):
 
 def _run_rotation_backtest(args, initial_capital: float, commission_rate: float):
     if args.history:
-        raise ValueError('rotation 回测当前仅支持内置多 ETF 样例')
+        raise ValueError('rotation 回测当前仅支持内置多 ETF 样例，CSV 历史行情将在后续版本支持')
 
     etf_pool = _resolve_etf_pool(args.etf_pool)
     history = sample_rotation_history()

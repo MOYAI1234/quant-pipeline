@@ -220,20 +220,28 @@ class RotationBacktestRunner:
         symbols = snapshot.get('symbols', {})
         if not symbols:
             raise ValueError('rotation history 缺少 symbols 数据')
-        return {
-            symbol: {
-                'price': bar.get('close', bar.get('price', 0)),
+        market_data = {
+            '_date': snapshot.get('date', snapshot.get('timestamp', '')),
+        }
+        for symbol, bar in symbols.items():
+            market_data[symbol] = {
+                'price': self._required_snapshot_price(symbol, bar),
                 'prices': list(bar.get('prices', [])),
             }
-            for symbol, bar in symbols.items()
-        }
+        return market_data
 
     def _current_prices(self, market_data: dict) -> dict:
         return {
             symbol: data['price']
             for symbol, data in market_data.items()
-            if data.get('price', 0) > 0
+            if isinstance(data, dict) and data.get('price', 0) > 0
         }
+
+    def _required_snapshot_price(self, symbol: str, bar: dict) -> float:
+        price = bar.get('close', bar.get('price'))
+        if price is None or price <= 0:
+            raise ValueError(f"rotation history 中 {symbol} 缺少有效价格")
+        return price
 
     def _max_drawdown(self) -> float:
         peak = self.executor.initial_capital
