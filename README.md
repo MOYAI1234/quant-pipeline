@@ -12,6 +12,7 @@ ETF 量化助手 Pipeline，目标是把数据适配、策略生成、风控检�
 - adapter 支持 `mode=mock|real`。默认 `mock` 会返回占位数据；`real` 当前会明确标记为不可用并抛出 `ServiceUnavailableError`，避免把 0 或空列表误认为真实行情。
 - `DataManager` 会校验实时行情、净值和历史行情的基础字段契约；字段缺失或返回 shape 错误会抛出 `DataFetchError`，避免脏数据继续进入策略链路。
 - `execution/Simulator` 是简化成交模型，支持整手、手续费、均价、持仓和市值估算，但不包含真实撮合、滑点、订单状态同步。
+- `backtest/BacktestRunner` 已支持最小 grid 历史样例回测，并复用 `Simulator`；当前还不是完整回测系统，不含交易日历、滑点、复杂组合和真实历史数据源。
 - 策略状态目前以内存为主，重启后不会自动恢复网格 ledger、轮动 pending 状态或成交流水。
 - QMT/实盘执行、API、Web、完整回测引擎仍未实现。
 
@@ -52,6 +53,20 @@ python cli\commands.py --help
 python cli\commands.py report --type daily
 ```
 
+运行内置样例回测：
+
+```powershell
+python cli\commands.py backtest --strategy grid
+```
+
+使用 CSV 历史行情回测：
+
+```powershell
+python cli\commands.py backtest --strategy grid --history path\to\history.csv
+```
+
+CSV 字段：`date,open,high,low,close,volume,amount`。
+
 启动网格策略模拟循环：
 
 ```powershell
@@ -79,6 +94,7 @@ python -m compileall -q .
 - adapter 的 mock/real 模式、结构化健康检查和未实现 real 模式错误
 - `DataManager` 对实时行情、净值和历史行情的字段契约校验
 - `Simulator` 买入、卖出、均价、部分卖出和市值估算
+- `BacktestRunner` 的 grid 买卖周期、空历史保护、CSV 读取/错误处理和 CLI smoke
 - `GridStrategy` 多格买入、同格防重复、卖出、止损后 ledger 重置
 - `RotationStrategy` 首次调仓、卖旧买新、失败 pending 清理和重试
 - `QuantPipeline.run_once()` 单轮策略执行与监控更新
@@ -89,7 +105,7 @@ python -m compileall -q .
 
 1. 补强测试和主循环可测性。
 2. 明确 adapter 的 mock/real 模式和数据契约。
-3. 实现历史行情驱动的回测引擎。
+3. 扩展历史行情驱动的回测引擎。
 4. 持久化账户、成交和策略状态。
 5. 完善监控报告和告警闭环。
 6. 在模拟和回测稳定后，再预研 QMT/实盘执行。

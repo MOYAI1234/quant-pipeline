@@ -14,6 +14,10 @@ class TestSimulator:
         assert portfolio['position_count'] == 0
         assert portfolio['total_value'] == 100000
 
+    def test_rejects_non_positive_initial_capital(self):
+        with pytest.raises(ValueError, match='initial_capital 必须大于 0'):
+            Simulator({'initial_capital': 0})
+
     def test_buy_round_lot(self):
         # 只能买100的整数倍
         order = {'action': 'buy', 'symbol': '510300', 'price': 4.0, 'amount': 5000}
