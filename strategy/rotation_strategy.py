@@ -142,3 +142,28 @@ class RotationStrategy(BaseStrategy):
         target_capital = capital * (1.0 / len(self.selected_etfs)) if self.selected_etfs else 0
         shares = int(target_capital / price / 100) * 100
         return shares
+
+    def snapshot(self) -> dict:
+        return {
+            'version': 1,
+            'type': 'RotationStrategy',
+            'name': self.name,
+            'symbol': self.symbol,
+            'selected_etfs': list(self.selected_etfs),
+            'last_rebalance': (
+                self.last_rebalance.isoformat()
+                if self.last_rebalance else None
+            ),
+            'pending_rebalance_count': self.pending_rebalance_count,
+            'trades': self._serialize_trades(),
+        }
+
+    def restore(self, snapshot: dict):
+        if snapshot.get('version') != 1:
+            raise ValueError('不支持的 RotationStrategy 状态版本')
+        self.selected_etfs = list(snapshot.get('selected_etfs', []))
+        self.last_rebalance = self._resolve_datetime({
+            'timestamp': snapshot.get('last_rebalance')
+        })
+        self.pending_rebalance_count = snapshot.get('pending_rebalance_count', 0)
+        self._restore_trades(snapshot.get('trades', []))
