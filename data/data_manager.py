@@ -1,10 +1,17 @@
 from adapters.mx_data_adapter import MXDataAdapter
 from adapters.mx_xuangu_adapter import MX_XuanguAdapter
 from adapters.mx_search_adapter import MX_SearchAdapter
+from .contracts import DataFetchError
 from .data_cache import DataCache, _SENTINEL
 
 
 class DataManager:
+    QUOTE_FIELDS = (
+        'symbol', 'price', 'open', 'high', 'low', 'pre_close',
+        'volume', 'amount', 'timestamp'
+    )
+    NAV_FIELDS = ('symbol', 'nav', 'price', 'premium', 'timestamp')
+    HISTORY_FIELDS = ('date', 'open', 'high', 'low', 'close', 'volume', 'amount')
 
     def __init__(self, config):
         self.mx_data = MXDataAdapter(config.get('mx_data', {}))
@@ -27,7 +34,11 @@ class DataManager:
         cached = self.cache.get(cache_key)
         if cached is not _SENTINEL:
             return cached
-        data = self.mx_data.get_etf_realtime(symbol)
+        data = self._normalize_record(
+            self.mx_data.get_etf_realtime(symbol),
+            self.QUOTE_FIELDS,
+            source='mx_data.realtime',
+        )
         self.cache.set(cache_key, data, ttl=10)
         return data
 
@@ -36,7 +47,11 @@ class DataManager:
         cached = self.cache.get(cache_key)
         if cached is not _SENTINEL:
             return cached
-        data = self.mx_data.get_etf_history(symbol, start_date, end_date)
+        data = self._normalize_records(
+            self.mx_data.get_etf_history(symbol, start_date, end_date),
+            self.HISTORY_FIELDS,
+            source='mx_data.history',
+        )
         self.cache.set(cache_key, data, ttl=3600)
         return data
 
@@ -45,7 +60,11 @@ class DataManager:
         cached = self.cache.get(cache_key)
         if cached is not _SENTINEL:
             return cached
-        data = self.mx_data.get_etf_nav(symbol)
+        data = self._normalize_record(
+            self.mx_data.get_etf_nav(symbol),
+            self.NAV_FIELDS,
+            source='mx_data.nav',
+        )
         self.cache.set(cache_key, data, ttl=60)
         return data
 
@@ -76,3 +95,48 @@ class DataManager:
             status.get('mock', False)
             for status in self.health_check().values()
         )
+
+    def _normalize_record(self, record: dict, required_fields: tuple, source: str) -> dict:
+        if record is None:
+            raise DataFetchError(
+                f"{source} 返回值不能为 None",
+                error_code='NULL_DATA',
+                source=source,
+            )
+
+        if not isinstance(record, dict):
+            raise DataFetchError(
+                f"{source} 返回值必须是 dict，实际类型: {type(record).__name__}",
+                error_code='INVALID_DATA_SHAPE',
+                source=source,
+            )
+
+        if not record:
+            raise DataFetchError(
+                f"{source} 返回值不能为空字典",
+                error_code='EMPTY_DATA',
+                source=source,
+            )
+
+        missing = [field for field in required_fields if field not in record]
+        if missing:
+            raise DataFetchError(
+                f"{source} 缺少字段: {', '.join(missing)}",
+                error_code='MISSING_FIELDS',
+                source=source,
+            )
+
+        return {field: record[field] for field in required_fields}
+
+    def _normalize_records(self, records: list, required_fields: tuple, source: str) -> list:
+        if not isinstance(records, list):
+            raise DataFetchError(
+                f"{source} 返回值必须是 list",
+                error_code='INVALID_DATA_SHAPE',
+                source=source,
+            )
+
+        return [
+            self._normalize_record(record, required_fields, source)
+            for record in records
+        ]
