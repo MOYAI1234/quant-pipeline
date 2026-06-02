@@ -27,7 +27,7 @@ python cli\commands.py backtest --strategy grid
 结果：
 
 - `compileall` 通过
-- `pytest` 通过，`39 passed`
+- `pytest` 通过，`46 passed`
 - CLI help 可用
 - CLI daily report 可生成空组合报告
 - CLI grid backtest 可生成样例回测报告

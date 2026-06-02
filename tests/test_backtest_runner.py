@@ -1,5 +1,6 @@
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -65,9 +66,59 @@ def test_load_history_csv_reads_basic_bar_fields(tmp_path):
     }]
 
 
+def test_load_history_csv_rejects_missing_file(tmp_path):
+    missing_file = tmp_path / 'missing.csv'
+
+    with pytest.raises(FileNotFoundError, match='历史行情 CSV 不存在'):
+        load_history_csv(str(missing_file))
+
+
+def test_load_history_csv_rejects_empty_file(tmp_path):
+    history_file = tmp_path / 'history.csv'
+    history_file.write_text('', encoding='utf-8')
+
+    with pytest.raises(ValueError, match='历史行情 CSV 不能为空'):
+        load_history_csv(str(history_file))
+
+
+def test_load_history_csv_rejects_missing_required_columns(tmp_path):
+    history_file = tmp_path / 'history.csv'
+    history_file.write_text(
+        'date,open,high,low,close,volume\n'
+        '2026-01-01,4.0,4.1,3.9,4.05,1000\n',
+        encoding='utf-8',
+    )
+
+    with pytest.raises(ValueError, match='历史行情 CSV 缺少字段: amount'):
+        load_history_csv(str(history_file))
+
+
+def test_load_history_csv_rejects_header_without_data_rows(tmp_path):
+    history_file = tmp_path / 'history.csv'
+    history_file.write_text(
+        'date,open,high,low,close,volume,amount\n',
+        encoding='utf-8',
+    )
+
+    with pytest.raises(ValueError, match='历史行情 CSV 没有数据行'):
+        load_history_csv(str(history_file))
+
+
+def test_load_history_csv_rejects_invalid_numeric_fields(tmp_path):
+    history_file = tmp_path / 'history.csv'
+    history_file.write_text(
+        'date,open,high,low,close,volume,amount\n'
+        '2026-01-01,4.0,4.1,3.9,bad,1000,4050\n',
+        encoding='utf-8',
+    )
+
+    with pytest.raises(ValueError, match='字段 close 不是有效数字'):
+        load_history_csv(str(history_file))
+
+
 def test_cli_backtest_smoke_outputs_markdown_report():
     completed = subprocess.run(
-        [sys.executable, 'cli\\commands.py', 'backtest', '--strategy', 'grid'],
+        [sys.executable, str(Path('cli') / 'commands.py'), 'backtest', '--strategy', 'grid'],
         check=True,
         capture_output=True,
         text=True,
@@ -75,3 +126,27 @@ def test_cli_backtest_smoke_outputs_markdown_report():
 
     assert '# 回测报告 - 网格回测' in completed.stdout
     assert '- 交易次数: 2' in completed.stdout
+
+
+@pytest.mark.parametrize('option,value', [
+    ('--grid-size', '0'),
+    ('--initial-capital', '-1'),
+])
+def test_cli_backtest_rejects_invalid_numeric_args(option, value):
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'grid',
+            option,
+            value,
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 2
+    assert option in completed.stderr

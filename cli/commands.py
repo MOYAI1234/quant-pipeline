@@ -10,6 +10,15 @@ from strategy.grid_strategy import GridStrategy
 from strategy.rotation_strategy import RotationStrategy
 
 
+DEFAULT_BACKTEST_SYMBOL = '510300'
+DEFAULT_BACKTEST_CENTER_PRICE = 4.00
+DEFAULT_BACKTEST_GRID_SIZE = 0.10
+DEFAULT_BACKTEST_GRID_COUNT = 5
+DEFAULT_BACKTEST_SHARES_PER_GRID = 1000
+DEFAULT_BACKTEST_INITIAL_CAPITAL = 100000
+DEFAULT_BACKTEST_COMMISSION_RATE = 0.0003
+
+
 def cmd_start(args):
     system = QuantPipeline()
 
@@ -57,21 +66,80 @@ def cmd_backtest(args):
     if args.strategy != 'grid':
         raise ValueError('当前最小回测仅支持 grid 策略')
 
+    symbol = _resolve_symbol(args.symbol)
+    center_price = _positive_number(
+        _value_or_default(args.center_price, DEFAULT_BACKTEST_CENTER_PRICE),
+        '--center-price',
+    )
+    grid_size = _positive_number(
+        _value_or_default(args.grid_size, DEFAULT_BACKTEST_GRID_SIZE),
+        '--grid-size',
+    )
+    grid_count = _positive_int(
+        _value_or_default(args.grid_count, DEFAULT_BACKTEST_GRID_COUNT),
+        '--grid-count',
+    )
+    shares_per_grid = _positive_int(
+        _value_or_default(args.shares_per_grid, DEFAULT_BACKTEST_SHARES_PER_GRID),
+        '--shares-per-grid',
+    )
+    max_grids = _positive_int(
+        _value_or_default(args.max_grids, grid_count),
+        '--max-grids',
+    )
+    initial_capital = _positive_number(
+        _value_or_default(args.initial_capital, DEFAULT_BACKTEST_INITIAL_CAPITAL),
+        '--initial-capital',
+    )
+    commission_rate = _non_negative_number(
+        _value_or_default(args.commission_rate, DEFAULT_BACKTEST_COMMISSION_RATE),
+        '--commission-rate',
+    )
+
     strategy = GridStrategy({
         'name': '网格回测',
-        'symbol': args.symbol or '510300',
-        'center_price': args.center_price or 4.00,
-        'grid_size': args.grid_size or 0.10,
-        'grid_count': args.grid_count or 5,
-        'shares_per_grid': args.shares_per_grid or 1000,
-        'max_grids': args.max_grids or args.grid_count or 5,
+        'symbol': symbol,
+        'center_price': center_price,
+        'grid_size': grid_size,
+        'grid_count': grid_count,
+        'shares_per_grid': shares_per_grid,
+        'max_grids': max_grids,
     })
     history = load_history_csv(args.history) if args.history else sample_grid_history()
     runner = BacktestRunner(strategy, {
-        'initial_capital': args.initial_capital or 100000,
-        'commission_rate': args.commission_rate or 0.0003,
+        'initial_capital': initial_capital,
+        'commission_rate': commission_rate,
     })
     print(runner.render_markdown(runner.run(history)))
+
+
+def _resolve_symbol(symbol: str) -> str:
+    resolved = symbol.strip() if symbol else DEFAULT_BACKTEST_SYMBOL
+    if not resolved:
+        raise ValueError('--symbol 不能为空')
+    return resolved
+
+
+def _value_or_default(value, default):
+    return default if value is None else value
+
+
+def _positive_number(value: float, option_name: str) -> float:
+    if value <= 0:
+        raise ValueError(f"{option_name} 必须大于 0")
+    return value
+
+
+def _positive_int(value: int, option_name: str) -> int:
+    if value <= 0:
+        raise ValueError(f"{option_name} 必须大于 0")
+    return value
+
+
+def _non_negative_number(value: float, option_name: str) -> float:
+    if value < 0:
+        raise ValueError(f"{option_name} 不能小于 0")
+    return value
 
 
 def main():
@@ -97,7 +165,7 @@ def main():
 
     backtest_parser = subparsers.add_parser('backtest', help='运行回测')
     backtest_parser.add_argument('--strategy', default='grid', choices=['grid'])
-    backtest_parser.add_argument('--symbol', type=str, default='510300')
+    backtest_parser.add_argument('--symbol', type=str, default=DEFAULT_BACKTEST_SYMBOL)
     backtest_parser.add_argument('--history', type=str, help='历史行情 CSV，字段: date,open,high,low,close,volume,amount')
     backtest_parser.add_argument('--center-price', type=float)
     backtest_parser.add_argument('--grid-size', type=float)
@@ -116,7 +184,10 @@ def main():
     elif args.command == 'report':
         cmd_report(args)
     elif args.command == 'backtest':
-        cmd_backtest(args)
+        try:
+            cmd_backtest(args)
+        except (FileNotFoundError, ValueError) as exc:
+            parser.error(str(exc))
     else:
         parser.print_help()
 

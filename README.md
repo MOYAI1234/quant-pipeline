@@ -94,7 +94,7 @@ python -m compileall -q .
 - adapter 的 mock/real 模式、结构化健康检查和未实现 real 模式错误
 - `DataManager` 对实时行情、净值和历史行情的字段契约校验
 - `Simulator` 买入、卖出、均价、部分卖出和市值估算
-- `BacktestRunner` 的 grid 买卖周期、空历史保护、CSV 读取和 CLI smoke
+- `BacktestRunner` 的 grid 买卖周期、空历史保护、CSV 读取/错误处理和 CLI smoke
 - `GridStrategy` 多格买入、同格防重复、卖出、止损后 ledger 重置
 - `RotationStrategy` 首次调仓、卖旧买新、失败 pending 清理和重试
 - `QuantPipeline.run_once()` 单轮策略执行与监控更新

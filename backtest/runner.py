@@ -4,6 +4,9 @@ from pathlib import Path
 from execution.simulator import Simulator
 
 
+REQUIRED_CSV_FIELDS = ('date', 'open', 'high', 'low', 'close', 'volume', 'amount')
+
+
 class BacktestRunner:
 
     def __init__(self, strategy, account_config: dict = None):
@@ -99,18 +102,36 @@ class BacktestRunner:
 
 
 def load_history_csv(path: str) -> list:
+    csv_path = Path(path)
+    if not csv_path.exists():
+        raise FileNotFoundError(f"历史行情 CSV 不存在: {csv_path}")
+    if not csv_path.is_file():
+        raise ValueError(f"历史行情路径不是文件: {csv_path}")
+
     rows = []
-    with Path(path).open(newline='', encoding='utf-8') as file:
-        for row in csv.DictReader(file):
+    with csv_path.open(newline='', encoding='utf-8') as file:
+        reader = csv.DictReader(file)
+        if not reader.fieldnames:
+            raise ValueError('历史行情 CSV 不能为空')
+
+        missing = [field for field in REQUIRED_CSV_FIELDS if field not in reader.fieldnames]
+        if missing:
+            raise ValueError(f"历史行情 CSV 缺少字段: {', '.join(missing)}")
+
+        for line_number, row in enumerate(reader, start=2):
+            if _is_blank_row(row):
+                continue
             rows.append({
-                'date': row.get('date', ''),
-                'open': _to_float(row.get('open')),
-                'high': _to_float(row.get('high')),
-                'low': _to_float(row.get('low')),
-                'close': _to_float(row.get('close')),
-                'volume': _to_int(row.get('volume')),
-                'amount': _to_float(row.get('amount')),
+                'date': _required_text(row.get('date'), 'date', line_number),
+                'open': _to_float(row.get('open'), 'open', line_number),
+                'high': _to_float(row.get('high'), 'high', line_number),
+                'low': _to_float(row.get('low'), 'low', line_number),
+                'close': _to_float(row.get('close'), 'close', line_number),
+                'volume': _to_int(row.get('volume'), 'volume', line_number),
+                'amount': _to_float(row.get('amount'), 'amount', line_number),
             })
+    if not rows:
+        raise ValueError('历史行情 CSV 没有数据行')
     return rows
 
 
@@ -134,13 +155,33 @@ def _bar(date: str, open_price: float, high: float, low: float, close: float) ->
     }
 
 
-def _to_float(value) -> float:
-    if value in (None, ''):
-        return 0.0
-    return float(value)
+def _is_blank_row(row: dict) -> bool:
+    return all(value in (None, '') for value in row.values())
 
 
-def _to_int(value) -> int:
+def _required_text(value, field: str, line_number: int) -> str:
     if value in (None, ''):
-        return 0
-    return int(float(value))
+        raise ValueError(f"历史行情 CSV 第 {line_number} 行字段 {field} 不能为空")
+    return value
+
+
+def _to_float(value, field: str, line_number: int) -> float:
+    if value in (None, ''):
+        raise ValueError(f"历史行情 CSV 第 {line_number} 行字段 {field} 不能为空")
+    try:
+        return float(value)
+    except ValueError as exc:
+        raise ValueError(
+            f"历史行情 CSV 第 {line_number} 行字段 {field} 不是有效数字: {value}"
+        ) from exc
+
+
+def _to_int(value, field: str, line_number: int) -> int:
+    if value in (None, ''):
+        raise ValueError(f"历史行情 CSV 第 {line_number} 行字段 {field} 不能为空")
+    try:
+        return int(float(value))
+    except ValueError as exc:
+        raise ValueError(
+            f"历史行情 CSV 第 {line_number} 行字段 {field} 不是有效整数: {value}"
+        ) from exc
