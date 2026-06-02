@@ -14,6 +14,7 @@ class MXDataAdapter(BaseAdapter):
             'open': 0.0,
             'high': 0.0,
             'low': 0.0,
+            'pre_close': 0.0,
             'volume': 0,
             'amount': 0.0,
             'timestamp': ''
@@ -29,7 +30,8 @@ class MXDataAdapter(BaseAdapter):
             'symbol': symbol,
             'nav': 0.0,
             'price': 0.0,
-            'premium': 0.0
+            'premium': 0.0,
+            'timestamp': ''
         }
 
     def get_etf_list(self, etf_type: str = None) -> list:
