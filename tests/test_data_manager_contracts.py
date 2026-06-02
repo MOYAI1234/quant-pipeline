@@ -57,7 +57,7 @@ def test_get_etf_realtime_returns_complete_mock_quote_contract():
 
     quote = manager.get_etf_realtime('510300')
 
-    assert set(DataManager.QUOTE_FIELDS).issubset(quote)
+    assert set(quote) == set(DataManager.QUOTE_FIELDS)
     assert quote['symbol'] == '510300'
     assert quote['pre_close'] == 0.0
 
@@ -72,7 +72,7 @@ def test_get_etf_nav_returns_complete_mock_nav_contract():
 
     nav = manager.get_etf_nav('510300')
 
-    assert set(DataManager.NAV_FIELDS).issubset(nav)
+    assert set(nav) == set(DataManager.NAV_FIELDS)
     assert nav['symbol'] == '510300'
     assert nav['timestamp'] == ''
 
@@ -89,6 +89,26 @@ def test_get_etf_realtime_rejects_missing_required_fields():
         manager.get_etf_realtime('510300')
 
     assert exc.value.error_code == 'MISSING_FIELDS'
+    assert exc.value.source == 'mx_data.realtime'
+
+
+def test_get_etf_realtime_rejects_none_record():
+    manager = _manager_with_adapter(BrokenMXDataAdapter(realtime=None))
+
+    with pytest.raises(DataFetchError) as exc:
+        manager.get_etf_realtime('510300')
+
+    assert exc.value.error_code == 'NULL_DATA'
+    assert exc.value.source == 'mx_data.realtime'
+
+
+def test_get_etf_realtime_rejects_empty_record():
+    manager = _manager_with_adapter(BrokenMXDataAdapter(realtime={}))
+
+    with pytest.raises(DataFetchError) as exc:
+        manager.get_etf_realtime('510300')
+
+    assert exc.value.error_code == 'EMPTY_DATA'
     assert exc.value.source == 'mx_data.realtime'
 
 
@@ -129,6 +149,7 @@ def test_normalized_quote_is_cached_after_first_fetch():
             'volume': 100,
             'amount': 40000.0,
             'timestamp': '2026-06-02 10:00:00',
+            'adapter_extra': 'not part of contract',
         }
     )
     manager = _manager_with_adapter(adapter)
@@ -138,4 +159,6 @@ def test_normalized_quote_is_cached_after_first_fetch():
     cached = manager.get_etf_realtime('510300')
 
     assert quote == cached
+    assert set(cached) == set(DataManager.QUOTE_FIELDS)
+    assert 'adapter_extra' not in cached
     assert cached['price'] == 4.0

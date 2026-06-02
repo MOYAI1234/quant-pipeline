@@ -97,10 +97,24 @@ class DataManager:
         )
 
     def _normalize_record(self, record: dict, required_fields: tuple, source: str) -> dict:
+        if record is None:
+            raise DataFetchError(
+                f"{source} 返回值不能为 None",
+                error_code='NULL_DATA',
+                source=source,
+            )
+
         if not isinstance(record, dict):
             raise DataFetchError(
-                f"{source} 返回值必须是 dict",
+                f"{source} 返回值必须是 dict，实际类型: {type(record).__name__}",
                 error_code='INVALID_DATA_SHAPE',
+                source=source,
+            )
+
+        if not record:
+            raise DataFetchError(
+                f"{source} 返回值不能为空字典",
+                error_code='EMPTY_DATA',
                 source=source,
             )
 
@@ -112,7 +126,7 @@ class DataManager:
                 source=source,
             )
 
-        return dict(record)
+        return {field: record[field] for field in required_fields}
 
     def _normalize_records(self, records: list, required_fields: tuple, source: str) -> list:
         if not isinstance(records, list):
