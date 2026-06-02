@@ -4,7 +4,13 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backtest.runner import BacktestRunner, load_history_csv, sample_grid_history
+from backtest.runner import (
+    BacktestRunner,
+    RotationBacktestRunner,
+    load_history_csv,
+    sample_grid_history,
+    sample_rotation_history,
+)
 from main import QuantPipeline
 from strategy.grid_strategy import GridStrategy
 from strategy.rotation_strategy import RotationStrategy
@@ -17,6 +23,10 @@ DEFAULT_BACKTEST_GRID_COUNT = 5
 DEFAULT_BACKTEST_SHARES_PER_GRID = 1000
 DEFAULT_BACKTEST_INITIAL_CAPITAL = 100000
 DEFAULT_BACKTEST_COMMISSION_RATE = 0.0003
+DEFAULT_BACKTEST_ETF_POOL = ['510300', '510500', '159915']
+DEFAULT_BACKTEST_ROTATION_LOOKBACK = 3
+DEFAULT_BACKTEST_ROTATION_TOP_N = 1
+DEFAULT_BACKTEST_ROTATION_REBALANCE_DAYS = 0
 
 
 def cmd_start(args):
@@ -63,9 +73,22 @@ def cmd_report(args):
 
 
 def cmd_backtest(args):
-    if args.strategy != 'grid':
-        raise ValueError('当前最小回测仅支持 grid 策略')
+    initial_capital = _positive_number(
+        _value_or_default(args.initial_capital, DEFAULT_BACKTEST_INITIAL_CAPITAL),
+        '--initial-capital',
+    )
+    commission_rate = _non_negative_number(
+        _value_or_default(args.commission_rate, DEFAULT_BACKTEST_COMMISSION_RATE),
+        '--commission-rate',
+    )
 
+    if args.strategy == 'grid':
+        _run_grid_backtest(args, initial_capital, commission_rate)
+    elif args.strategy == 'rotation':
+        _run_rotation_backtest(args, initial_capital, commission_rate)
+
+
+def _run_grid_backtest(args, initial_capital: float, commission_rate: float):
     symbol = _resolve_symbol(args.symbol)
     center_price = _positive_number(
         _value_or_default(args.center_price, DEFAULT_BACKTEST_CENTER_PRICE),
@@ -87,14 +110,6 @@ def cmd_backtest(args):
         _value_or_default(args.max_grids, grid_count),
         '--max-grids',
     )
-    initial_capital = _positive_number(
-        _value_or_default(args.initial_capital, DEFAULT_BACKTEST_INITIAL_CAPITAL),
-        '--initial-capital',
-    )
-    commission_rate = _non_negative_number(
-        _value_or_default(args.commission_rate, DEFAULT_BACKTEST_COMMISSION_RATE),
-        '--commission-rate',
-    )
 
     strategy = GridStrategy({
         'name': '网格回测',
@@ -113,11 +128,62 @@ def cmd_backtest(args):
     print(runner.render_markdown(runner.run(history)))
 
 
+def _run_rotation_backtest(args, initial_capital: float, commission_rate: float):
+    if args.history:
+        raise ValueError('rotation 回测当前仅支持内置多 ETF 样例')
+
+    etf_pool = _resolve_etf_pool(args.etf_pool)
+    history = sample_rotation_history()
+    available_symbols = set(history[0].get('symbols', {}))
+    missing_symbols = [symbol for symbol in etf_pool if symbol not in available_symbols]
+    if missing_symbols:
+        raise ValueError(
+            f"rotation 内置样例不包含 ETF: {', '.join(missing_symbols)}"
+        )
+    lookback = _positive_int(
+        _value_or_default(args.lookback, DEFAULT_BACKTEST_ROTATION_LOOKBACK),
+        '--lookback',
+    )
+    top_n = _positive_int(
+        _value_or_default(args.top_n, DEFAULT_BACKTEST_ROTATION_TOP_N),
+        '--top-n',
+    )
+    rebalance_days = _non_negative_int(
+        _value_or_default(args.rebalance_days, DEFAULT_BACKTEST_ROTATION_REBALANCE_DAYS),
+        '--rebalance-days',
+    )
+    if top_n > len(etf_pool):
+        raise ValueError('--top-n 不能大于 ETF 池数量')
+
+    strategy = RotationStrategy({
+        'name': '轮动回测',
+        'symbol': etf_pool[0],
+        'etf_pool': etf_pool,
+        'lookback': lookback,
+        'top_n': top_n,
+        'rebalance_days': rebalance_days,
+    })
+    runner = RotationBacktestRunner(strategy, {
+        'initial_capital': initial_capital,
+        'commission_rate': commission_rate,
+    })
+    print(runner.render_markdown(runner.run(history)))
+
+
 def _resolve_symbol(symbol: str) -> str:
     resolved = symbol.strip() if symbol else DEFAULT_BACKTEST_SYMBOL
     if not resolved:
         raise ValueError('--symbol 不能为空')
     return resolved
+
+
+def _resolve_etf_pool(etf_pool: str) -> list:
+    if not etf_pool:
+        return list(DEFAULT_BACKTEST_ETF_POOL)
+    symbols = [symbol.strip() for symbol in etf_pool.split(',') if symbol.strip()]
+    if not symbols:
+        raise ValueError('--etf-pool 不能为空')
+    return symbols
 
 
 def _value_or_default(value, default):
@@ -133,6 +199,12 @@ def _positive_number(value: float, option_name: str) -> float:
 def _positive_int(value: int, option_name: str) -> int:
     if value <= 0:
         raise ValueError(f"{option_name} 必须大于 0")
+    return value
+
+
+def _non_negative_int(value: int, option_name: str) -> int:
+    if value < 0:
+        raise ValueError(f"{option_name} 不能小于 0")
     return value
 
 
@@ -164,7 +236,7 @@ def main():
     report_parser.add_argument('--type', default='daily', choices=['daily', 'weekly'])
 
     backtest_parser = subparsers.add_parser('backtest', help='运行回测')
-    backtest_parser.add_argument('--strategy', default='grid', choices=['grid'])
+    backtest_parser.add_argument('--strategy', default='grid', choices=['grid', 'rotation'])
     backtest_parser.add_argument('--symbol', type=str, default=DEFAULT_BACKTEST_SYMBOL)
     backtest_parser.add_argument('--history', type=str, help='历史行情 CSV，字段: date,open,high,low,close,volume,amount')
     backtest_parser.add_argument('--center-price', type=float)
@@ -174,6 +246,10 @@ def main():
     backtest_parser.add_argument('--max-grids', type=int)
     backtest_parser.add_argument('--initial-capital', type=float)
     backtest_parser.add_argument('--commission-rate', type=float)
+    backtest_parser.add_argument('--etf-pool', type=str, help='ETF池，逗号分隔')
+    backtest_parser.add_argument('--lookback', type=int, help='轮动回看周期')
+    backtest_parser.add_argument('--top-n', type=int, help='轮动选择ETF数量')
+    backtest_parser.add_argument('--rebalance-days', type=int, help='轮动再平衡天数')
 
     args = parser.parse_args()
 

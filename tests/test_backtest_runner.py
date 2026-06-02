@@ -4,8 +4,15 @@ from pathlib import Path
 
 import pytest
 
-from backtest.runner import BacktestRunner, load_history_csv, sample_grid_history
+from backtest.runner import (
+    BacktestRunner,
+    RotationBacktestRunner,
+    load_history_csv,
+    sample_grid_history,
+    sample_rotation_history,
+)
 from strategy.grid_strategy import GridStrategy
+from strategy.rotation_strategy import RotationStrategy
 
 
 def _grid_strategy():
@@ -17,6 +24,17 @@ def _grid_strategy():
         'grid_count': 3,
         'shares_per_grid': 1000,
         'max_grids': 3,
+    })
+
+
+def _rotation_strategy():
+    return RotationStrategy({
+        'name': '测试轮动回测',
+        'symbol': '510300',
+        'etf_pool': ['510300', '510500', '159915'],
+        'lookback': 3,
+        'top_n': 1,
+        'rebalance_days': 0,
     })
 
 
@@ -36,6 +54,24 @@ def test_backtest_runner_executes_grid_buy_sell_cycle():
     assert result['max_drawdown'] >= 0
     assert len(result['equity_curve']) == 3
     assert '510300' not in result['portfolio']['positions']
+
+
+def test_rotation_backtest_runner_buys_then_rotates_to_new_leader():
+    runner = RotationBacktestRunner(_rotation_strategy(), {
+        'initial_capital': 100000,
+        'commission_rate': 0.0003,
+    })
+
+    result = runner.run(sample_rotation_history())
+
+    assert result['strategy'] == '测试轮动回测'
+    assert result['symbol'] == '510300,510500,159915'
+    assert result['trade_count'] == 3
+    assert len(result['equity_curve']) == 2
+    assert '510300' not in result['portfolio']['positions']
+    assert '510500' in result['portfolio']['positions']
+    assert runner.strategy.selected_etfs == ['510500']
+    assert len(runner.strategy.trades) == 3
 
 
 def test_backtest_runner_skips_grid_order_when_bar_does_not_touch_limit_price():
@@ -262,6 +298,45 @@ def test_cli_backtest_smoke_outputs_markdown_report():
 
     assert '# 回测报告 - 网格回测' in completed.stdout
     assert '- 交易次数: 2' in completed.stdout
+
+
+def test_cli_rotation_backtest_smoke_outputs_markdown_report():
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'rotation',
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert '# 回测报告 - 轮动回测' in completed.stdout
+    assert '- 标的池: 510300,510500,159915' in completed.stdout
+    assert '- 交易次数: 3' in completed.stdout
+
+
+def test_cli_rotation_backtest_rejects_unknown_sample_symbol():
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'rotation',
+            '--etf-pool',
+            '510300,UNKNOWN',
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 2
+    assert 'rotation 内置样例不包含 ETF: UNKNOWN' in completed.stderr
 
 
 @pytest.mark.parametrize('option,value', [

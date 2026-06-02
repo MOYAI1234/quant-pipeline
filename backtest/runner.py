@@ -141,6 +141,111 @@ class BacktestRunner:
         return max_drawdown
 
 
+class RotationBacktestRunner:
+
+    def __init__(self, strategy, account_config: dict = None):
+        self._strategy_template = copy.deepcopy(strategy)
+        self.strategy = copy.deepcopy(self._strategy_template)
+        self._account_config = dict(account_config or {})
+        self.executor = None
+        self.equity_curve = []
+
+    def run(self, history: list) -> dict:
+        if not history:
+            raise ValueError('history 不能为空')
+
+        self.strategy = copy.deepcopy(self._strategy_template)
+        self.executor = Simulator(dict(self._account_config))
+        self.equity_curve = []
+        last_snapshot = None
+        for snapshot in history:
+            last_snapshot = snapshot
+            market_data = self._snapshot_to_market_data(snapshot)
+            current_prices = self._current_prices(market_data)
+            portfolio = self.executor.get_portfolio(current_prices)
+            signals = self.strategy.generate_signal(market_data, portfolio)
+
+            for signal in signals:
+                if self.executor.execute_order(signal):
+                    self.strategy.record_trade(signal)
+                    if hasattr(self.strategy, 'on_trade_confirmed'):
+                        self.strategy.on_trade_confirmed(signal)
+                elif hasattr(self.strategy, 'on_trade_failed'):
+                    self.strategy.on_trade_failed(signal)
+
+            portfolio = self.executor.get_portfolio(current_prices)
+            self.equity_curve.append({
+                'date': snapshot.get('date', snapshot.get('timestamp', '')),
+                'total_value': portfolio['total_value'],
+                'pnl': portfolio['pnl'],
+                'pnl_percent': portfolio['pnl_percent'],
+            })
+
+        final_market_data = self._snapshot_to_market_data(last_snapshot)
+        final_portfolio = self.executor.get_portfolio(self._current_prices(final_market_data))
+
+        return {
+            'strategy': self.strategy.name,
+            'symbol': ','.join(self.strategy.etf_pool),
+            'start_date': self.equity_curve[0]['date'],
+            'end_date': self.equity_curve[-1]['date'],
+            'initial_capital': self.executor.initial_capital,
+            'final_value': final_portfolio['total_value'],
+            'total_return': (
+                final_portfolio['total_value'] - self.executor.initial_capital
+            ) / self.executor.initial_capital,
+            'max_drawdown': self._max_drawdown(),
+            'trade_count': len(self.executor.trades),
+            'realized_pnl': final_portfolio['realized_pnl'],
+            'portfolio': final_portfolio,
+            'equity_curve': list(self.equity_curve),
+        }
+
+    def render_markdown(self, result: dict) -> str:
+        lines = [
+            f"# 回测报告 - {result['strategy']}",
+            "",
+            f"- 标的池: {result['symbol']}",
+            f"- 区间: {result['start_date']} 至 {result['end_date']}",
+            f"- 初始资金: {result['initial_capital']:.2f}",
+            f"- 期末总值: {result['final_value']:.2f}",
+            f"- 总收益率: {result['total_return']:.2%}",
+            f"- 最大回撤: {result['max_drawdown']:.2%}",
+            f"- 交易次数: {result['trade_count']}",
+            f"- 已实现盈亏: {result['realized_pnl']:.2f}",
+        ]
+        return "\n".join(lines)
+
+    def _snapshot_to_market_data(self, snapshot: dict) -> dict:
+        symbols = snapshot.get('symbols', {})
+        if not symbols:
+            raise ValueError('rotation history 缺少 symbols 数据')
+        return {
+            symbol: {
+                'price': bar.get('close', bar.get('price', 0)),
+                'prices': list(bar.get('prices', [])),
+            }
+            for symbol, bar in symbols.items()
+        }
+
+    def _current_prices(self, market_data: dict) -> dict:
+        return {
+            symbol: data['price']
+            for symbol, data in market_data.items()
+            if data.get('price', 0) > 0
+        }
+
+    def _max_drawdown(self) -> float:
+        peak = self.executor.initial_capital
+        max_drawdown = 0.0
+        for point in self.equity_curve:
+            value = point['total_value']
+            peak = max(peak, value)
+            if peak > 0:
+                max_drawdown = max(max_drawdown, (peak - value) / peak)
+        return max_drawdown
+
+
 def load_history_csv(path: str) -> list:
     csv_path = Path(path)
     if not csv_path.exists():
@@ -183,6 +288,21 @@ def sample_grid_history() -> list:
     ]
 
 
+def sample_rotation_history() -> list:
+    return [
+        _rotation_snapshot('2026-01-01', {
+            '510300': [10.0, 11.0, 12.0],
+            '510500': [10.0, 9.5, 9.0],
+            '159915': [10.0, 10.0, 10.5],
+        }),
+        _rotation_snapshot('2026-01-02', {
+            '510300': [11.0, 12.0, 11.0],
+            '510500': [9.0, 10.0, 12.0],
+            '159915': [10.0, 10.5, 10.2],
+        }),
+    ]
+
+
 def _bar(date: str, open_price: float, high: float, low: float, close: float) -> dict:
     return {
         'date': date,
@@ -192,6 +312,19 @@ def _bar(date: str, open_price: float, high: float, low: float, close: float) ->
         'close': close,
         'volume': 1000000,
         'amount': close * 1000000,
+    }
+
+
+def _rotation_snapshot(date: str, prices_by_symbol: dict) -> dict:
+    return {
+        'date': date,
+        'symbols': {
+            symbol: {
+                'close': prices[-1],
+                'prices': prices,
+            }
+            for symbol, prices in prices_by_symbol.items()
+        },
     }
 
 

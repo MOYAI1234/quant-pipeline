@@ -22,15 +22,17 @@ python -m pytest -q
 python cli\commands.py --help
 python cli\commands.py report --type daily
 python cli\commands.py backtest --strategy grid
+python cli\commands.py backtest --strategy rotation
 ```
 
 结果：
 
 - `compileall` 通过
-- `pytest` 通过，`54 passed`
+- `pytest` 通过，`57 passed`
 - CLI help 可用
 - CLI daily report 可生成空组合报告
 - CLI grid backtest 可生成样例回测报告
+- CLI rotation backtest 可生成多 ETF 样例回测报告
 
 ## PRD 对照状态
 
@@ -40,7 +42,7 @@ python cli\commands.py backtest --strategy grid
 | 数据管理器 | 部分完成 | `DataManager` 和 TTL 缓存已存在，但缺少数据有效性、行情时效、错误语义和契约转换 |
 | 网格策略 | 基础可用 | 已支持多格买入、成交确认后更新 ledger、卖出后允许再买；仍缺持久化和更丰富行情路径测试 |
 | 行业轮动策略 | 基础可用 | 已支持动量选择、卖旧买新、失败回调；仍缺独立测试和风控冲突场景覆盖 |
-| 回测功能 | 已启动 | 已新增最小 `backtest/BacktestRunner`，可用历史 bar 驱动 grid 策略并复用 `Simulator` 输出基础指标；仍缺完整交易日历、滑点、组合、多策略和真实历史数据源 |
+| 回测功能 | 已启动 | 已新增最小 `BacktestRunner` 和 `RotationBacktestRunner`，可用历史 bar / 多 ETF 样例驱动 grid、rotation 策略并复用 `Simulator` 输出基础指标；仍缺完整交易日历、滑点、组合、多策略和真实历史数据源 |
 | 模拟执行器 | 基础可用 | 买卖、整手、均价、手续费、估值和部分盈亏计算已实现；成交模型仍简化 |
 | QMT/实盘执行 | 未完成 | `qmt_executor.py` 不存在，实盘订单模型、状态同步、异常恢复都未开始 |
 | 风控模块 | 部分完成 | 仓位、ETF 质量、止损已存在；但真实 ETF 指标缺失，规则和策略目标可能冲突 |
@@ -48,8 +50,8 @@ python cli\commands.py backtest --strategy grid
 | 监控告警 | 部分完成 | 状态指标、报告和告警类存在；未形成可运行的通知通道和监控验收 |
 | CLI | 基础可用 | `start/status/report/backtest` 已有；缺少 health-check、config validate 等关键命令 |
 | API/Web | 未完成 | PRD 中规划了 API 和 Web 界面，当前仓库没有对应模块 |
-| 测试体系 | 不足 | 现有 54 个测试覆盖 simulator、grid e2e、rotation、backtest runner、CLI smoke 等；risk、main loop、adapter、report 仍有缺口 |
-| 文档入口 | 不足 | 仓库当前缺少 `README.md`，不利于交付、验收和新一轮开发协作 |
+| 测试体系 | 不足 | 现有 57 个测试覆盖 simulator、grid e2e、rotation、backtest runner、CLI smoke 等；risk、main loop、adapter、report 仍有缺口 |
+| 文档入口 | 不足 | `README.md` 已补充基础运行、测试和阶段边界；仍缺 `docs/testing.md`、`docs/architecture.md` 等专题文档 |
 
 ## 主要风险
 
@@ -129,11 +131,11 @@ PRD 将“可回测策略系统”列为阶段二交付物，但当前只有实�
 
 ### P2：产品入口和交付文档不足
 
-仓库没有 `README.md`，也没有开发者如何运行、如何测试、如何接入数据源、如何验收的说明。
+仓库已有 `README.md` 说明基础运行、测试和 mock/simulator 阶段边界，但仍缺少更细的开发者专题文档，例如如何接入数据源、如何验收和如何理解架构边界。
 
 建议：
 
-- 增加 `README.md`
+- 持续维护 `README.md`
 - 增加 `docs/testing.md`
 - 增加 `docs/architecture.md`
 - 将 PRD 验收项映射到测试命令和功能状态
@@ -180,7 +182,7 @@ PRD 将“可回测策略系统”列为阶段二交付物，但当前只有实�
 
 ### M2：回测引擎
 
-状态：已启动。当前已新增最小 `BacktestRunner`，支持单策略、单标的、历史 bar list/CSV 输入，复用 `Simulator` 执行 grid 买卖并输出收益、最大回撤、交易次数等基础指标；CLI 已增加 `backtest` 子命令。该能力仍是 M2 起步版，不包含完整交易日历、滑点模型、组合回测、多策略编排和真实历史数据源。
+状态：已启动。当前已新增最小 `BacktestRunner`，支持单策略、单标的、历史 bar list/CSV 输入；并新增 `RotationBacktestRunner`，支持内置多 ETF 历史样例驱动行业轮动。两者均复用 `Simulator` 输出收益、最大回撤、交易次数等基础指标；CLI 已增加 `backtest --strategy grid|rotation`。该能力仍是 M2 起步版，不包含完整交易日历、滑点模型、组合回测、多策略编排和真实历史数据源。
 
 目标：让策略在历史数据上可验证。
 
@@ -254,6 +256,6 @@ PRD 将“可回测策略系统”列为阶段二交付物，但当前只有实�
 1. 新增 rotation 测试文件：覆盖首次调仓、卖旧买新、风控失败、pending 清理。
 2. 新增 stop-loss 与 grid ledger 同步测试：验证止损清仓后同一网格可再次买入。
 3. 为 `QuantPipeline` 抽出单 tick 执行方法，避免主循环只能睡眠运行，方便后续集成测试。
-4. 补 `README.md`，明确当前是 mock/simulator 阶段，不是实盘系统。
+4. 持续补充 `README.md` 和专题文档，明确当前是 mock/simulator 阶段，不是实盘系统。
 
 这组任务风险小、收益高，也最适合作为后续数据接入和回测开发前的地基。
