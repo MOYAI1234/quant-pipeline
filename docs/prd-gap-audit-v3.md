@@ -1,7 +1,7 @@
 # PRD v3 差距审计与迭代路线图
 
 审计日期：2026-06-01
-代码基线：`5c92c4b` (`master`)
+代码基线：`112aca6` (`master`)，并包含当前 M3 状态持久化分支增量
 PRD 来源：`D:\claudecode\docs\misc\quant-assistant-prd-v3.md`
 
 ## 结论
@@ -28,7 +28,7 @@ python cli\commands.py backtest --strategy rotation
 结果：
 
 - `compileall` 通过
-- `pytest` 通过，`60 passed`
+- `pytest` 通过，`67 passed`
 - CLI help 可用
 - CLI daily report 可生成空组合报告
 - CLI grid backtest 可生成样例回测报告
@@ -50,7 +50,7 @@ python cli\commands.py backtest --strategy rotation
 | 监控告警 | 部分完成 | 状态指标、报告和告警类存在；未形成可运行的通知通道和监控验收 |
 | CLI | 基础可用 | `start/status/report/backtest` 已有；缺少 health-check、config validate 等关键命令 |
 | API/Web | 未完成 | PRD 中规划了 API 和 Web 界面，当前仓库没有对应模块 |
-| 测试体系 | 不足 | 现有 60 个测试覆盖 simulator、grid e2e、rotation、backtest runner、CLI smoke 等；risk、main loop、adapter、report 仍有缺口 |
+| 测试体系 | 不足 | 现有 67 个测试覆盖 simulator、grid e2e、rotation、backtest runner、CLI smoke、状态持久化等；risk、adapter、report 仍有缺口 |
 | 文档入口 | 不足 | `README.md` 已补充基础运行、测试和阶段边界；仍缺 `docs/testing.md`、`docs/architecture.md` 等专题文档 |
 
 ## 主要风险
@@ -91,7 +91,7 @@ PRD 将“可回测策略系统”列为阶段二交付物，但当前只有实�
 
 ### P1：策略状态只在内存中，长期运行不可恢复
 
-网格 `grid_ledger`、轮动 `last_rebalance` / `pending_rebalance_count`、模拟账户持仓和成交记录均为内存态。
+网格 `grid_ledger`、轮动 `last_rebalance` / `pending_rebalance_count`、模拟账户持仓和成交记录已具备手动 snapshot/restore 与 JSON 保存/恢复入口，但尚未接入启动自动恢复和退出自动保存。
 
 风险：
 
@@ -201,6 +201,8 @@ PRD 将“可回测策略系统”列为阶段二交付物，但当前只有实�
 - 回测结果可生成 Markdown 报告
 
 ### M3：状态持久化
+
+状态：已启动。当前已为 `Simulator`、`GridStrategy`、`RotationStrategy` 增加 `snapshot()` / `restore()`，并新增 `JsonStateStore` 支持账户和策略状态的 JSON 保存/恢复。该能力仍是 M3 起步版，尚未接入 `QuantPipeline` 启动自动恢复、退出自动保存、订单状态持久化和迁移策略。
 
 目标：长期模拟和未来实盘具备恢复能力。
 

@@ -94,3 +94,28 @@ class GridStrategy(BaseStrategy):
 
     def calc_position_size(self, capital: float, price: float) -> int:
         return self.shares_per_grid
+
+    def snapshot(self) -> dict:
+        return {
+            'version': 1,
+            'type': 'GridStrategy',
+            'name': self.name,
+            'symbol': self.symbol,
+            'grid_ledger': {
+                str(price): dict(state)
+                for price, state in self.grid_ledger.items()
+            },
+            'trades': list(self.trades),
+        }
+
+    def restore(self, snapshot: dict):
+        if snapshot.get('version') != 1:
+            raise ValueError('不支持的 GridStrategy 状态版本')
+        ledger = snapshot.get('grid_ledger', {})
+        restored_ledger = {}
+        for grid_price in self.buy_grids:
+            restored_ledger[grid_price] = dict(
+                ledger.get(str(grid_price), {'bought': False, 'sold': False})
+            )
+        self.grid_ledger = restored_ledger
+        self.trades = list(snapshot.get('trades', []))

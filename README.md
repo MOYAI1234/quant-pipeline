@@ -13,7 +13,7 @@ ETF 量化助手 Pipeline，目标是把数据适配、策略生成、风控检�
 - `DataManager` 会校验实时行情、净值和历史行情的基础字段契约；字段缺失或返回 shape 错误会抛出 `DataFetchError`，避免脏数据继续进入策略链路。
 - `execution/Simulator` 是简化成交模型，支持整手、手续费、均价、持仓和市值估算，但不包含真实撮合、滑点、订单状态同步。
 - `backtest/BacktestRunner` 已支持最小 grid 历史样例回测，`RotationBacktestRunner` 已支持内置多 ETF 轮动样例回测，并复用 `Simulator`；当前还不是完整回测系统，不含交易日历、滑点、复杂组合和真实历史数据源。
-- 策略状态目前以内存为主，重启后不会自动恢复网格 ledger、轮动 pending 状态或成交流水。
+- `persistence/JsonStateStore` 已支持手动保存和恢复 `Simulator`、`GridStrategy`、`RotationStrategy` 的 JSON 快照；当前还未接入启动自动恢复和退出自动保存。
 - QMT/实盘执行、API、Web、完整回测引擎仍未实现。
 
 更多差距和路线图见 [docs/prd-gap-audit-v3.md](docs/prd-gap-audit-v3.md)。
@@ -28,6 +28,7 @@ config/      默认配置和日志配置
 data/        数据管理、缓存和数据契约
 execution/   模拟执行器和订单管理
 monitor/     运行指标、告警和报告
+persistence/ 账户和策略状态快照存储
 risk/        ETF 质量、仓位和止损风控
 strategy/    网格策略、轮动策略和策略管理器
 tests/       单元测试和集成测试
@@ -103,6 +104,7 @@ python -m compileall -q .
 - `BacktestRunner` 的 grid 买卖周期、轮动样例回测、空历史保护、CSV 读取/错误处理和 CLI smoke
 - `GridStrategy` 多格买入、同格防重复、卖出、止损后 ledger 重置
 - `RotationStrategy` 首次调仓、卖旧买新、失败 pending 清理和重试
+- `JsonStateStore` 对账户、网格 ledger、轮动调仓状态和成交快照的保存/恢复
 - `QuantPipeline.run_once()` 单轮策略执行与监控更新
 
 ## 下一步路线
