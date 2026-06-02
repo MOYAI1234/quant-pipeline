@@ -1,3 +1,4 @@
+from copy import deepcopy
 from datetime import datetime
 from .executor import BaseExecutor
 
@@ -215,10 +216,7 @@ class Simulator(BaseExecutor):
             'version': 1,
             'initial_capital': self.initial_capital,
             'capital': self.capital,
-            'positions': {
-                symbol: dict(position)
-                for symbol, position in self.positions.items()
-            },
+            'positions': deepcopy(self.positions),
             'trades': [self._serialize_trade(trade) for trade in self.trades],
             'commission_rate': self.commission_rate,
         }
@@ -226,16 +224,15 @@ class Simulator(BaseExecutor):
     def restore(self, snapshot: dict):
         if snapshot.get('version') != 1:
             raise ValueError('不支持的 Simulator 状态版本')
-        initial_capital = snapshot.get('initial_capital', 0)
+        if 'initial_capital' not in snapshot:
+            raise ValueError('Simulator 快照缺少 initial_capital 字段')
+        initial_capital = snapshot.get('initial_capital')
         if initial_capital <= 0:
             raise ValueError('initial_capital 必须大于 0')
 
         self.initial_capital = initial_capital
         self.capital = snapshot.get('capital', initial_capital)
-        self.positions = {
-            symbol: dict(position)
-            for symbol, position in snapshot.get('positions', {}).items()
-        }
+        self.positions = deepcopy(snapshot.get('positions', {}))
         self.trades = [
             self._deserialize_trade(trade)
             for trade in snapshot.get('trades', [])
@@ -243,15 +240,26 @@ class Simulator(BaseExecutor):
         self.commission_rate = snapshot.get('commission_rate', self.commission_rate)
 
     def _serialize_trade(self, trade: dict) -> dict:
-        serialized = dict(trade)
+        serialized = deepcopy(trade)
         timestamp = serialized.get('timestamp')
         if isinstance(timestamp, datetime):
             serialized['timestamp'] = timestamp.isoformat()
         return serialized
 
     def _deserialize_trade(self, trade: dict) -> dict:
-        restored = dict(trade)
+        self._validate_trade_snapshot(trade)
+        restored = deepcopy(trade)
         timestamp = restored.get('timestamp')
         if isinstance(timestamp, str) and timestamp:
             restored['timestamp'] = datetime.fromisoformat(timestamp)
         return restored
+
+    def _validate_trade_snapshot(self, trade: dict):
+        if not isinstance(trade, dict):
+            raise ValueError('Simulator 成交快照必须是 dict')
+        required_fields = {'action', 'symbol', 'price', 'shares', 'amount'}
+        missing_fields = required_fields - set(trade.keys())
+        if missing_fields:
+            raise ValueError(
+                f"Simulator 成交快照缺少字段: {', '.join(sorted(missing_fields))}"
+            )

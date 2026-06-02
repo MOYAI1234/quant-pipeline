@@ -1,4 +1,6 @@
 from abc import ABC, abstractmethod
+from copy import deepcopy
+from datetime import datetime
 
 
 class BaseStrategy(ABC):
@@ -20,6 +22,26 @@ class BaseStrategy(ABC):
 
     def record_trade(self, trade: dict):
         self.trades.append(trade)
+
+    def _serialize_trades(self) -> list:
+        return [self._serialize_trade(trade) for trade in self.trades]
+
+    def _restore_trades(self, trades: list):
+        self.trades = [self._deserialize_trade(trade) for trade in trades]
+
+    def _serialize_trade(self, trade: dict) -> dict:
+        serialized = deepcopy(trade)
+        timestamp = serialized.get('timestamp')
+        if isinstance(timestamp, datetime):
+            serialized['timestamp'] = timestamp.isoformat()
+        return serialized
+
+    def _deserialize_trade(self, trade: dict) -> dict:
+        restored = deepcopy(trade)
+        timestamp = restored.get('timestamp')
+        if isinstance(timestamp, str) and timestamp:
+            restored['timestamp'] = datetime.fromisoformat(timestamp)
+        return restored
 
     def get_performance(self) -> dict:
         if not self.trades:

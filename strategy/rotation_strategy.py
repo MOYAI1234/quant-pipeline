@@ -155,7 +155,7 @@ class RotationStrategy(BaseStrategy):
                 if self.last_rebalance else None
             ),
             'pending_rebalance_count': self.pending_rebalance_count,
-            'trades': list(self.trades),
+            'trades': self._serialize_trades(),
         }
 
     def restore(self, snapshot: dict):
@@ -166,4 +166,4 @@ class RotationStrategy(BaseStrategy):
             'timestamp': snapshot.get('last_rebalance')
         })
         self.pending_rebalance_count = snapshot.get('pending_rebalance_count', 0)
-        self.trades = list(snapshot.get('trades', []))
+        self._restore_trades(snapshot.get('trades', []))

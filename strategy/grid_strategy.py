@@ -1,4 +1,9 @@
+import logging
+
 from .base import BaseStrategy
+
+
+logger = logging.getLogger('quant_pipeline.strategy.grid')
 
 
 class GridStrategy(BaseStrategy):
@@ -105,17 +110,34 @@ class GridStrategy(BaseStrategy):
                 str(price): dict(state)
                 for price, state in self.grid_ledger.items()
             },
-            'trades': list(self.trades),
+            'trades': self._serialize_trades(),
         }
 
     def restore(self, snapshot: dict):
         if snapshot.get('version') != 1:
             raise ValueError('不支持的 GridStrategy 状态版本')
         ledger = snapshot.get('grid_ledger', {})
+        snapshot_grid_prices = self._snapshot_grid_prices(ledger)
+        orphan_grid_prices = snapshot_grid_prices - set(self.buy_grids)
+        if orphan_grid_prices:
+            logger.warning(
+                '快照中存在 %s 个已失效的网格: %s',
+                len(orphan_grid_prices),
+                sorted(orphan_grid_prices),
+            )
         restored_ledger = {}
         for grid_price in self.buy_grids:
             restored_ledger[grid_price] = dict(
                 ledger.get(str(grid_price), {'bought': False, 'sold': False})
             )
         self.grid_ledger = restored_ledger
-        self.trades = list(snapshot.get('trades', []))
+        self._restore_trades(snapshot.get('trades', []))
+
+    def _snapshot_grid_prices(self, ledger: dict) -> set:
+        grid_prices = set()
+        for price in ledger.keys():
+            try:
+                grid_prices.add(float(price))
+            except (TypeError, ValueError):
+                logger.warning('快照中存在无法识别的网格价格: %s', price)
+        return grid_prices
