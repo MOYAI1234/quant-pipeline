@@ -54,6 +54,31 @@ def test_backtest_runner_resets_state_between_runs():
     assert second_result['final_value'] == first_result['final_value']
 
 
+def test_backtest_runner_resets_strategy_state_between_runs_with_open_position():
+    runner = BacktestRunner(_grid_strategy(), {
+        'initial_capital': 100000,
+        'commission_rate': 0.0003,
+    })
+    buy_only_history = [{
+        'date': '2026-01-01',
+        'open': 3.90,
+        'high': 3.90,
+        'low': 3.90,
+        'close': 3.90,
+        'volume': 1000000,
+        'amount': 3900000,
+    }]
+
+    first_result = runner.run(buy_only_history)
+    second_result = runner.run(buy_only_history)
+
+    assert first_result['trade_count'] == 1
+    assert second_result['trade_count'] == 1
+    assert len(second_result['portfolio']['positions']) == 1
+    assert runner.strategy.grid_ledger[3.9]['bought'] is True
+    assert len(runner.strategy.trades) == 1
+
+
 def test_backtest_runner_drawdown_starts_from_initial_capital():
     strategy = GridStrategy({
         'name': '测试亏损网格',

@@ -1,3 +1,4 @@
+import copy
 import csv
 from pathlib import Path
 
@@ -10,7 +11,8 @@ REQUIRED_CSV_FIELDS = ('date', 'open', 'high', 'low', 'close', 'volume', 'amount
 class BacktestRunner:
 
     def __init__(self, strategy, account_config: dict = None):
-        self.strategy = strategy
+        self._strategy_template = copy.deepcopy(strategy)
+        self.strategy = copy.deepcopy(self._strategy_template)
         self._account_config = dict(account_config or {})
         self.executor = None
         self.equity_curve = []
@@ -19,6 +21,7 @@ class BacktestRunner:
         if not history:
             raise ValueError('history 不能为空')
 
+        self.strategy = copy.deepcopy(self._strategy_template)
         self.executor = Simulator(dict(self._account_config))
         self.equity_curve = []
         last_quote = None
