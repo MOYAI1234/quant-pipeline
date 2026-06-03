@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from execution.order_manager import OrderManager
 from execution.simulator import Simulator
 from persistence.state_store import JsonStateStore
 from strategy.grid_strategy import GridStrategy
@@ -227,6 +228,54 @@ def test_json_state_store_saves_metadata_without_mutating_source(tmp_path):
         loaded['metadata']['last_market_time_by_symbol']['510300']
         == '2026-06-03 09:30:00'
     )
+
+
+def test_order_manager_snapshot_round_trips_orders_and_timestamps():
+    manager = OrderManager()
+    signal = {
+        'action': 'buy',
+        'symbol': '510300',
+        'price': 4.0,
+        'shares': 1000,
+        'amount': 4000,
+    }
+    order_id = manager.create_order(signal)
+    manager.update_status(order_id, 'filled')
+
+    restored = OrderManager()
+    restored.restore(manager.snapshot())
+    order = restored.get_order(order_id)
+
+    assert 'id' not in signal
+    assert 'created_at' not in signal
+    assert order['status'] == 'filled'
+    assert isinstance(order['created_at'], datetime)
+    assert isinstance(order['updated_at'], datetime)
+
+
+def test_json_state_store_saves_and_restores_order_state(tmp_path):
+    store = JsonStateStore(str(tmp_path / 'state.json'))
+    simulator = Simulator({'initial_capital': 100000})
+    manager = OrderManager()
+    order_id = manager.create_order({
+        'action': 'buy',
+        'symbol': '510300',
+        'price': 4.0,
+        'shares': 1000,
+        'amount': 4000,
+    })
+    manager.update_status(order_id, 'filled')
+
+    saved = store.save(simulator, {}, order_manager=manager)
+    restored_manager = OrderManager()
+    loaded = store.restore(
+        Simulator({'initial_capital': 100000}),
+        {},
+        order_manager=restored_manager,
+    )
+
+    assert loaded == saved
+    assert restored_manager.get_order(order_id)['status'] == 'filled'
 
 
 def test_json_state_store_rejects_unknown_state_version(tmp_path):

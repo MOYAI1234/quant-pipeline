@@ -7,6 +7,7 @@ from config.settings import SYSTEM_CONFIG
 from config.logging_config import setup_logging
 from data.data_manager import DataManager
 from strategy.strategy_manager import StrategyManager
+from execution.order_manager import OrderManager
 from execution.simulator import Simulator
 from persistence import JsonStateStore
 from risk.risk_manager import RiskManager
@@ -24,6 +25,7 @@ class QuantPipeline:
         self.data_manager = DataManager(self.config.get('data', {}))
         self.strategy_manager = StrategyManager()
         self.executor = Simulator(self.config.get('account', {}))
+        self.order_manager = OrderManager()
         self.risk_manager = RiskManager(self.config.get('risk', {}))
         self.macro_analyzer = MacroAnalyzer(self.config.get('analysis', {}))
         self.monitor = SystemMonitor(self.config.get('monitor', {}))
@@ -66,6 +68,7 @@ class QuantPipeline:
             restored_state = self.state_store.restore(
                 self.executor,
                 dict(self.strategy_manager.get_all()),
+                order_manager=self.order_manager,
             )
         except Exception as e:
             self.state_restore_failed = True
@@ -88,6 +91,7 @@ class QuantPipeline:
             self.executor,
             dict(self.strategy_manager.get_all()),
             self.runtime_state,
+            self.order_manager,
         )
         self.logger.info(f"已保存状态: {self.state_store.path}")
         return saved_state
@@ -167,15 +171,21 @@ class QuantPipeline:
         # 检查持仓止损
         stop_loss_signals = self.risk_manager.check_portfolio_stop_loss(portfolio)
         for sig in stop_loss_signals:
+            order_id = self.order_manager.create_order(sig)
             risk_check = self.risk_manager.check_order(sig, portfolio)
             if risk_check['passed']:
                 success = self.executor.execute_order(sig)
                 if success:
+                    self.order_manager.update_status(order_id, 'filled')
                     # 通知所有持有该 symbol 的策略
                     for name, strategy in self.strategy_manager.get_all().items():
                         if hasattr(strategy, 'on_trade_confirmed'):
                             strategy.on_trade_confirmed(sig)
                     self.logger.info(f"[止损] 执行卖出: {sig['symbol']} {sig.get('price', 0)}")
+                else:
+                    self.order_manager.update_status(order_id, 'failed')
+            else:
+                self.order_manager.update_status(order_id, 'rejected')
 
         # 更新组合状态
         portfolio = self.executor.get_portfolio(current_prices)
@@ -201,6 +211,7 @@ class QuantPipeline:
             signals = strategy.generate_signal(data, portfolio)
 
             for sig in signals:
+                order_id = self.order_manager.create_order(sig)
                 risk_check = self.risk_manager.check_order(
                     sig, portfolio
                 )
@@ -208,6 +219,7 @@ class QuantPipeline:
                 if risk_check['passed']:
                     success = self.executor.execute_order(sig)
                     if success:
+                        self.order_manager.update_status(order_id, 'filled')
                         strategy.record_trade(sig)
                         if hasattr(strategy, 'on_trade_confirmed'):
                             strategy.on_trade_confirmed(sig)
@@ -215,12 +227,14 @@ class QuantPipeline:
                             f"[{name}] 执行交易: {sig['action']} {sig.get('price', 0)}"
                         )
                     else:
+                        self.order_manager.update_status(order_id, 'failed')
                         if hasattr(strategy, 'on_trade_failed'):
                             strategy.on_trade_failed(sig)
                         self.logger.warning(
                             f"[{name}] 执行失败: {sig['action']} {sig.get('price', 0)}"
                         )
                 else:
+                    self.order_manager.update_status(order_id, 'rejected')
                     if hasattr(strategy, 'on_trade_failed'):
                         strategy.on_trade_failed(sig)
                     self.logger.warning(

@@ -92,6 +92,10 @@ def test_run_once_executes_grid_signal_and_updates_metrics():
         system.runtime_state['last_market_time_by_symbol']['510300']
         == '2026-06-01 10:00:00'
     )
+    orders = system.order_manager.get_all_orders()
+    assert len(orders) == 1
+    assert orders[0]['status'] == 'filled'
+    assert orders[0]['symbol'] == '510300'
 
 
 def test_run_once_returns_repriced_portfolio_for_existing_positions():
@@ -170,6 +174,20 @@ def test_state_persistence_round_trips_runtime_metadata(tmp_path):
             '510300': '2026-06-03 09:30:00',
         },
     }
+
+
+def test_state_persistence_round_trips_order_state(tmp_path):
+    state_path = tmp_path / 'state.json'
+    system = _build_system(state_path=state_path)
+    system.add_strategy(_grid_strategy())
+    system.run_once()
+    order_id = system.order_manager.get_all_orders()[0]['id']
+    system.save_state()
+
+    restored = _build_system(state_path=state_path)
+    restored.restore_state()
+
+    assert restored.order_manager.get_order(order_id)['status'] == 'filled'
 
 
 def test_restore_state_skips_mismatched_strategy_state(tmp_path):

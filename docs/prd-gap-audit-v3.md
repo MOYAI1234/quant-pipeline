@@ -1,7 +1,7 @@
 # PRD v3 差距审计与迭代路线图
 
 审计日期：2026-06-01
-代码基线：`cb68339` (`master`)，并包含当前 M3 metadata 分支增量
+代码基线：`be2525e` (`master`)，并包含当前 M3 order state 分支增量
 PRD 来源：`D:\claudecode\docs\misc\quant-assistant-prd-v3.md`
 
 ## 结论
@@ -28,7 +28,7 @@ python cli\commands.py backtest --strategy rotation
 结果：
 
 - `compileall` 通过
-- `pytest` 通过，`84 passed`
+- `pytest` 通过，`87 passed`
 - CLI help 可用
 - CLI daily report 可生成空组合报告
 - CLI grid backtest 可生成样例回测报告
@@ -50,7 +50,7 @@ python cli\commands.py backtest --strategy rotation
 | 监控告警 | 部分完成 | 状态指标、报告和告警类存在；未形成可运行的通知通道和监控验收 |
 | CLI | 基础可用 | `start/status/report/backtest` 已有；缺少 health-check、config validate 等关键命令 |
 | API/Web | 未完成 | PRD 中规划了 API 和 Web 界面，当前仓库没有对应模块 |
-| 测试体系 | 不足 | 现有 84 个测试覆盖 simulator、grid e2e、rotation、backtest runner、CLI smoke、状态持久化等；risk、adapter、report 仍有缺口 |
+| 测试体系 | 不足 | 现有 87 个测试覆盖 simulator、grid e2e、rotation、backtest runner、CLI smoke、状态持久化等；risk、adapter、report 仍有缺口 |
 | 文档入口 | 不足 | `README.md` 已补充基础运行、测试和阶段边界；仍缺 `docs/testing.md`、`docs/architecture.md` 等专题文档 |
 
 ## 主要风险
@@ -89,20 +89,20 @@ PRD 将“可回测策略系统”列为阶段二交付物，但当前只有实�
 - 支持历史 K 线输入、手续费、滑点、交易日历、收益/回撤/胜率报告
 - CLI 增加 `backtest` 子命令
 
-### P1：状态持久化仍缺订单和迁移策略
+### P1：状态持久化仍缺迁移策略和真实订单回报
 
-网格 `grid_ledger`、轮动 `last_rebalance` / `pending_rebalance_count`、模拟账户持仓和成交记录已具备 snapshot/restore 与 JSON 保存/恢复入口，`QuantPipeline` 也已支持启动恢复和停止保存。
+网格 `grid_ledger`、轮动 `last_rebalance` / `pending_rebalance_count`、模拟账户持仓、成交记录、pipeline 内部订单状态和运行 metadata 已具备 snapshot/restore 与 JSON 保存/恢复入口，`QuantPipeline` 也已支持启动恢复和停止保存。
 
 风险：
 
-- 当前已有成交快照、最近运行时间和每个 symbol 的最后行情时间，但没有订单状态机
+- 当前已有 pending/filled/failed/rejected 的内部订单状态，但还不是 QMT/券商报单回报状态机
 - 状态版本只有拒绝逻辑，还没有迁移策略
-- 实盘接入前仍缺 pending/submitted/filled/rejected 等状态恢复基础
+- 实盘接入前仍缺 submitted/partial/cancelled 等真实订单状态和恢复基础
 
 建议：
 
 - 继续扩展 JSON/SQLite 持久化
-- 持久化对象继续补充订单状态机和更完整的运行审计信息
+- 持久化对象继续补充真实订单状态机和更完整的运行审计信息
 - 增加状态版本迁移策略
 
 ### P1：测试覆盖集中在 grid/simulator，缺少高风险集成路径
@@ -202,7 +202,7 @@ PRD 将“可回测策略系统”列为阶段二交付物，但当前只有实�
 
 ### M3：状态持久化
 
-状态：已启动。当前已为 `Simulator`、`GridStrategy`、`RotationStrategy` 增加 `snapshot()` / `restore()`，并新增 `JsonStateStore` 支持账户、策略状态和运行 metadata 的 JSON 保存/恢复；`QuantPipeline` 默认会在启动时恢复、停止时保存，CLI 支持 `--state-path` 和 `--no-state`。metadata 已记录 `last_run_at` 和 `last_market_time_by_symbol`。该能力仍是 M3 起步版，尚未覆盖订单状态持久化和版本迁移策略。
+状态：已启动。当前已为 `Simulator`、`GridStrategy`、`RotationStrategy`、`OrderManager` 增加 `snapshot()` / `restore()`，并新增 `JsonStateStore` 支持账户、策略状态、内部订单状态和运行 metadata 的 JSON 保存/恢复；`QuantPipeline` 默认会在启动时恢复、停止时保存，CLI 支持 `--state-path` 和 `--no-state`。metadata 已记录 `last_run_at` 和 `last_market_time_by_symbol`，订单会随 pipeline 执行更新为 pending/filled/failed/rejected。该能力仍是 M3 起步版，尚未覆盖真实券商订单回报和版本迁移策略。
 
 目标：长期模拟和未来实盘具备恢复能力。
 

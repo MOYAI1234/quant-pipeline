@@ -18,8 +18,9 @@ class JsonStateStore:
         executor,
         strategies: dict,
         metadata: dict | None = None,
+        order_manager=None,
     ) -> dict:
-        return {
+        state = {
             'version': STATE_VERSION,
             'account': executor.snapshot(),
             'strategies': {
@@ -29,9 +30,18 @@ class JsonStateStore:
             },
             'metadata': deepcopy(metadata or {}),
         }
+        if order_manager and hasattr(order_manager, 'snapshot'):
+            state['orders'] = order_manager.snapshot()
+        return state
 
-    def save(self, executor, strategies: dict, metadata: dict | None = None) -> dict:
-        state = self.build_snapshot(executor, strategies, metadata)
+    def save(
+        self,
+        executor,
+        strategies: dict,
+        metadata: dict | None = None,
+        order_manager=None,
+    ) -> dict:
+        state = self.build_snapshot(executor, strategies, metadata, order_manager)
         self.save_state(state)
         return state
 
@@ -51,7 +61,13 @@ class JsonStateStore:
         self._validate_state_version(state)
         return state
 
-    def restore(self, executor, strategies: dict, state: dict = None) -> dict:
+    def restore(
+        self,
+        executor,
+        strategies: dict,
+        state: dict | None = None,
+        order_manager=None,
+    ) -> dict:
         loaded_state = state if state is not None else self.load_state()
         if not loaded_state:
             return {}
@@ -64,6 +80,10 @@ class JsonStateStore:
         account_state = loaded_state.get('account')
         if account_state:
             executor.restore(account_state)
+
+        order_state = loaded_state.get('orders')
+        if order_state and order_manager and hasattr(order_manager, 'restore'):
+            order_manager.restore(order_state)
 
         for name, strategy_state in strategy_states.items():
             strategy = strategies.get(name)
