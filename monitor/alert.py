@@ -56,7 +56,7 @@ class AlertManager:
             path.parent.mkdir(parents=True, exist_ok=True)
             with path.open('a', encoding='utf-8') as file:
                 file.write(json.dumps(alert, ensure_ascii=False) + "\n")
-        except (OSError, TypeError, ValueError):
+        except Exception:
             self.logger.exception(
                 "告警写入 JSONL 失败: category=%s message=%s",
                 alert.get('category'),
