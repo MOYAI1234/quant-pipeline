@@ -87,6 +87,11 @@ def test_run_once_executes_grid_signal_and_updates_metrics():
     assert status['portfolio']['position_count'] == 1
     assert status['metrics']['position'] == 1
     assert '测试网格' in status['strategies']
+    assert system.runtime_state['last_run_at']
+    assert (
+        system.runtime_state['last_market_time_by_symbol']['510300']
+        == '2026-06-01 10:00:00'
+    )
 
 
 def test_run_once_returns_repriced_portfolio_for_existing_positions():
@@ -104,6 +109,15 @@ def test_run_once_returns_repriced_portfolio_for_existing_positions():
     assert position['current_price'] == 4.5
     assert position['market_value'] == 4500
     assert status['portfolio']['total_value'] == status['metrics']['total_value']
+
+
+def test_run_once_does_not_record_market_time_for_invalid_quote():
+    system = _build_system(FakeDataManager({'510300': 0}))
+    system.add_strategy(_grid_strategy())
+
+    system.run_once()
+
+    assert '510300' not in system.runtime_state['last_market_time_by_symbol']
 
 
 def test_stop_saves_state_and_restore_state_loads_account_and_strategy(tmp_path):
@@ -134,6 +148,28 @@ def test_stop_saves_state_and_restore_state_loads_account_and_strategy(tmp_path)
     assert loaded_state
     assert restored.executor.positions['510300']['shares'] == 1000
     assert restored_strategy.grid_ledger[3.9]['bought'] is True
+
+
+def test_state_persistence_round_trips_runtime_metadata(tmp_path):
+    state_path = tmp_path / 'state.json'
+    system = _build_system(state_path=state_path)
+    system.runtime_state = {
+        'last_run_at': '2026-06-03T10:00:00',
+        'last_market_time_by_symbol': {
+            '510300': '2026-06-03 09:30:00',
+        },
+    }
+    system.save_state()
+
+    restored = _build_system(state_path=state_path)
+    restored.restore_state()
+
+    assert restored.runtime_state == {
+        'last_run_at': '2026-06-03T10:00:00',
+        'last_market_time_by_symbol': {
+            '510300': '2026-06-03 09:30:00',
+        },
+    }
 
 
 def test_restore_state_skips_mismatched_strategy_state(tmp_path):

@@ -31,6 +31,7 @@ class QuantPipeline:
         self.state_config = self.config.get('state', {})
         self.state_store = self._build_state_store(self.state_config)
         self.state_restore_failed = False
+        self.runtime_state = self._default_runtime_state()
 
         self.running = False
 
@@ -71,6 +72,9 @@ class QuantPipeline:
             self.logger.warning(f"状态恢复失败，使用默认状态: {e}")
             return {}
         if restored_state:
+            self.runtime_state = self._merge_runtime_state(
+                restored_state.get('metadata', {})
+            )
             self.logger.info(f"已恢复状态: {self.state_store.path}")
         return restored_state
 
@@ -83,9 +87,36 @@ class QuantPipeline:
         saved_state = self.state_store.save(
             self.executor,
             dict(self.strategy_manager.get_all()),
+            self.runtime_state,
         )
         self.logger.info(f"已保存状态: {self.state_store.path}")
         return saved_state
+
+    def _merge_runtime_state(self, metadata: dict) -> dict:
+        runtime_state = self._default_runtime_state()
+        runtime_state.update(metadata or {})
+        runtime_state['last_market_time_by_symbol'] = dict(
+            runtime_state.get('last_market_time_by_symbol', {})
+        )
+        return runtime_state
+
+    def _default_runtime_state(self) -> dict:
+        return {
+            'last_run_at': None,
+            'last_market_time_by_symbol': {},
+        }
+
+    def _mark_runtime_tick(self) -> None:
+        self.runtime_state['last_run_at'] = datetime.now().isoformat()
+
+    def _record_market_time(self, symbol: str, quote: dict) -> None:
+        if not symbol or not isinstance(quote, dict):
+            return
+        timestamp = quote.get('timestamp') or quote.get('date')
+        if isinstance(timestamp, datetime):
+            timestamp = timestamp.isoformat()
+        if timestamp:
+            self.runtime_state.setdefault('last_market_time_by_symbol', {})[symbol] = timestamp
 
     def run(self):
         self.logger.info("=" * 50)
@@ -120,12 +151,15 @@ class QuantPipeline:
 
     def run_once(self):
         """执行一轮行情获取、风控检查、策略信号和监控更新。"""
+        self._mark_runtime_tick()
+
         # 获取所有持仓的实时行情
         current_prices = {}
         for symbol in self.executor.positions:
             quote = self.data_manager.get_etf_realtime(symbol)
             if quote and quote.get('price', 0) > 0:
                 current_prices[symbol] = quote['price']
+                self._record_market_time(symbol, quote)
 
         # 获取组合状态（使用实时价格估值）
         portfolio = self.executor.get_portfolio(current_prices)
@@ -151,12 +185,17 @@ class QuantPipeline:
             if hasattr(strategy, 'etf_pool'):
                 data = {}
                 for symbol in strategy.etf_pool:
-                    data[symbol] = self.data_manager.get_etf_realtime(symbol)
+                    quote = self.data_manager.get_etf_realtime(symbol)
+                    data[symbol] = quote or {}
+                    if quote and quote.get('price', 0) > 0:
+                        self._record_market_time(symbol, quote)
                     history = self.data_manager.get_etf_history(symbol, '', '')
                     if history:
                         data[symbol]['prices'] = [h.get('close', 0) for h in history]
             else:
                 data = self.data_manager.get_etf_realtime(strategy.symbol)
+                if data and data.get('price', 0) > 0:
+                    self._record_market_time(strategy.symbol, data)
 
             # 传递 portfolio 给策略
             signals = strategy.generate_signal(data, portfolio)

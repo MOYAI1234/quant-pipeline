@@ -35,3 +35,25 @@ def test_cli_status_restores_account_from_state_path(tmp_path):
     )
 
     assert '持仓: 1' in completed.stdout
+
+
+def test_cli_status_uses_default_state_when_restore_fails(tmp_path):
+    state_path = tmp_path / 'state.json'
+    state_path.write_text('{"version": 999}', encoding='utf-8')
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / 'cli' / 'commands.py'),
+            'status',
+            '--state-path',
+            str(state_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=PROJECT_ROOT,
+    )
+
+    assert '资金: 100000.00' in completed.stdout
+    assert '持仓: 0' in completed.stdout
