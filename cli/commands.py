@@ -1,4 +1,5 @@
 import argparse
+import json
 import sys
 import os
 from copy import deepcopy
@@ -74,6 +75,23 @@ def cmd_report(args):
     system.restore_state()
     report = system.generate_report(args.type or 'daily')
     print(report)
+
+
+def cmd_health(args):
+    system = QuantPipeline(_build_runtime_config(args))
+    try:
+        system.data_manager.connect()
+        summary = _build_health_summary(system.data_manager.health_check())
+    finally:
+        system.data_manager.disconnect()
+
+    if args.json:
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    else:
+        print(_render_health_summary(summary))
+
+    if args.strict and not summary['available']:
+        raise SystemExit(1)
 
 
 def cmd_backtest(args):
@@ -228,6 +246,34 @@ def _build_runtime_config(args) -> dict:
     return config
 
 
+def _build_health_summary(adapter_statuses: dict) -> dict:
+    return {
+        'available': all(
+            status.get('available', False)
+            for status in adapter_statuses.values()
+        ),
+        'mock': all(
+            status.get('mock', False)
+            for status in adapter_statuses.values()
+        ),
+        'adapters': adapter_statuses,
+    }
+
+
+def _render_health_summary(summary: dict) -> str:
+    overall = 'OK' if summary['available'] else 'FAIL'
+    mode = 'mock' if summary['mock'] else 'mixed/real'
+    lines = [f"数据源状态: {overall} ({mode})"]
+    for name, status in summary['adapters'].items():
+        availability = '可用' if status.get('available') else '不可用'
+        error = status.get('error') or '-'
+        lines.append(
+            f"- {name}: {availability}, mode={status.get('mode')}, "
+            f"service={status.get('service')}, error={error}"
+        )
+    return "\n".join(lines)
+
+
 def _add_state_options(parser):
     parser.add_argument('--state-path', type=str, help='状态文件路径，默认 data/state.json')
     parser.add_argument('--no-state', action='store_true', help='禁用状态恢复和保存')
@@ -257,6 +303,15 @@ def main():
     report_parser.add_argument('--type', default='daily', choices=['daily', 'weekly'])
     _add_state_options(report_parser)
 
+    health_parser = subparsers.add_parser('health', help='检查数据源健康状态')
+    health_parser.add_argument('--json', action='store_true', help='输出 JSON 格式')
+    health_parser.add_argument(
+        '--strict',
+        action='store_true',
+        help='任一数据源不可用时返回非零退出码',
+    )
+    _add_state_options(health_parser)
+
     backtest_parser = subparsers.add_parser('backtest', help='运行回测')
     backtest_parser.add_argument('--strategy', default='grid', choices=['grid', 'rotation'])
     backtest_parser.add_argument('--symbol', type=str, default=DEFAULT_BACKTEST_SYMBOL)
@@ -281,6 +336,8 @@ def main():
         cmd_status(args)
     elif args.command == 'report':
         cmd_report(args)
+    elif args.command == 'health':
+        cmd_health(args)
     elif args.command == 'backtest':
         try:
             cmd_backtest(args)

@@ -1,7 +1,7 @@
 # PRD v3 差距审计与迭代路线图
 
 审计日期：2026-06-01
-代码基线：`1e040d5` (`master`)，并包含当前 M3 state migration 分支增量
+代码基线：`786878d` (`master`)，并包含当前 M4 CLI health 分支增量
 PRD 来源：`D:\claudecode\docs\misc\quant-assistant-prd-v3.md`
 
 ## 结论
@@ -21,6 +21,7 @@ python -m compileall -q .
 python -m pytest -q
 python cli\commands.py --help
 python cli\commands.py report --type daily
+python cli\commands.py health
 python cli\commands.py backtest --strategy grid
 python cli\commands.py backtest --strategy rotation
 ```
@@ -28,9 +29,10 @@ python cli\commands.py backtest --strategy rotation
 结果：
 
 - `compileall` 通过
-- `pytest` 通过，`94 passed`
+- `pytest` 通过，`97 passed`
 - CLI help 可用
 - CLI daily report 可生成空组合报告
+- CLI health 可输出数据源健康状态
 - CLI grid backtest 可生成样例回测报告
 - CLI rotation backtest 可生成多 ETF 样例回测报告
 
@@ -48,9 +50,9 @@ python cli\commands.py backtest --strategy rotation
 | 风控模块 | 部分完成 | 仓位、ETF 质量、止损已存在；但真实 ETF 指标缺失，规则和策略目标可能冲突 |
 | 宏观/ETF/新闻分析 | 部分完成 | 分析器结构存在，但依赖 stub 数据，当前更多是接口占位 |
 | 监控告警 | 部分完成 | 状态指标、报告和告警类存在；未形成可运行的通知通道和监控验收 |
-| CLI | 基础可用 | `start/status/report/backtest` 已有；缺少 health-check、config validate 等关键命令 |
+| CLI | 基础可用 | `start/status/report/health/backtest` 已有；仍缺 config validate 等关键命令 |
 | API/Web | 未完成 | PRD 中规划了 API 和 Web 界面，当前仓库没有对应模块 |
-| 测试体系 | 不足 | 现有 94 个测试覆盖 simulator、grid e2e、rotation、backtest runner、CLI smoke、状态持久化等；risk、adapter、report 仍有缺口 |
+| 测试体系 | 不足 | 现有 97 个测试覆盖 simulator、grid e2e、rotation、backtest runner、CLI smoke、状态持久化等；risk、adapter、report 仍有缺口 |
 | 文档入口 | 不足 | `README.md` 已补充基础运行、测试和阶段边界；仍缺 `docs/testing.md`、`docs/architecture.md` 等专题文档 |
 
 ## 主要风险
@@ -202,7 +204,7 @@ PRD 将“可回测策略系统”列为阶段二交付物，但当前只有实�
 
 ### M3：状态持久化
 
-状态：已启动。当前已为 `Simulator`、`GridStrategy`、`RotationStrategy`、`OrderManager` 增加 `snapshot()` / `restore()`，并新增 `JsonStateStore` 支持账户、策略状态、内部订单状态和运行 metadata 的 JSON 保存/恢复；`QuantPipeline` 默认会在启动时恢复、停止时保存，CLI 支持 `--state-path` 和 `--no-state`。metadata 已记录 `last_run_at` 和 `last_market_time_by_symbol`，订单会随 pipeline 执行更新为 pending/filled/failed/rejected。状态文件已具备旧版无顶层 `version` 快照到 v1 的最小迁移入口。该能力仍是 M3 起步版，尚未覆盖真实券商订单回报、完整多版本迁移和 SQLite 存储。
+状态：已启动。当前已为 `Simulator`、`GridStrategy`、`RotationStrategy`、`OrderManager` 增加 `snapshot()` / `restore()`，并新增 `JsonStateStore` 支持账户、策略状态、内部订单状态和运行 metadata 的 JSON 保存/恢复；`QuantPipeline` 默认会在启动时恢复、停止时保存，CLI 支持 `--state-path` 和 `--no-state`。metadata 已记录 `last_run_at` 和 `last_market_time_by_symbol`，订单会随 pipeline 执行更新为 pending/filled/failed/rejected。状态文件已具备旧版无顶层 `version` 快照到 v1 的最小迁移入口和迁移循环保护。该能力仍是 M3 起步版，尚未覆盖真实券商订单回报、完整多版本迁移和 SQLite 存储。
 
 目标：长期模拟和未来实盘具备恢复能力。
 
@@ -220,6 +222,8 @@ PRD 将“可回测策略系统”列为阶段二交付物，但当前只有实�
 - 成交记录可追溯
 
 ### M4：监控、报告和告警闭环
+
+状态：已启动。当前 CLI 已新增 `health` 命令，可输出数据源健康状态的文本报告，也可通过 `--json` 输出结构化摘要；`--strict` 可在任一 adapter 不可用时返回非零退出码。该能力仍是 M4 起步版，尚未形成完整风险事件记录、报告扩展和通知通道。
 
 目标：让系统不仅能跑，还能被观察和复盘。
 
