@@ -205,6 +205,30 @@ def test_json_state_store_saves_and_restores_account_and_strategy_state(tmp_path
     assert restored_strategy.grid_ledger[3.9]['bought'] is True
 
 
+def test_json_state_store_saves_metadata_without_mutating_source(tmp_path):
+    store = JsonStateStore(str(tmp_path / 'state.json'))
+    simulator = Simulator({'initial_capital': 100000})
+    metadata = {
+        'last_run_at': '2026-06-03T10:00:00',
+        'last_market_time_by_symbol': {
+            '510300': '2026-06-03 09:30:00',
+        },
+    }
+
+    saved = store.save(simulator, {}, metadata)
+    metadata['last_market_time_by_symbol']['510300'] = 'changed'
+    loaded = store.load_state()
+
+    assert (
+        saved['metadata']['last_market_time_by_symbol']['510300']
+        == '2026-06-03 09:30:00'
+    )
+    assert (
+        loaded['metadata']['last_market_time_by_symbol']['510300']
+        == '2026-06-03 09:30:00'
+    )
+
+
 def test_json_state_store_rejects_unknown_state_version(tmp_path):
     store = JsonStateStore(str(tmp_path / 'state.json'))
     store.save_state({'version': 999})
