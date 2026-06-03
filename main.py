@@ -281,9 +281,25 @@ class QuantPipeline:
     def generate_report(self, report_type: str = 'daily') -> str:
         portfolio = self.executor.get_portfolio()
         strategy_summary = self._get_strategy_summary()
+        data_health = self._get_data_health()
         if report_type == 'weekly':
-            return self.report_generator.generate_weekly_report(portfolio, strategy_summary)
-        return self.report_generator.generate_daily_report(portfolio, strategy_summary)
+            return self.report_generator.generate_weekly_report(
+                portfolio,
+                strategy_summary,
+                data_health,
+            )
+        return self.report_generator.generate_daily_report(
+            portfolio,
+            strategy_summary,
+            data_health,
+        )
+
+    def _get_data_health(self) -> dict:
+        try:
+            self.data_manager.connect()
+            return self.data_manager.health_check()
+        finally:
+            self.data_manager.disconnect()
 
     def stop(self):
         self.logger.info("系统停止中...")
