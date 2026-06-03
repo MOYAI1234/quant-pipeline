@@ -29,7 +29,7 @@ python cli\commands.py backtest --strategy rotation
 结果：
 
 - `compileall` 通过
-- `pytest` 通过，`97 passed`
+- `pytest` 通过，`98 passed`
 - CLI help 可用
 - CLI daily report 可生成空组合报告
 - CLI health 可输出数据源健康状态
@@ -52,7 +52,7 @@ python cli\commands.py backtest --strategy rotation
 | 监控告警 | 部分完成 | 状态指标、报告和告警类存在；未形成可运行的通知通道和监控验收 |
 | CLI | 基础可用 | `start/status/report/health/backtest` 已有；仍缺 config validate 等关键命令 |
 | API/Web | 未完成 | PRD 中规划了 API 和 Web 界面，当前仓库没有对应模块 |
-| 测试体系 | 不足 | 现有 97 个测试覆盖 simulator、grid e2e、rotation、backtest runner、CLI smoke、状态持久化等；risk、adapter、report 仍有缺口 |
+| 测试体系 | 不足 | 现有 98 个测试覆盖 simulator、grid e2e、rotation、backtest runner、CLI smoke、状态持久化等；risk、adapter、report 仍有缺口 |
 | 文档入口 | 不足 | `README.md` 已补充基础运行、测试和阶段边界；仍缺 `docs/testing.md`、`docs/architecture.md` 等专题文档 |
 
 ## 主要风险

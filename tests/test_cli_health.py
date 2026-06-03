@@ -54,6 +54,16 @@ def test_cli_health_json_outputs_structured_summary():
     assert summary['adapters']['mx_data']['service'] == 'MXDataAdapter'
 
 
+def test_cli_health_summary_treats_empty_adapters_as_unavailable():
+    summary = cli_commands._build_health_summary({})
+
+    assert summary == {
+        'available': False,
+        'mock': False,
+        'adapters': {},
+    }
+
+
 def test_cli_health_strict_exits_when_adapter_is_unavailable(monkeypatch):
     class FakeDataManager:
 

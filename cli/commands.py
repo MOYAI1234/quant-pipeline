@@ -248,11 +248,11 @@ def _build_runtime_config(args) -> dict:
 
 def _build_health_summary(adapter_statuses: dict) -> dict:
     return {
-        'available': all(
+        'available': bool(adapter_statuses) and all(
             status.get('available', False)
             for status in adapter_statuses.values()
         ),
-        'mock': all(
+        'mock': bool(adapter_statuses) and all(
             status.get('mock', False)
             for status in adapter_statuses.values()
         ),
