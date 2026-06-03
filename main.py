@@ -281,9 +281,49 @@ class QuantPipeline:
     def generate_report(self, report_type: str = 'daily') -> str:
         portfolio = self.executor.get_portfolio()
         strategy_summary = self._get_strategy_summary()
+        data_health = self._get_data_health()
         if report_type == 'weekly':
-            return self.report_generator.generate_weekly_report(portfolio, strategy_summary)
-        return self.report_generator.generate_daily_report(portfolio, strategy_summary)
+            return self.report_generator.generate_weekly_report(
+                portfolio,
+                strategy_summary,
+                data_health,
+            )
+        return self.report_generator.generate_daily_report(
+            portfolio,
+            strategy_summary,
+            data_health,
+        )
+
+    def _get_data_health(self) -> dict:
+        adapters = self._get_data_adapters()
+        connected_before = {
+            id(adapter): getattr(adapter, 'connected', False)
+            for adapter in adapters
+        }
+        should_connect = not adapters or not all(connected_before.values())
+        try:
+            if should_connect:
+                self.data_manager.connect()
+            return self.data_manager.health_check()
+        finally:
+            if should_connect:
+                self._restore_data_connections(adapters, connected_before)
+
+    def _get_data_adapters(self) -> list:
+        adapter_names = ('mx_data', 'mx_xuangu', 'mx_search')
+        return [
+            getattr(self.data_manager, name)
+            for name in adapter_names
+            if hasattr(self.data_manager, name)
+        ]
+
+    def _restore_data_connections(self, adapters: list, connected_before: dict):
+        if not adapters:
+            self.data_manager.disconnect()
+            return
+        for adapter in adapters:
+            if not connected_before.get(id(adapter), False):
+                adapter.disconnect()
 
     def stop(self):
         self.logger.info("系统停止中...")

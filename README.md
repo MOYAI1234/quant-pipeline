@@ -123,6 +123,7 @@ python -m compileall -q .
 - `RotationStrategy` 首次调仓、卖旧买新、失败 pending 清理和重试
 - `JsonStateStore` 对账户、网格 ledger、轮动调仓状态、成交快照、订单状态、运行 metadata 和旧版状态迁移的保存/恢复
 - `QuantPipeline.run_once()` 单轮策略执行、订单状态流转、监控更新，以及启动/停止状态恢复保存
+- 日报/周报中输出数据源健康状态
 
 ## 下一步路线
 
