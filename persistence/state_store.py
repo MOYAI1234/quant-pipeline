@@ -4,6 +4,7 @@ from pathlib import Path
 
 
 STATE_VERSION = 1
+MAX_STATE_MIGRATIONS = 10
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -99,9 +100,15 @@ class JsonStateStore:
             raise ValueError('状态文件版本无效')
         if version > STATE_VERSION:
             raise ValueError('不支持的状态文件版本')
+        remaining_migrations = MAX_STATE_MIGRATIONS
         while version < STATE_VERSION:
+            remaining_migrations -= 1
+            if remaining_migrations < 0:
+                raise ValueError(f"状态迁移未收敛: 当前版本 {version}")
             migrated_state = self._apply_migration(migrated_state, version)
             version = migrated_state.get('version')
+            if not isinstance(version, int):
+                raise ValueError('状态文件版本无效')
         return migrated_state
 
     def _apply_migration(self, state: dict, version: int) -> dict:
@@ -110,11 +117,10 @@ class JsonStateStore:
         raise ValueError('不支持的状态文件版本')
 
     def _migrate_v0_to_v1(self, state: dict) -> dict:
-        migrated_state = deepcopy(state)
-        migrated_state['version'] = 1
-        migrated_state.setdefault('strategies', {})
-        migrated_state.setdefault('metadata', {})
-        return migrated_state
+        state['version'] = 1
+        state.setdefault('strategies', {})
+        state.setdefault('metadata', {})
+        return state
 
     def _validate_strategy_states(self, strategies: dict, strategy_states: dict):
         for name, strategy_state in strategy_states.items():

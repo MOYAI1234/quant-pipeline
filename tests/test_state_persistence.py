@@ -257,6 +257,20 @@ def test_json_state_store_migrates_legacy_state_without_top_level_version(tmp_pa
     assert 'metadata' not in legacy_state
 
 
+def test_json_state_store_rejects_non_converging_migration(tmp_path, monkeypatch):
+    store = JsonStateStore(str(tmp_path / 'state.json'))
+
+    def keep_same_version(state, version):
+        stagnant_state = dict(state)
+        stagnant_state['version'] = version
+        return stagnant_state
+
+    monkeypatch.setattr(store, '_apply_migration', keep_same_version)
+
+    with pytest.raises(ValueError, match='状态迁移未收敛'):
+        store.restore(Simulator({'initial_capital': 100000}), {}, {'account': {}})
+
+
 def test_order_manager_snapshot_round_trips_orders_and_timestamps():
     manager = OrderManager()
     signal = {
