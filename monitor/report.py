@@ -11,6 +11,7 @@ class ReportGenerator:
         portfolio: dict,
         strategy_summary: dict,
         data_health: dict | None = None,
+        alerts: list | None = None,
     ) -> str:
         report = []
         report.append(f"# 每日报告 - {datetime.now().strftime('%Y-%m-%d')}")
@@ -28,6 +29,7 @@ class ReportGenerator:
             report.append(f"- 胜率: {perf.get('win_rate', 0):.2%}")
             report.append(f"- 总收益: {perf.get('total_profit', 0):.2f}")
         self._append_data_health(report, data_health)
+        self._append_alerts(report, alerts)
         return "\n".join(report)
 
     def generate_weekly_report(
@@ -35,6 +37,7 @@ class ReportGenerator:
         portfolio: dict,
         strategy_summary: dict,
         data_health: dict | None = None,
+        alerts: list | None = None,
     ) -> str:
         report = []
         report.append(f"# 周度报告 - {datetime.now().strftime('%Y-%m-%d')}")
@@ -43,6 +46,7 @@ class ReportGenerator:
         report.append(f"- 总价值: {portfolio.get('total_value', 0):.2f}")
         report.append(f"- 盈亏: {portfolio.get('pnl', 0):.2f} ({portfolio.get('pnl_percent', 0):.2f}%)")
         self._append_data_health(report, data_health)
+        self._append_alerts(report, alerts)
         return "\n".join(report)
 
     def _append_data_health(self, report: list, data_health: dict | None):
@@ -69,4 +73,23 @@ class ReportGenerator:
             report.append(
                 f"- {name}: {availability}, mode={status.get('mode')}, "
                 f"service={status.get('service')}, error={error}"
+            )
+
+    def _append_alerts(self, report: list, alerts: list | None):
+        if alerts is None:
+            return
+
+        report.append("")
+        report.append("## 告警事件")
+        if not alerts:
+            report.append("- 无")
+            return
+
+        for alert in alerts:
+            level = alert.get('level', 'warning')
+            category = alert.get('category', 'system')
+            message = alert.get('message', '')
+            timestamp = alert.get('timestamp') or '-'
+            report.append(
+                f"- [{level}] {category}: {message} ({timestamp})"
             )

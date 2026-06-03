@@ -12,7 +12,7 @@ ETF 量化助手 Pipeline，目标是把数据适配、策略生成、风控检�
 - adapter 支持 `mode=mock|real`。默认 `mock` 会返回占位数据；`real` 当前会明确标记为不可用并抛出 `ServiceUnavailableError`，避免把 0 或空列表误认为真实行情。
 - `DataManager` 会校验实时行情、净值和历史行情的基础字段契约；字段缺失或返回 shape 错误会抛出 `DataFetchError`，避免脏数据继续进入策略链路。
 - `execution/Simulator` 是简化成交模型，支持整手、手续费、均价、持仓和市值估算；`OrderManager` 会记录 pipeline 内部订单的 pending/filled/failed/rejected 状态，但不包含真实券商撮合、滑点和报单回报同步。
-- `monitor/AlertManager` 已支持结构化告警事件和可选 JSONL 文件输出，适合本地模拟阶段做可测试的风险事件记录；当前还未接飞书、邮件等外部通知通道。
+- `monitor/AlertManager` 已支持结构化告警事件和可选 JSONL 文件输出，日报/周报会展示最近告警摘要；当前还未接飞书、邮件等外部通知通道。
 - `backtest/BacktestRunner` 已支持最小 grid 历史样例回测，`RotationBacktestRunner` 已支持内置多 ETF 轮动样例回测，并复用 `Simulator`；当前还不是完整回测系统，不含交易日历、滑点、复杂组合和真实历史数据源。
 - `persistence/JsonStateStore` 已支持保存和恢复 `Simulator`、`GridStrategy`、`RotationStrategy`、`OrderManager` 的 JSON 快照和运行 metadata，并提供旧版无顶层 `version` 状态到 v1 的最小迁移入口；`QuantPipeline` 默认会在启动时恢复、停止时保存到 `data/state.json`，但完整多版本迁移和 SQLite 存储仍未实现。
 - QMT/实盘执行、API、Web、完整回测引擎仍未实现。
@@ -126,7 +126,7 @@ python -m compileall -q .
 - `RotationStrategy` 首次调仓、卖旧买新、失败 pending 清理和重试
 - `JsonStateStore` 对账户、网格 ledger、轮动调仓状态、成交快照、订单状态、运行 metadata 和旧版状态迁移的保存/恢复
 - `QuantPipeline.run_once()` 单轮策略执行、订单状态流转、监控更新，以及启动/停止状态恢复保存
-- 日报/周报中输出数据源健康状态
+- 日报/周报中输出数据源健康状态和告警事件摘要
 - `AlertManager` 结构化事件、JSONL 输出、亏损/持仓告警触发和历史记录裁剪
 
 ## 下一步路线
