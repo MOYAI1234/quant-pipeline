@@ -4,6 +4,7 @@ from pathlib import Path
 
 
 STATE_VERSION = 1
+MAX_STATE_MIGRATIONS = 10
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -58,8 +59,7 @@ class JsonStateStore:
         if not self.path.exists():
             return {}
         state = json.loads(self.path.read_text(encoding='utf-8'))
-        self._validate_state_version(state)
-        return state
+        return self._migrate_state(state)
 
     def restore(
         self,
@@ -72,7 +72,7 @@ class JsonStateStore:
         if not loaded_state:
             return {}
         if state is not None:
-            self._validate_state_version(loaded_state)
+            loaded_state = self._migrate_state(loaded_state)
 
         strategy_states = loaded_state.get('strategies', {})
         self._validate_strategy_states(strategies, strategy_states)
@@ -91,9 +91,36 @@ class JsonStateStore:
                 strategy.restore(strategy_state)
         return loaded_state
 
-    def _validate_state_version(self, state: dict):
-        if state.get('version') != STATE_VERSION:
+    def _migrate_state(self, state: dict) -> dict:
+        if not isinstance(state, dict):
+            raise ValueError('状态文件必须是 JSON object')
+        migrated_state = deepcopy(state)
+        version = migrated_state.get('version', 0)
+        if not isinstance(version, int):
+            raise ValueError('状态文件版本无效')
+        if version > STATE_VERSION:
             raise ValueError('不支持的状态文件版本')
+        remaining_migrations = MAX_STATE_MIGRATIONS
+        while version < STATE_VERSION:
+            remaining_migrations -= 1
+            if remaining_migrations < 0:
+                raise ValueError(f"状态迁移未收敛: 当前版本 {version}")
+            migrated_state = self._apply_migration(migrated_state, version)
+            version = migrated_state.get('version')
+            if not isinstance(version, int):
+                raise ValueError('状态文件版本无效')
+        return migrated_state
+
+    def _apply_migration(self, state: dict, version: int) -> dict:
+        if version == 0:
+            return self._migrate_v0_to_v1(state)
+        raise ValueError('不支持的状态文件版本')
+
+    def _migrate_v0_to_v1(self, state: dict) -> dict:
+        state['version'] = 1
+        state.setdefault('strategies', {})
+        state.setdefault('metadata', {})
+        return state
 
     def _validate_strategy_states(self, strategies: dict, strategy_states: dict):
         for name, strategy_state in strategy_states.items():
