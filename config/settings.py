@@ -29,6 +29,7 @@ SYSTEM_CONFIG = {
     'monitor': {
         'check_interval': 60,
         'alert_threshold': -10,
+        'alert_file_path': None,
     },
     'state': {
         'enabled': True,
