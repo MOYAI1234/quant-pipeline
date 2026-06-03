@@ -3,6 +3,7 @@ import json
 import sys
 import os
 from copy import deepcopy
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -30,6 +31,7 @@ DEFAULT_BACKTEST_ETF_POOL = ['510300', '510500', '159915']
 DEFAULT_BACKTEST_ROTATION_LOOKBACK = 3
 DEFAULT_BACKTEST_ROTATION_TOP_N = 1
 DEFAULT_BACKTEST_ROTATION_REBALANCE_DAYS = 0
+DEFAULT_ALERT_FILE_PATH = 'data/alerts.jsonl'
 
 
 def cmd_start(args):
@@ -92,6 +94,14 @@ def cmd_health(args):
 
     if args.strict and not summary['available']:
         raise SystemExit(1)
+
+
+def cmd_alerts(args):
+    events = _load_alert_events(args.alert_file, args.limit)
+    if args.json:
+        print(json.dumps(events, ensure_ascii=False, indent=2))
+    else:
+        print(_render_alert_events(events))
 
 
 def cmd_backtest(args):
@@ -274,6 +284,64 @@ def _render_health_summary(summary: dict) -> str:
     return "\n".join(lines)
 
 
+def _load_alert_events(alert_file: str | None, limit: int) -> list:
+    if limit < 0:
+        raise ValueError('--limit 不能小于 0')
+
+    path = _resolve_project_path(alert_file or _default_alert_file_path())
+    if not path.exists():
+        return []
+
+    events = []
+    for line_number, line in enumerate(
+        path.read_text(encoding='utf-8').splitlines(),
+        start=1,
+    ):
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"告警文件第 {line_number} 行不是合法 JSON: {exc.msg}"
+            ) from exc
+        if not isinstance(event, dict):
+            raise ValueError(f"告警文件第 {line_number} 行必须是 JSON object")
+        events.append(event)
+
+    if limit == 0:
+        return []
+    return events[-limit:]
+
+
+def _render_alert_events(events: list) -> str:
+    if not events:
+        return "告警事件: 无"
+
+    lines = [f"告警事件: {len(events)} 条"]
+    for event in events:
+        level = event.get('level', 'warning')
+        category = event.get('category', 'system')
+        message = event.get('message', '')
+        timestamp = event.get('timestamp') or '-'
+        lines.append(f"- [{level}] {category}: {message} ({timestamp})")
+    return "\n".join(lines)
+
+
+def _default_alert_file_path() -> str:
+    return (
+        SYSTEM_CONFIG.get('monitor', {}).get('alert_file_path')
+        or DEFAULT_ALERT_FILE_PATH
+    )
+
+
+def _resolve_project_path(path: str) -> Path:
+    resolved = Path(path)
+    if resolved.is_absolute():
+        return resolved
+    return Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) / resolved
+
+
 def _add_state_options(parser):
     parser.add_argument('--state-path', type=str, help='状态文件路径，默认 data/state.json')
     parser.add_argument('--no-state', action='store_true', help='禁用状态恢复和保存')
@@ -312,6 +380,15 @@ def main():
     )
     _add_state_options(health_parser)
 
+    alerts_parser = subparsers.add_parser('alerts', help='查看本地告警事件')
+    alerts_parser.add_argument(
+        '--alert-file',
+        type=str,
+        help='告警 JSONL 文件路径，默认读取 monitor.alert_file_path 或 data/alerts.jsonl',
+    )
+    alerts_parser.add_argument('--limit', type=int, default=10, help='显示最近 N 条告警，默认 10')
+    alerts_parser.add_argument('--json', action='store_true', help='输出 JSON 格式')
+
     backtest_parser = subparsers.add_parser('backtest', help='运行回测')
     backtest_parser.add_argument('--strategy', default='grid', choices=['grid', 'rotation'])
     backtest_parser.add_argument('--symbol', type=str, default=DEFAULT_BACKTEST_SYMBOL)
@@ -338,6 +415,11 @@ def main():
         cmd_report(args)
     elif args.command == 'health':
         cmd_health(args)
+    elif args.command == 'alerts':
+        try:
+            cmd_alerts(args)
+        except ValueError as exc:
+            parser.error(str(exc))
     elif args.command == 'backtest':
         try:
             cmd_backtest(args)
