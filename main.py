@@ -31,10 +31,7 @@ class QuantPipeline:
         self.state_config = self.config.get('state', {})
         self.state_store = self._build_state_store(self.state_config)
         self.state_restore_failed = False
-        self.runtime_state = {
-            'last_run_at': None,
-            'last_market_time_by_symbol': {},
-        }
+        self.runtime_state = self._default_runtime_state()
 
         self.running = False
 
@@ -96,20 +93,23 @@ class QuantPipeline:
         return saved_state
 
     def _merge_runtime_state(self, metadata: dict) -> dict:
-        runtime_state = {
-            'last_run_at': None,
-            'last_market_time_by_symbol': {},
-        }
+        runtime_state = self._default_runtime_state()
         runtime_state.update(metadata or {})
         runtime_state['last_market_time_by_symbol'] = dict(
             runtime_state.get('last_market_time_by_symbol', {})
         )
         return runtime_state
 
-    def _mark_runtime_tick(self):
+    def _default_runtime_state(self) -> dict:
+        return {
+            'last_run_at': None,
+            'last_market_time_by_symbol': {},
+        }
+
+    def _mark_runtime_tick(self) -> None:
         self.runtime_state['last_run_at'] = datetime.now().isoformat()
 
-    def _record_market_time(self, symbol: str, quote: dict):
+    def _record_market_time(self, symbol: str, quote: dict) -> None:
         if not symbol or not isinstance(quote, dict):
             return
         timestamp = quote.get('timestamp') or quote.get('date')
@@ -185,14 +185,17 @@ class QuantPipeline:
             if hasattr(strategy, 'etf_pool'):
                 data = {}
                 for symbol in strategy.etf_pool:
-                    data[symbol] = self.data_manager.get_etf_realtime(symbol)
-                    self._record_market_time(symbol, data[symbol])
+                    quote = self.data_manager.get_etf_realtime(symbol)
+                    data[symbol] = quote or {}
+                    if quote and quote.get('price', 0) > 0:
+                        self._record_market_time(symbol, quote)
                     history = self.data_manager.get_etf_history(symbol, '', '')
                     if history:
                         data[symbol]['prices'] = [h.get('close', 0) for h in history]
             else:
                 data = self.data_manager.get_etf_realtime(strategy.symbol)
-                self._record_market_time(strategy.symbol, data)
+                if data and data.get('price', 0) > 0:
+                    self._record_market_time(strategy.symbol, data)
 
             # 传递 portfolio 给策略
             signals = strategy.generate_signal(data, portfolio)

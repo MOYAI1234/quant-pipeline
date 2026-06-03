@@ -13,7 +13,12 @@ class JsonStateStore:
         state_path = Path(path)
         self.path = state_path if state_path.is_absolute() else PROJECT_ROOT / state_path
 
-    def build_snapshot(self, executor, strategies: dict, metadata: dict = None) -> dict:
+    def build_snapshot(
+        self,
+        executor,
+        strategies: dict,
+        metadata: dict | None = None,
+    ) -> dict:
         return {
             'version': STATE_VERSION,
             'account': executor.snapshot(),
@@ -25,7 +30,7 @@ class JsonStateStore:
             'metadata': deepcopy(metadata or {}),
         }
 
-    def save(self, executor, strategies: dict, metadata: dict = None) -> dict:
+    def save(self, executor, strategies: dict, metadata: dict | None = None) -> dict:
         state = self.build_snapshot(executor, strategies, metadata)
         self.save_state(state)
         return state

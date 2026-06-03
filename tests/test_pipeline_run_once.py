@@ -111,6 +111,15 @@ def test_run_once_returns_repriced_portfolio_for_existing_positions():
     assert status['portfolio']['total_value'] == status['metrics']['total_value']
 
 
+def test_run_once_does_not_record_market_time_for_invalid_quote():
+    system = _build_system(FakeDataManager({'510300': 0}))
+    system.add_strategy(_grid_strategy())
+
+    system.run_once()
+
+    assert '510300' not in system.runtime_state['last_market_time_by_symbol']
+
+
 def test_stop_saves_state_and_restore_state_loads_account_and_strategy(tmp_path):
     state_path = tmp_path / 'state.json'
     system = _build_system(state_path=state_path)
