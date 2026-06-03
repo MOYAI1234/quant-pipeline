@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from execution.order_manager import OrderManager
 from execution.simulator import Simulator
 from persistence.state_store import JsonStateStore
 from strategy.grid_strategy import GridStrategy
@@ -227,6 +228,130 @@ def test_json_state_store_saves_metadata_without_mutating_source(tmp_path):
         loaded['metadata']['last_market_time_by_symbol']['510300']
         == '2026-06-03 09:30:00'
     )
+
+
+def test_order_manager_snapshot_round_trips_orders_and_timestamps():
+    manager = OrderManager()
+    signal = {
+        'action': 'buy',
+        'symbol': '510300',
+        'price': 4.0,
+        'shares': 1000,
+        'amount': 4000,
+    }
+    order_id = manager.create_order(signal)
+    manager.update_status(order_id, 'filled')
+
+    restored = OrderManager()
+    restored.restore(manager.snapshot())
+    order = restored.get_order(order_id)
+
+    assert 'id' not in signal
+    assert 'created_at' not in signal
+    assert order['status'] == 'filled'
+    assert isinstance(order['created_at'], datetime)
+    assert isinstance(order['updated_at'], datetime)
+
+
+def test_order_manager_snapshot_serializes_nested_datetimes():
+    manager = OrderManager()
+    timestamp = datetime(2026, 6, 3, 10, 30)
+    order_id = manager.create_order({
+        'action': 'buy',
+        'symbol': '510300',
+        'price': 4.0,
+        'shares': 1000,
+        'timestamp': timestamp,
+        'metadata': {
+            'generated_at': timestamp,
+            'events': [{'at': timestamp}],
+        },
+    })
+
+    snapshot = manager.snapshot()
+    order = snapshot['orders'][0]
+
+    assert order['id'] == order_id
+    assert order['timestamp'] == '2026-06-03T10:30:00'
+    assert order['metadata']['generated_at'] == '2026-06-03T10:30:00'
+    assert order['metadata']['events'][0]['at'] == '2026-06-03T10:30:00'
+
+
+def test_order_manager_restore_keeps_existing_orders_when_snapshot_is_invalid():
+    manager = OrderManager()
+    existing_order_id = manager.create_order({
+        'action': 'buy',
+        'symbol': '510300',
+        'price': 4.0,
+        'shares': 1000,
+    })
+
+    with pytest.raises(ValueError, match='订单快照缺少 id 字段'):
+        manager.restore({
+            'version': 1,
+            'orders': [{'symbol': '510500'}],
+        })
+
+    assert manager.get_order(existing_order_id)['symbol'] == '510300'
+
+
+def test_json_state_store_saves_and_restores_order_state(tmp_path):
+    store = JsonStateStore(str(tmp_path / 'state.json'))
+    simulator = Simulator({'initial_capital': 100000})
+    manager = OrderManager()
+    order_id = manager.create_order({
+        'action': 'buy',
+        'symbol': '510300',
+        'price': 4.0,
+        'shares': 1000,
+        'amount': 4000,
+    })
+    manager.update_status(order_id, 'filled')
+
+    saved = store.save(simulator, {}, order_manager=manager)
+    restored_manager = OrderManager()
+    loaded = store.restore(
+        Simulator({'initial_capital': 100000}),
+        {},
+        order_manager=restored_manager,
+    )
+
+    assert loaded == saved
+    assert restored_manager.get_order(order_id)['status'] == 'filled'
+
+
+def test_json_state_store_restores_orders_before_account_state(tmp_path):
+    store = JsonStateStore(str(tmp_path / 'state.json'))
+    target_simulator = Simulator({'initial_capital': 100000})
+    target_manager = OrderManager()
+    state = {
+        'version': 1,
+        'account': {
+            'version': 1,
+            'initial_capital': 100000,
+            'capital': 96000,
+            'positions': {
+                '510300': {
+                    'shares': 1000,
+                    'avg_price': 4.0,
+                    'cost': 4000,
+                },
+            },
+            'trades': [],
+            'commission_rate': 0.0003,
+        },
+        'strategies': {},
+        'orders': {
+            'version': 1,
+            'orders': [{'symbol': '510300'}],
+        },
+    }
+
+    with pytest.raises(ValueError, match='订单快照缺少 id 字段'):
+        store.restore(target_simulator, {}, state, order_manager=target_manager)
+
+    assert target_simulator.positions == {}
+    assert target_manager.get_all_orders() == []
 
 
 def test_json_state_store_rejects_unknown_state_version(tmp_path):
