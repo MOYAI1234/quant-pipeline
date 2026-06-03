@@ -46,14 +46,17 @@ class ReportGenerator:
         return "\n".join(report)
 
     def _append_data_health(self, report: list, data_health: dict | None):
-        if not data_health:
+        if data_health is None:
             return
 
-        available = all(
+        available = bool(data_health) and all(
             status.get('available', False)
             for status in data_health.values()
         )
-        mock = all(status.get('mock', False) for status in data_health.values())
+        mock = bool(data_health) and all(
+            status.get('mock', False)
+            for status in data_health.values()
+        )
         overall = 'OK' if available else 'FAIL'
         mode = 'mock' if mock else 'mixed/real'
 

@@ -2,6 +2,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from main import QuantPipeline
 from monitor.report import ReportGenerator
 
 
@@ -40,6 +41,32 @@ def test_daily_report_includes_data_health_section():
     assert '- 总体: FAIL (mixed/real)' in report
     assert '- mx_data: 可用, mode=mock' in report
     assert '- mx_search: 不可用, mode=real' in report
+
+
+def test_daily_report_treats_empty_data_health_as_unavailable():
+    report = ReportGenerator({}).generate_daily_report(
+        {'capital': 100000, 'position_count': 0, 'total_value': 100000},
+        {},
+        {},
+    )
+
+    assert '## 数据源状态' in report
+    assert '- 总体: FAIL (mixed/real)' in report
+
+
+def test_generate_report_preserves_existing_data_connections():
+    system = QuantPipeline()
+    system.data_manager.connect()
+
+    try:
+        report = system.generate_report('daily')
+
+        assert '## 数据源状态' in report
+        assert system.data_manager.mx_data.connected is True
+        assert system.data_manager.mx_xuangu.connected is True
+        assert system.data_manager.mx_search.connected is True
+    finally:
+        system.data_manager.disconnect()
 
 
 def test_cli_daily_report_includes_default_mock_data_health():
