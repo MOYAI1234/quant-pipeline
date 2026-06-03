@@ -30,6 +30,7 @@ class QuantPipeline:
         self.report_generator = ReportGenerator(self.config.get('monitor', {}))
         self.state_config = self.config.get('state', {})
         self.state_store = self._build_state_store(self.state_config)
+        self.state_restore_failed = False
 
         self.running = False
 
@@ -59,12 +60,14 @@ class QuantPipeline:
     def restore_state(self) -> dict:
         if not self.state_store:
             return {}
+        self.state_restore_failed = False
         try:
             restored_state = self.state_store.restore(
                 self.executor,
                 dict(self.strategy_manager.get_all()),
             )
         except Exception as e:
+            self.state_restore_failed = True
             self.logger.warning(f"状态恢复失败，使用默认状态: {e}")
             return {}
         if restored_state:
@@ -73,6 +76,9 @@ class QuantPipeline:
 
     def save_state(self) -> dict:
         if not self.state_store:
+            return {}
+        if self.state_restore_failed:
+            self.logger.warning("状态恢复失败，本轮跳过状态保存，避免覆盖原状态文件")
             return {}
         saved_state = self.state_store.save(
             self.executor,

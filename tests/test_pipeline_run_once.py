@@ -162,3 +162,34 @@ def test_restore_state_skips_mismatched_strategy_state(tmp_path):
 
     assert restored.restore_state() == {}
     assert restored.executor.positions == {}
+
+
+def test_stop_does_not_overwrite_state_after_restore_failure(tmp_path):
+    state_path = tmp_path / 'state.json'
+    system = _build_system(state_path=state_path)
+    strategy = _grid_strategy()
+    system.add_strategy(strategy)
+    system.executor.execute_order({
+        'action': 'buy',
+        'symbol': '510300',
+        'price': 4.0,
+        'shares': 1000,
+    })
+    system.save_state()
+    original_state = state_path.read_text(encoding='utf-8')
+
+    restored = _build_system(state_path=state_path)
+    restored.add_strategy(GridStrategy({
+        'name': '测试网格',
+        'symbol': '510500',
+        'center_price': 4.00,
+        'grid_size': 0.10,
+        'grid_count': 3,
+        'shares_per_grid': 1000,
+        'max_grids': 3,
+    }))
+
+    assert restored.restore_state() == {}
+    restored.stop()
+
+    assert state_path.read_text(encoding='utf-8') == original_state
