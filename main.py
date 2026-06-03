@@ -122,6 +122,16 @@ class QuantPipeline:
         if timestamp:
             self.runtime_state.setdefault('last_market_time_by_symbol', {})[symbol] = timestamp
 
+    def _strategy_matches_signal(self, strategy, signal: dict) -> bool:
+        symbol = signal.get('symbol')
+        if not symbol:
+            return False
+        related_symbols = set(getattr(strategy, 'etf_pool', []) or [])
+        strategy_symbol = getattr(strategy, 'symbol', None)
+        if strategy_symbol:
+            related_symbols.add(strategy_symbol)
+        return symbol in related_symbols
+
     def run(self):
         self.logger.info("=" * 50)
         self.logger.info("量化助手 Pipeline 启动")
@@ -177,9 +187,11 @@ class QuantPipeline:
                 success = self.executor.execute_order(sig)
                 if success:
                     self.order_manager.update_status(order_id, 'filled')
-                    # 通知所有持有该 symbol 的策略
-                    for name, strategy in self.strategy_manager.get_all().items():
-                        if hasattr(strategy, 'on_trade_confirmed'):
+                    for strategy in self.strategy_manager.get_all().values():
+                        if (
+                            self._strategy_matches_signal(strategy, sig)
+                            and hasattr(strategy, 'on_trade_confirmed')
+                        ):
                             strategy.on_trade_confirmed(sig)
                     self.logger.info(f"[止损] 执行卖出: {sig['symbol']} {sig.get('price', 0)}")
                 else:

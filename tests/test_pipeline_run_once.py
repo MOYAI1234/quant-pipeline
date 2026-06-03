@@ -63,10 +63,10 @@ def _build_system(data_manager=None, state_path=None):
     return system
 
 
-def _grid_strategy():
+def _grid_strategy(symbol='510300', name='测试网格'):
     return GridStrategy({
-        'name': '测试网格',
-        'symbol': '510300',
+        'name': name,
+        'symbol': symbol,
         'center_price': 4.00,
         'grid_size': 0.10,
         'grid_count': 3,
@@ -113,6 +113,46 @@ def test_run_once_returns_repriced_portfolio_for_existing_positions():
     assert position['current_price'] == 4.5
     assert position['market_value'] == 4500
     assert status['portfolio']['total_value'] == status['metrics']['total_value']
+
+
+def test_run_once_stop_loss_confirms_only_matching_strategy():
+    system = _build_system(FakeDataManager({
+        '510300': 3.8,
+        '510500': 4.0,
+    }))
+    strategy_300 = _grid_strategy('510300', '沪深网格')
+    strategy_500 = _grid_strategy('510500', '中证网格')
+    system.add_strategy(strategy_300)
+    system.add_strategy(strategy_500)
+    system.executor.execute_order({
+        'action': 'buy',
+        'symbol': '510300',
+        'price': 4.0,
+        'shares': 1000,
+    })
+    system.executor.execute_order({
+        'action': 'buy',
+        'symbol': '510500',
+        'price': 4.0,
+        'shares': 1000,
+    })
+    strategy_300.on_trade_confirmed({
+        'action': 'buy',
+        'symbol': '510300',
+        'price': 3.9,
+        'shares': 1000,
+    })
+    strategy_500.on_trade_confirmed({
+        'action': 'buy',
+        'symbol': '510500',
+        'price': 3.9,
+        'shares': 1000,
+    })
+
+    system.run_once()
+
+    assert strategy_300.grid_ledger[3.9]['bought'] is False
+    assert strategy_500.grid_ledger[3.9]['bought'] is True
 
 
 def test_run_once_does_not_record_market_time_for_invalid_quote():

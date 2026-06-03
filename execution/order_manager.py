@@ -43,21 +43,17 @@ class OrderManager:
     def restore(self, snapshot: dict):
         if snapshot.get('version') != 1:
             raise ValueError('不支持的 OrderManager 状态版本')
-        self.orders = {}
+        restored_orders = {}
         for order in snapshot.get('orders', []):
             restored_order = self._deserialize_order(order)
             order_id = restored_order.get('id')
             if not order_id:
                 raise ValueError('订单快照缺少 id 字段')
-            self.orders[order_id] = restored_order
+            restored_orders[order_id] = restored_order
+        self.orders = restored_orders
 
     def _serialize_order(self, order: dict) -> dict:
-        serialized = deepcopy(order)
-        for field in ('created_at', 'updated_at'):
-            value = serialized.get(field)
-            if isinstance(value, datetime):
-                serialized[field] = value.isoformat()
-        return serialized
+        return self._serialize_value(order)
 
     def _deserialize_order(self, order: dict) -> dict:
         restored = deepcopy(order)
@@ -66,3 +62,15 @@ class OrderManager:
             if isinstance(value, str) and value:
                 restored[field] = datetime.fromisoformat(value)
         return restored
+
+    def _serialize_value(self, value):
+        if isinstance(value, datetime):
+            return value.isoformat()
+        if isinstance(value, dict):
+            return {
+                key: self._serialize_value(item)
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [self._serialize_value(item) for item in value]
+        return deepcopy(value)

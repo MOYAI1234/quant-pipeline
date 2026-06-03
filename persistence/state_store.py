@@ -77,13 +77,13 @@ class JsonStateStore:
         strategy_states = loaded_state.get('strategies', {})
         self._validate_strategy_states(strategies, strategy_states)
 
-        account_state = loaded_state.get('account')
-        if account_state:
-            executor.restore(account_state)
-
         order_state = loaded_state.get('orders')
         if order_state and order_manager and hasattr(order_manager, 'restore'):
             order_manager.restore(order_state)
+
+        account_state = loaded_state.get('account')
+        if account_state:
+            executor.restore(account_state)
 
         for name, strategy_state in strategy_states.items():
             strategy = strategies.get(name)
