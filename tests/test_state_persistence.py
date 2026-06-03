@@ -230,6 +230,33 @@ def test_json_state_store_saves_metadata_without_mutating_source(tmp_path):
     )
 
 
+def test_json_state_store_migrates_legacy_state_without_top_level_version(tmp_path):
+    store = JsonStateStore(str(tmp_path / 'state.json'))
+    simulator = Simulator({'initial_capital': 100000, 'commission_rate': 0.0003})
+    assert simulator.execute_order({
+        'action': 'buy',
+        'symbol': '510300',
+        'price': 4.0,
+        'shares': 1000,
+    }) is True
+    legacy_state = {
+        'account': simulator.snapshot(),
+        'strategies': {},
+    }
+    store.save_state(legacy_state)
+
+    loaded = store.load_state()
+    restored_simulator = Simulator({'initial_capital': 1})
+    restored = store.restore(restored_simulator, {}, legacy_state)
+
+    assert loaded['version'] == 1
+    assert loaded['metadata'] == {}
+    assert restored['version'] == 1
+    assert restored_simulator.positions == simulator.positions
+    assert 'version' not in legacy_state
+    assert 'metadata' not in legacy_state
+
+
 def test_order_manager_snapshot_round_trips_orders_and_timestamps():
     manager = OrderManager()
     signal = {
@@ -359,6 +386,14 @@ def test_json_state_store_rejects_unknown_state_version(tmp_path):
     store.save_state({'version': 999})
 
     with pytest.raises(ValueError, match='不支持的状态文件版本'):
+        store.load_state()
+
+
+def test_json_state_store_rejects_invalid_state_version_type(tmp_path):
+    store = JsonStateStore(str(tmp_path / 'state.json'))
+    store.save_state({'version': '1'})
+
+    with pytest.raises(ValueError, match='状态文件版本无效'):
         store.load_state()
 
 

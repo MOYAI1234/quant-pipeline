@@ -58,8 +58,7 @@ class JsonStateStore:
         if not self.path.exists():
             return {}
         state = json.loads(self.path.read_text(encoding='utf-8'))
-        self._validate_state_version(state)
-        return state
+        return self._migrate_state(state)
 
     def restore(
         self,
@@ -72,7 +71,7 @@ class JsonStateStore:
         if not loaded_state:
             return {}
         if state is not None:
-            self._validate_state_version(loaded_state)
+            loaded_state = self._migrate_state(loaded_state)
 
         strategy_states = loaded_state.get('strategies', {})
         self._validate_strategy_states(strategies, strategy_states)
@@ -91,9 +90,31 @@ class JsonStateStore:
                 strategy.restore(strategy_state)
         return loaded_state
 
-    def _validate_state_version(self, state: dict):
-        if state.get('version') != STATE_VERSION:
+    def _migrate_state(self, state: dict) -> dict:
+        if not isinstance(state, dict):
+            raise ValueError('状态文件必须是 JSON object')
+        migrated_state = deepcopy(state)
+        version = migrated_state.get('version', 0)
+        if not isinstance(version, int):
+            raise ValueError('状态文件版本无效')
+        if version > STATE_VERSION:
             raise ValueError('不支持的状态文件版本')
+        while version < STATE_VERSION:
+            migrated_state = self._apply_migration(migrated_state, version)
+            version = migrated_state.get('version')
+        return migrated_state
+
+    def _apply_migration(self, state: dict, version: int) -> dict:
+        if version == 0:
+            return self._migrate_v0_to_v1(state)
+        raise ValueError('不支持的状态文件版本')
+
+    def _migrate_v0_to_v1(self, state: dict) -> dict:
+        migrated_state = deepcopy(state)
+        migrated_state['version'] = 1
+        migrated_state.setdefault('strategies', {})
+        migrated_state.setdefault('metadata', {})
+        return migrated_state
 
     def _validate_strategy_states(self, strategies: dict, strategy_states: dict):
         for name, strategy_state in strategy_states.items():
