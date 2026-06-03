@@ -1,4 +1,5 @@
 import logging
+from copy import deepcopy
 
 from .base import BaseStrategy
 
@@ -106,6 +107,7 @@ class GridStrategy(BaseStrategy):
             'type': 'GridStrategy',
             'name': self.name,
             'symbol': self.symbol,
+            'config': deepcopy(self.config),
             'grid_ledger': {
                 str(price): dict(state)
                 for price, state in self.grid_ledger.items()

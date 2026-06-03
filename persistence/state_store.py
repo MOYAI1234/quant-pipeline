@@ -3,12 +3,14 @@ from pathlib import Path
 
 
 STATE_VERSION = 1
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 class JsonStateStore:
 
     def __init__(self, path: str):
-        self.path = Path(path)
+        state_path = Path(path)
+        self.path = state_path if state_path.is_absolute() else PROJECT_ROOT / state_path
 
     def build_snapshot(self, executor, strategies: dict) -> dict:
         return {
@@ -49,21 +51,33 @@ class JsonStateStore:
         if state is not None:
             self._validate_state_version(loaded_state)
 
+        strategy_states = loaded_state.get('strategies', {})
+        self._validate_strategy_states(strategies, strategy_states)
+
         account_state = loaded_state.get('account')
         if account_state:
             executor.restore(account_state)
 
-        strategy_states = loaded_state.get('strategies', {})
         for name, strategy_state in strategy_states.items():
             strategy = strategies.get(name)
             if strategy and hasattr(strategy, 'restore'):
-                self._validate_strategy_type(name, strategy, strategy_state)
                 strategy.restore(strategy_state)
         return loaded_state
 
     def _validate_state_version(self, state: dict):
         if state.get('version') != STATE_VERSION:
             raise ValueError('不支持的状态文件版本')
+
+    def _validate_strategy_states(self, strategies: dict, strategy_states: dict):
+        for name, strategy_state in strategy_states.items():
+            strategy = strategies.get(name)
+            if strategy and hasattr(strategy, 'restore'):
+                self._validate_strategy_identity(name, strategy, strategy_state)
+
+    def _validate_strategy_identity(self, name: str, strategy, strategy_state: dict):
+        self._validate_strategy_type(name, strategy, strategy_state)
+        self._validate_strategy_symbol(name, strategy, strategy_state)
+        self._validate_strategy_config(name, strategy, strategy_state)
 
     def _validate_strategy_type(self, name: str, strategy, strategy_state: dict):
         state_type = strategy_state.get('type')
@@ -72,3 +86,15 @@ class JsonStateStore:
             raise ValueError(
                 f"策略状态类型不匹配: {name} 需要 {expected_type}, 实际为 {state_type}"
             )
+
+    def _validate_strategy_symbol(self, name: str, strategy, strategy_state: dict):
+        state_symbol = strategy_state.get('symbol')
+        if state_symbol and state_symbol != strategy.symbol:
+            raise ValueError(
+                f"策略状态标的不匹配: {name} 需要 {strategy.symbol}, 实际为 {state_symbol}"
+            )
+
+    def _validate_strategy_config(self, name: str, strategy, strategy_state: dict):
+        state_config = strategy_state.get('config')
+        if state_config and state_config != strategy.config:
+            raise ValueError(f"策略状态配置不匹配: {name}")

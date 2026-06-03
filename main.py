@@ -8,6 +8,7 @@ from config.logging_config import setup_logging
 from data.data_manager import DataManager
 from strategy.strategy_manager import StrategyManager
 from execution.simulator import Simulator
+from persistence import JsonStateStore
 from risk.risk_manager import RiskManager
 from analysis.macro_analyzer import MacroAnalyzer
 from monitor.monitor import SystemMonitor
@@ -27,6 +28,9 @@ class QuantPipeline:
         self.macro_analyzer = MacroAnalyzer(self.config.get('analysis', {}))
         self.monitor = SystemMonitor(self.config.get('monitor', {}))
         self.report_generator = ReportGenerator(self.config.get('monitor', {}))
+        self.state_config = self.config.get('state', {})
+        self.state_store = self._build_state_store(self.state_config)
+        self.state_restore_failed = False
 
         self.running = False
 
@@ -48,6 +52,41 @@ class QuantPipeline:
         self.macro_analyzer.connect()
         self.logger.info("所有服务已连接")
 
+    def _build_state_store(self, state_config: dict):
+        if not state_config.get('enabled', False):
+            return None
+        return JsonStateStore(state_config.get('path', 'data/state.json'))
+
+    def restore_state(self) -> dict:
+        if not self.state_store:
+            return {}
+        self.state_restore_failed = False
+        try:
+            restored_state = self.state_store.restore(
+                self.executor,
+                dict(self.strategy_manager.get_all()),
+            )
+        except Exception as e:
+            self.state_restore_failed = True
+            self.logger.warning(f"状态恢复失败，使用默认状态: {e}")
+            return {}
+        if restored_state:
+            self.logger.info(f"已恢复状态: {self.state_store.path}")
+        return restored_state
+
+    def save_state(self) -> dict:
+        if not self.state_store:
+            return {}
+        if self.state_restore_failed:
+            self.logger.warning("状态恢复失败，本轮跳过状态保存，避免覆盖原状态文件")
+            return {}
+        saved_state = self.state_store.save(
+            self.executor,
+            dict(self.strategy_manager.get_all()),
+        )
+        self.logger.info(f"已保存状态: {self.state_store.path}")
+        return saved_state
+
     def run(self):
         self.logger.info("=" * 50)
         self.logger.info("量化助手 Pipeline 启动")
@@ -59,6 +98,9 @@ class QuantPipeline:
         macro_analysis = self.macro_analyzer.get_market_analysis()
         self.logger.info(f"市场情绪: {macro_analysis['sentiment']['sentiment']}")
         self.logger.info(f"投资建议: {macro_analysis['recommendation']}")
+
+        if self.state_config.get('restore_on_start', True):
+            self.restore_state()
 
         self.running = True
         self.logger.info("开始运行策略...")
@@ -180,6 +222,12 @@ class QuantPipeline:
 
     def stop(self):
         self.logger.info("系统停止中...")
+        if self.state_config.get('save_on_stop', True):
+            try:
+                self.save_state()
+            except Exception as e:
+                self.logger.error(f"状态保存失败: {e}")
+
         self.monitor.print_status()
 
         self.logger.info("策略表现:")
