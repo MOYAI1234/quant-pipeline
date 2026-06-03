@@ -32,6 +32,8 @@ class AlertManager:
         return alert
 
     def get_alert_history(self, limit: int = 10) -> list:
+        if limit <= 0:
+            return []
         return self.alert_history[-limit:]
 
     def _log_alert(self, alert: dict):
@@ -49,7 +51,14 @@ class AlertManager:
         if not self.alert_file_path:
             return
 
-        path = Path(self.alert_file_path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open('a', encoding='utf-8') as file:
-            file.write(json.dumps(alert, ensure_ascii=False) + "\n")
+        try:
+            path = Path(self.alert_file_path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open('a', encoding='utf-8') as file:
+                file.write(json.dumps(alert, ensure_ascii=False) + "\n")
+        except (OSError, TypeError, ValueError):
+            self.logger.exception(
+                "告警写入 JSONL 失败: category=%s message=%s",
+                alert.get('category'),
+                alert.get('message'),
+            )

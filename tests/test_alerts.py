@@ -78,3 +78,26 @@ def test_alert_history_limit_returns_latest_events():
         '告警 1',
         '告警 2',
     ]
+
+
+def test_alert_history_non_positive_limit_returns_empty():
+    manager = AlertManager({})
+    manager.send_alert('告警')
+
+    assert manager.get_alert_history(limit=0) == []
+    assert manager.get_alert_history(limit=-1) == []
+
+
+def test_alert_file_write_failure_does_not_break_send_alert(monkeypatch, caplog):
+    manager = AlertManager({'alert_file_path': 'alerts.jsonl'})
+
+    def fail_open(*args, **kwargs):
+        raise OSError('disk unavailable')
+
+    monkeypatch.setattr('monitor.alert.Path.open', fail_open)
+
+    event = manager.send_alert('落盘失败也要返回')
+
+    assert event['message'] == '落盘失败也要返回'
+    assert manager.get_alert_history() == [event]
+    assert '告警写入 JSONL 失败' in caplog.text
