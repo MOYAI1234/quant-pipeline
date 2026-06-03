@@ -54,6 +54,13 @@ python cli\commands.py --help
 python cli\commands.py report --type daily
 ```
 
+检查数据源健康状态：
+
+```powershell
+python cli\commands.py health
+python cli\commands.py health --json --strict
+```
+
 运行内置样例回测：
 
 ```powershell
@@ -108,6 +115,7 @@ python -m compileall -q .
 当前测试重点覆盖：
 
 - adapter 的 mock/real 模式、结构化健康检查和未实现 real 模式错误
+- CLI `health` 对数据源健康状态的文本/JSON 输出
 - `DataManager` 对实时行情、净值和历史行情的字段契约校验
 - `Simulator` 买入、卖出、均价、部分卖出和市值估算
 - `BacktestRunner` 的 grid 买卖周期、轮动样例回测、空历史保护、CSV 读取/错误处理和 CLI smoke
