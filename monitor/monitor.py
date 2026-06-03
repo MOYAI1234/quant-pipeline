@@ -26,17 +26,36 @@ class SystemMonitor:
         alert_threshold = self.config.get('alert_threshold', -10)
 
         if self.metrics.get('pnl_percent', 0) < alert_threshold:
-            alerts.append(f"亏损告警: {self.metrics['pnl_percent']:.2f}%")
+            alerts.append({
+                'message': f"亏损告警: {self.metrics['pnl_percent']:.2f}%",
+                'level': 'warning',
+                'category': 'risk.pnl',
+                'payload': {
+                    'pnl_percent': self.metrics['pnl_percent'],
+                    'threshold': alert_threshold,
+                },
+            })
 
         max_position = self.config.get('max_position', 5)
         if self.metrics.get('position', 0) >= max_position:
-            alerts.append(f"持仓告警: {self.metrics['position']}格")
+            alerts.append({
+                'message': f"持仓告警: {self.metrics['position']}格",
+                'level': 'warning',
+                'category': 'risk.position',
+                'payload': {
+                    'position': self.metrics['position'],
+                    'max_position': max_position,
+                },
+            })
 
         for alert in alerts:
-            self.alert_manager.send_alert(alert)
+            self.alert_manager.send_alert(**alert)
 
     def get_metrics(self) -> dict:
         return self.metrics
+
+    def get_alert_history(self, limit: int = 10) -> list:
+        return self.alert_manager.get_alert_history(limit)
 
     def print_status(self):
         print(f"时间: {self.metrics.get('timestamp', '')}")
