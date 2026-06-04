@@ -118,6 +118,68 @@ def test_get_etf_realtime_rejects_empty_record():
     assert exc.value.source == 'mx_data.realtime'
 
 
+def test_get_etf_realtime_rejects_invalid_numeric_field():
+    manager = _manager_with_adapter(BrokenMXDataAdapter(
+        realtime={
+            'symbol': '510300',
+            'price': 'bad',
+            'open': 4.0,
+            'high': 4.1,
+            'low': 3.9,
+            'pre_close': 3.95,
+            'volume': 100,
+            'amount': 40000.0,
+            'timestamp': '2026-06-02 10:00:00',
+        }
+    ))
+
+    with pytest.raises(DataFetchError) as exc:
+        manager.get_etf_realtime('510300')
+
+    assert exc.value.error_code == 'INVALID_FIELD_VALUE'
+    assert exc.value.source == 'mx_data.realtime'
+    assert '字段 price 必须是有限数字' in str(exc.value)
+
+
+def test_get_etf_realtime_rejects_negative_volume():
+    manager = _manager_with_adapter(BrokenMXDataAdapter(
+        realtime={
+            'symbol': '510300',
+            'price': 4.0,
+            'open': 4.0,
+            'high': 4.1,
+            'low': 3.9,
+            'pre_close': 3.95,
+            'volume': -1,
+            'amount': 40000.0,
+            'timestamp': '2026-06-02 10:00:00',
+        }
+    ))
+
+    with pytest.raises(DataFetchError) as exc:
+        manager.get_etf_realtime('510300')
+
+    assert exc.value.error_code == 'INVALID_FIELD_VALUE'
+    assert exc.value.source == 'mx_data.realtime'
+    assert '字段 volume 必须是非负整数' in str(exc.value)
+
+
+def test_get_etf_nav_allows_negative_premium():
+    manager = _manager_with_adapter(BrokenMXDataAdapter(
+        nav={
+            'symbol': '510300',
+            'nav': 4.1,
+            'price': 4.0,
+            'premium': -0.024,
+            'timestamp': '2026-06-02 10:00:00',
+        }
+    ))
+
+    nav = manager.get_etf_nav('510300')
+
+    assert nav['premium'] == -0.024
+
+
 def test_get_etf_history_rejects_non_list_shape():
     manager = _manager_with_adapter(BrokenMXDataAdapter(history={'date': '2026-06-02'}))
 
@@ -141,6 +203,27 @@ def test_get_etf_history_rejects_records_with_missing_fields():
 
     assert exc.value.error_code == 'MISSING_FIELDS'
     assert exc.value.source == 'mx_data.history'
+
+
+def test_get_etf_history_rejects_non_finite_close():
+    manager = _manager_with_adapter(BrokenMXDataAdapter(
+        history=[{
+            'date': '2026-06-02',
+            'open': 4.0,
+            'high': 4.1,
+            'low': 3.9,
+            'close': float('nan'),
+            'volume': 100,
+            'amount': 40000.0,
+        }]
+    ))
+
+    with pytest.raises(DataFetchError) as exc:
+        manager.get_etf_history('510300', '2026-06-01', '2026-06-02')
+
+    assert exc.value.error_code == 'INVALID_FIELD_VALUE'
+    assert exc.value.source == 'mx_data.history'
+    assert '字段 close 必须是有限数字' in str(exc.value)
 
 
 def test_normalized_quote_is_cached_after_first_fetch():
@@ -168,6 +251,7 @@ def test_normalized_quote_is_cached_after_first_fetch():
     assert set(cached) == set(DataManager.QUOTE_FIELDS)
     assert 'adapter_extra' not in cached
     assert cached['price'] == 4.0
+    assert isinstance(cached['price'], float)
 
 
 def test_expired_quote_cache_refetches_from_adapter():
