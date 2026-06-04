@@ -141,6 +141,7 @@ python -m compileall -q .
 - CLI `config validate` 对内置配置和 JSON 配置文件的校验
 - `DataManager` 对实时行情、净值和历史行情的字段、数值类型、非负单位和可选时效契约校验
 - `DataManager` 缓存过期重取和 adapter 异常包装
+- `RiskManager` 买入仓位上限、已有标的加仓、单笔权重、无持仓卖出、固定止损、单笔止损、跟踪止损和组合亏损告警
 - `Simulator` 买入、卖出、均价、部分卖出和市值估算
 - `BacktestRunner` 的 grid 买卖周期、轮动样例回测、空历史保护、CSV 读取/错误处理和 CLI smoke
 - `GridStrategy` 多格买入、同格防重复、卖出、止损后 ledger 重置

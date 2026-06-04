@@ -31,7 +31,7 @@ python cli\commands.py backtest --strategy rotation
 结果：
 
 - `compileall` 通过
-- `pytest` 通过，`162 passed`
+- `pytest` 通过，`171 passed`
 - CLI help 可用
 - CLI daily report 可生成包含数据源健康状态的空组合报告
 - CLI health 可输出数据源健康状态
@@ -56,7 +56,7 @@ python cli\commands.py backtest --strategy rotation
 | 监控告警 | 部分完成 | 状态指标、报告和结构化告警事件已存在，报告可展示最近告警摘要，并支持本地 JSONL 输出；外部通知通道尚未实现 |
 | CLI | 基础可用 | `start/status/report/health/alerts/config validate/backtest` 已有；仍缺更完整的配置解释、初始化和运行诊断命令 |
 | API/Web | 未完成 | PRD 中规划了 API 和 Web 界面，当前仓库没有对应模块 |
-| 测试体系 | 不足 | 现有 162 个测试覆盖 simulator、grid e2e、rotation、backtest runner、CLI smoke、状态持久化、报告健康状态、告警事件、配置校验、DataManager 缓存与数据契约等；risk、adapter、report 仍有缺口 |
+| 测试体系 | 不足 | 现有 171 个测试覆盖 simulator、grid e2e、rotation、risk manager 边界、backtest runner、CLI smoke、状态持久化、报告健康状态、告警事件、配置校验、DataManager 缓存与数据契约等；adapter、report 仍有缺口 |
 | 文档入口 | 不足 | `README.md` 已补充基础运行、测试和阶段边界；仍缺 `docs/testing.md`、`docs/architecture.md` 等专题文档 |
 
 ## 主要风险
@@ -121,7 +121,7 @@ PRD 将“可回测策略系统”列为阶段二交付物，但当前只有实�
 - rotation 风控拒绝后 pending 清理和重试
 - rotation 卖旧买新时现金计算
 - stop-loss 触发后策略 ledger 同步
-- RiskManager buy/sell/rebalance 的边界
+- RiskManager rebalance 的边界
 - QuantPipeline 主循环的单 tick 集成测试
 - DataManager 缓存过期与 adapter 异常传播
 
@@ -168,7 +168,7 @@ PRD 将“可回测策略系统”列为阶段二交付物，但当前只有实�
 
 ### M1：数据适配契约和 mock/real 模式
 
-状态：已启动。当前 adapter 已支持显式 `mode=mock|real`，并通过结构化健康检查暴露 `mode`、`connected`、`available`、`mock` 和 `error`。`real` 模式尚未接入真实外部服务，会明确返回不可用并在数据调用时抛出 `ServiceUnavailableError`。`DataManager` 已开始校验实时行情、净值和历史行情的基础字段、数值类型、非负单位、可选行情时效、无时区 timestamp 的显式源时区解释和 adapter 异常传播，字段缺失、shape 错误、非法字段值或启用时效校验后的过期数据会抛出 `DataFetchError`。
+状态：已启动。当前 adapter 已支持显式 `mode=mock|real`，并通过结构化健康检查暴露 `mode`、`connected`、`available`、`mock` 和 `error`。`real` 模式尚未接入真实外部服务，会明确返回不可用并在数据调用时抛出 `ServiceUnavailableError`。`DataManager` 已开始校验实时行情、净值和历史行情的基础字段、数值类型、非负单位、可选行情时效、无时区 timestamp 的显式源时区解释和 adapter 异常传播，字段缺失、shape 错误、非法字段值或启用时效校验后的过期数据会抛出 `DataFetchError`。`RiskManager` 已补充买入仓位上限、已有标的加仓、单笔权重、无持仓卖出、固定止损、单笔止损、跟踪止损和组合亏损告警的直接边界测试。
 
 目标：让系统能清楚地区分“真实数据可用”和“当前只是模拟数据”。
 
