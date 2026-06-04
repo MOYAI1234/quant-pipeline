@@ -1,4 +1,5 @@
 import math
+from datetime import datetime
 from numbers import Integral, Real
 
 from adapters.mx_data_adapter import MXDataAdapter
@@ -43,6 +44,8 @@ class DataManager:
         self.mx_xuangu = MX_XuanguAdapter(config.get('mx_xuangu', {}))
         self.mx_search = MX_SearchAdapter(config.get('mx_search', {}))
         self.cache = DataCache(config.get('cache_ttl', 300))
+        self.max_realtime_age_seconds = config.get('max_realtime_age_seconds')
+        self.max_nav_age_seconds = config.get('max_nav_age_seconds')
 
     def connect(self):
         self.mx_data.connect()
@@ -68,6 +71,11 @@ class DataManager:
             raw_data,
             self.QUOTE_FIELDS,
             source='mx_data.realtime',
+        )
+        self._validate_timestamp_freshness(
+            data['timestamp'],
+            source='mx_data.realtime',
+            max_age_seconds=self.max_realtime_age_seconds,
         )
         self.cache.set(cache_key, data, ttl=10)
         return data
@@ -106,6 +114,11 @@ class DataManager:
             raw_data,
             self.NAV_FIELDS,
             source='mx_data.nav',
+        )
+        self._validate_timestamp_freshness(
+            data['timestamp'],
+            source='mx_data.nav',
+            max_age_seconds=self.max_nav_age_seconds,
         )
         self.cache.set(cache_key, data, ttl=60)
         return data
@@ -260,3 +273,43 @@ class DataManager:
             error_code='INVALID_FIELD_VALUE',
             source=source,
         )
+
+    def _validate_timestamp_freshness(
+        self,
+        timestamp: str,
+        source: str,
+        max_age_seconds,
+    ) -> None:
+        if max_age_seconds is None:
+            return
+        if not timestamp:
+            raise DataFetchError(
+                f"{source} timestamp 不能为空",
+                error_code='MISSING_TIMESTAMP',
+                source=source,
+            )
+
+        parsed = self._parse_timestamp(timestamp, source)
+        now = datetime.now(parsed.tzinfo) if parsed.tzinfo else datetime.now()
+        age_seconds = (now - parsed).total_seconds()
+        if age_seconds > max_age_seconds:
+            raise DataFetchError(
+                f"{source} 数据已过期: timestamp={timestamp}",
+                error_code='STALE_DATA',
+                source=source,
+            )
+
+    def _parse_timestamp(self, timestamp: str, source: str) -> datetime:
+        try:
+            normalized = (
+                timestamp[:-1] + '+00:00'
+                if timestamp.endswith('Z')
+                else timestamp
+            )
+            return datetime.fromisoformat(normalized)
+        except ValueError as exc:
+            raise DataFetchError(
+                f"{source} timestamp 不是合法 ISO 时间: {timestamp}",
+                error_code='INVALID_TIMESTAMP',
+                source=source,
+            ) from exc

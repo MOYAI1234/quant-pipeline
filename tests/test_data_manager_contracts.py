@@ -1,5 +1,7 @@
-import pytest
+from datetime import datetime, timedelta, timezone
+
 import numpy as np
+import pytest
 
 from data.contracts import DataFetchError
 from data.data_manager import DataManager
@@ -44,12 +46,14 @@ class ExplodingMXDataAdapter(BrokenMXDataAdapter):
         raise RuntimeError('upstream timeout')
 
 
-def _manager_with_adapter(adapter):
-    manager = DataManager({
+def _manager_with_adapter(adapter, config_overrides=None):
+    config = {
         'mx_data': {'mode': 'mock'},
         'mx_xuangu': {'mode': 'mock'},
         'mx_search': {'mode': 'mock'},
-    })
+    }
+    config.update(config_overrides or {})
+    manager = DataManager(config)
     manager.mx_data = adapter
     return manager
 
@@ -82,6 +86,26 @@ def test_get_etf_nav_returns_complete_mock_nav_contract():
     assert set(nav) == set(DataManager.NAV_FIELDS)
     assert nav['symbol'] == '510300'
     assert nav['timestamp'] == ''
+
+
+def test_default_config_allows_empty_mock_timestamp():
+    manager = _manager_with_adapter(BrokenMXDataAdapter(
+        realtime={
+            'symbol': '510300',
+            'price': 0.0,
+            'open': 0.0,
+            'high': 0.0,
+            'low': 0.0,
+            'pre_close': 0.0,
+            'volume': 0,
+            'amount': 0.0,
+            'timestamp': '',
+        }
+    ))
+
+    quote = manager.get_etf_realtime('510300')
+
+    assert quote['timestamp'] == ''
 
 
 def test_get_etf_realtime_rejects_missing_required_fields():
@@ -202,6 +226,119 @@ def test_get_etf_nav_allows_negative_premium():
     nav = manager.get_etf_nav('510300')
 
     assert nav['premium'] == -0.024
+
+
+def test_get_etf_realtime_rejects_stale_timestamp_when_configured():
+    manager = _manager_with_adapter(
+        BrokenMXDataAdapter(
+            realtime={
+                'symbol': '510300',
+                'price': 4.0,
+                'open': 4.0,
+                'high': 4.1,
+                'low': 3.9,
+                'pre_close': 3.95,
+                'volume': 100,
+                'amount': 40000.0,
+                'timestamp': '2000-01-01T10:00:00',
+            }
+        ),
+        {'max_realtime_age_seconds': 60},
+    )
+
+    with pytest.raises(DataFetchError) as exc:
+        manager.get_etf_realtime('510300')
+
+    assert exc.value.error_code == 'STALE_DATA'
+    assert exc.value.source == 'mx_data.realtime'
+
+
+def test_get_etf_realtime_accepts_fresh_timestamp_when_configured():
+    timestamp = datetime.now().isoformat(timespec='seconds')
+    manager = _manager_with_adapter(
+        BrokenMXDataAdapter(
+            realtime={
+                'symbol': '510300',
+                'price': 4.0,
+                'open': 4.0,
+                'high': 4.1,
+                'low': 3.9,
+                'pre_close': 3.95,
+                'volume': 100,
+                'amount': 40000.0,
+                'timestamp': timestamp,
+            }
+        ),
+        {'max_realtime_age_seconds': 60},
+    )
+
+    quote = manager.get_etf_realtime('510300')
+
+    assert quote['timestamp'] == timestamp
+
+
+def test_get_etf_nav_rejects_missing_timestamp_when_freshness_configured():
+    manager = _manager_with_adapter(
+        BrokenMXDataAdapter(
+            nav={
+                'symbol': '510300',
+                'nav': 4.1,
+                'price': 4.0,
+                'premium': -0.024,
+                'timestamp': '',
+            }
+        ),
+        {'max_nav_age_seconds': 60},
+    )
+
+    with pytest.raises(DataFetchError) as exc:
+        manager.get_etf_nav('510300')
+
+    assert exc.value.error_code == 'MISSING_TIMESTAMP'
+    assert exc.value.source == 'mx_data.nav'
+
+
+def test_get_etf_nav_rejects_invalid_timestamp_when_freshness_configured():
+    manager = _manager_with_adapter(
+        BrokenMXDataAdapter(
+            nav={
+                'symbol': '510300',
+                'nav': 4.1,
+                'price': 4.0,
+                'premium': -0.024,
+                'timestamp': 'not-a-time',
+            }
+        ),
+        {'max_nav_age_seconds': 60},
+    )
+
+    with pytest.raises(DataFetchError) as exc:
+        manager.get_etf_nav('510300')
+
+    assert exc.value.error_code == 'INVALID_TIMESTAMP'
+    assert exc.value.source == 'mx_data.nav'
+
+
+def test_get_etf_nav_accepts_timezone_aware_timestamp_when_configured():
+    timestamp = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat(
+        timespec='seconds'
+    )
+    manager = _manager_with_adapter(
+        BrokenMXDataAdapter(
+            nav={
+                'symbol': '510300',
+                'nav': 4.1,
+                'price': 4.0,
+                'premium': -0.024,
+                'timestamp': timestamp,
+            }
+        ),
+        {'max_nav_age_seconds': 60},
+    )
+
+    nav = manager.get_etf_nav('510300')
+
+    assert nav['timestamp'] == timestamp
 
 
 def test_normalize_field_rejects_unclassified_contract_field():

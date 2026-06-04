@@ -38,6 +38,13 @@ def _validate_required_sections(config: dict, errors: list) -> None:
 def _validate_data_config(data_config: dict | None, errors: list, warnings: list) -> None:
     if not isinstance(data_config, dict):
         return
+    for key in ('max_realtime_age_seconds', 'max_nav_age_seconds'):
+        _validate_optional_nullable_positive_number(
+            data_config,
+            key,
+            f"data.{key}",
+            errors,
+        )
     for adapter_name in ('mx_data', 'mx_xuangu', 'mx_search'):
         adapter_config = data_config.get(adapter_name)
         _validate_adapter_config(
@@ -200,6 +207,16 @@ def _validate_optional_positive_number(
     errors: list,
 ) -> None:
     if key in config:
+        _validate_positive_number(config.get(key), name, errors)
+
+
+def _validate_optional_nullable_positive_number(
+    config: dict,
+    key: str,
+    name: str,
+    errors: list,
+) -> None:
+    if key in config and config.get(key) is not None:
         _validate_positive_number(config.get(key), name, errors)
 
 
