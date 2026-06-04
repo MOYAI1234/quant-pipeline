@@ -255,7 +255,7 @@ def test_get_etf_realtime_rejects_stale_timestamp_when_configured():
 
 
 def test_get_etf_realtime_revalidates_cached_timestamp_when_configured():
-    timestamp = datetime.now().isoformat(timespec='seconds')
+    timestamp = datetime.now(timezone.utc).isoformat(timespec='seconds')
     manager = _manager_with_adapter(
         BrokenMXDataAdapter(
             realtime={
@@ -285,7 +285,7 @@ def test_get_etf_realtime_revalidates_cached_timestamp_when_configured():
 
 
 def test_get_etf_realtime_limits_cache_ttl_to_remaining_freshness():
-    timestamp = (datetime.now() - timedelta(seconds=59)).isoformat(
+    timestamp = (datetime.now(timezone.utc) - timedelta(seconds=59)).isoformat(
         timespec='seconds'
     )
     manager = _manager_with_adapter(
@@ -314,7 +314,7 @@ def test_get_etf_realtime_limits_cache_ttl_to_remaining_freshness():
 
 
 def test_get_etf_realtime_accepts_fresh_timestamp_when_configured():
-    timestamp = datetime.now().isoformat(timespec='seconds')
+    timestamp = datetime.now(timezone.utc).isoformat(timespec='seconds')
     manager = _manager_with_adapter(
         BrokenMXDataAdapter(
             realtime={
@@ -338,7 +338,7 @@ def test_get_etf_realtime_accepts_fresh_timestamp_when_configured():
 
 
 def test_get_etf_realtime_rejects_far_future_timestamp_when_configured():
-    timestamp = (datetime.now() + timedelta(minutes=5)).isoformat(
+    timestamp = (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat(
         timespec='seconds'
     )
     manager = _manager_with_adapter(
@@ -366,6 +366,33 @@ def test_get_etf_realtime_rejects_far_future_timestamp_when_configured():
 
     assert exc.value.error_code == 'FUTURE_DATA'
     assert exc.value.source == 'mx_data.realtime'
+
+
+def test_parse_timestamp_applies_configured_timezone_to_naive_timestamp():
+    manager = _manager_with_adapter(
+        BrokenMXDataAdapter(),
+        {'timestamp_timezone_offset': '+08:00'},
+    )
+
+    parsed = manager._parse_timestamp('2026-06-04T17:00:00', 'test.source')
+
+    assert parsed.tzinfo is not None
+    assert parsed.utcoffset() == timedelta(hours=8)
+
+
+def test_parse_timestamp_preserves_explicit_timezone():
+    manager = _manager_with_adapter(
+        BrokenMXDataAdapter(),
+        {'timestamp_timezone_offset': '+08:00'},
+    )
+
+    parsed = manager._parse_timestamp(
+        '2026-06-04T17:00:00+00:00',
+        'test.source',
+    )
+
+    assert parsed.tzinfo is not None
+    assert parsed.utcoffset() == timedelta(0)
 
 
 def test_get_etf_nav_rejects_missing_timestamp_when_freshness_configured():

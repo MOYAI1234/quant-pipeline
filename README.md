@@ -115,7 +115,7 @@ python cli\commands.py start --strategy grid --no-state
 
 如需把本地模拟告警写入文件，可在 `SYSTEM_CONFIG['monitor']` 中设置 `alert_file_path`，例如 `data/alerts.jsonl`。每行是一条结构化 JSON 告警事件。
 
-如需在真实数据接入时启用行情时效门槛，可在 `SYSTEM_CONFIG['data']` 中设置 `max_realtime_age_seconds` 和 `max_nav_age_seconds`；默认值为 `None`，以兼容当前 mock 空时间戳。未来时间戳容忍窗口由 `max_timestamp_future_skew_seconds` 控制，默认 60 秒。
+如需在真实数据接入时启用行情时效门槛，可在 `SYSTEM_CONFIG['data']` 中设置 `max_realtime_age_seconds` 和 `max_nav_age_seconds`；默认值为 `None`，以兼容当前 mock 空时间戳。未来时间戳容忍窗口由 `max_timestamp_future_skew_seconds` 控制，默认 60 秒。不带时区的行情 timestamp 会按 `timestamp_timezone_offset` 解释，默认 `+08:00`。
 
 注意：当前默认数据适配器返回 mock/空数据，`start` 命令主要用于验证程序链路，不代表真实行情运行。
 

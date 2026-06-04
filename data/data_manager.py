@@ -1,5 +1,5 @@
 import math
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from numbers import Integral, Real
 
 from adapters.mx_data_adapter import MXDataAdapter
@@ -49,6 +49,9 @@ class DataManager:
         self.max_timestamp_future_skew_seconds = config.get(
             'max_timestamp_future_skew_seconds',
             60,
+        )
+        self.timestamp_timezone = self._parse_timezone_offset(
+            config.get('timestamp_timezone_offset', '+08:00')
         )
 
     def connect(self):
@@ -306,7 +309,7 @@ class DataManager:
             )
 
         parsed = self._parse_timestamp(timestamp, source)
-        now = datetime.now(parsed.tzinfo) if parsed.tzinfo else datetime.now()
+        now = datetime.now(parsed.tzinfo)
         age_seconds = (now - parsed).total_seconds()
         future_skew = self.max_timestamp_future_skew_seconds
         if future_skew is not None and age_seconds < -future_skew:
@@ -330,13 +333,33 @@ class DataManager:
                 if timestamp.endswith('Z')
                 else timestamp
             )
-            return datetime.fromisoformat(normalized)
+            parsed = datetime.fromisoformat(normalized)
         except ValueError as exc:
             raise DataFetchError(
                 f"{source} timestamp 不是合法 ISO 时间: {timestamp}",
                 error_code='INVALID_TIMESTAMP',
                 source=source,
             ) from exc
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=self.timestamp_timezone)
+        return parsed
+
+    def _parse_timezone_offset(self, offset: str) -> timezone:
+        if not isinstance(offset, str):
+            raise ValueError('timestamp_timezone_offset 必须是字符串')
+        if len(offset) != 6 or offset[0] not in '+-' or offset[3] != ':':
+            raise ValueError('timestamp_timezone_offset 必须是 +HH:MM 或 -HH:MM')
+        try:
+            hours = int(offset[1:3])
+            minutes = int(offset[4:6])
+        except ValueError as exc:
+            raise ValueError(
+                'timestamp_timezone_offset 必须是 +HH:MM 或 -HH:MM'
+            ) from exc
+        if hours > 23 or minutes > 59:
+            raise ValueError('timestamp_timezone_offset 超出合法时区偏移范围')
+        sign = 1 if offset[0] == '+' else -1
+        return timezone(sign * timedelta(hours=hours, minutes=minutes))
 
     def _freshness_limited_ttl(
         self,

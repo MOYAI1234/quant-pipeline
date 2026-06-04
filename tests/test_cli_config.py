@@ -196,6 +196,32 @@ def test_validate_config_rejects_invalid_data_future_skew_threshold():
     )
 
 
+def test_validate_config_rejects_invalid_timestamp_timezone_offset():
+    config = deepcopy(SYSTEM_CONFIG)
+    config['data']['timestamp_timezone_offset'] = 'Asia/Shanghai'
+
+    result = validate_config(config)
+
+    assert result['valid'] is False
+    assert (
+        'data.timestamp_timezone_offset 必须是 +HH:MM 或 -HH:MM'
+        in result['errors']
+    )
+
+
+def test_validate_config_rejects_out_of_range_timestamp_timezone_offset():
+    config = deepcopy(SYSTEM_CONFIG)
+    config['data']['timestamp_timezone_offset'] = '+24:00'
+
+    result = validate_config(config)
+
+    assert result['valid'] is False
+    assert (
+        'data.timestamp_timezone_offset 超出合法时区偏移范围'
+        in result['errors']
+    )
+
+
 def test_validate_config_rejects_invalid_commission_rate():
     config = deepcopy(SYSTEM_CONFIG)
     config['account']['commission_rate'] = 2

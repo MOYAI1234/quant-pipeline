@@ -51,6 +51,12 @@ def _validate_data_config(data_config: dict | None, errors: list, warnings: list
         'data.max_timestamp_future_skew_seconds',
         errors,
     )
+    _validate_optional_timezone_offset(
+        data_config,
+        'timestamp_timezone_offset',
+        'data.timestamp_timezone_offset',
+        errors,
+    )
     for adapter_name in ('mx_data', 'mx_xuangu', 'mx_search'):
         adapter_config = data_config.get(adapter_name)
         _validate_adapter_config(
@@ -224,6 +230,31 @@ def _validate_optional_nullable_positive_number(
 ) -> None:
     if key in config and config.get(key) is not None:
         _validate_positive_number(config.get(key), name, errors)
+
+
+def _validate_optional_timezone_offset(
+    config: dict,
+    key: str,
+    name: str,
+    errors: list,
+) -> None:
+    if key not in config:
+        return
+    value = config.get(key)
+    if not isinstance(value, str):
+        errors.append(f"{name} 必须是 +HH:MM 或 -HH:MM")
+        return
+    if len(value) != 6 or value[0] not in '+-' or value[3] != ':':
+        errors.append(f"{name} 必须是 +HH:MM 或 -HH:MM")
+        return
+    try:
+        hours = int(value[1:3])
+        minutes = int(value[4:6])
+    except ValueError:
+        errors.append(f"{name} 必须是 +HH:MM 或 -HH:MM")
+        return
+    if hours > 23 or minutes > 59:
+        errors.append(f"{name} 超出合法时区偏移范围")
 
 
 def _validate_non_negative_number(value, name: str, errors: list) -> None:

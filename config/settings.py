@@ -3,6 +3,7 @@ SYSTEM_CONFIG = {
         'max_realtime_age_seconds': None,
         'max_nav_age_seconds': None,
         'max_timestamp_future_skew_seconds': 60,
+        'timestamp_timezone_offset': '+08:00',
         'mx_data': {
             'mode': 'mock',
             'timeout': 10,
