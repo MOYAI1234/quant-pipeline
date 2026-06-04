@@ -162,6 +162,16 @@ def test_validate_config_rejects_invalid_risk_adapter_mode():
     assert 'risk.mx_data.mode 必须是 mock 或 real' in result['errors']
 
 
+def test_validate_config_rejects_invalid_risk_weight_limit():
+    config = deepcopy(SYSTEM_CONFIG)
+    config['risk']['max_single_weight'] = 1.5
+
+    result = validate_config(config)
+
+    assert result['valid'] is False
+    assert 'risk.max_single_weight 必须在 0 到 1 之间' in result['errors']
+
+
 def test_validate_config_warns_for_analysis_real_adapter_mode():
     config = deepcopy(SYSTEM_CONFIG)
     config['analysis'] = {'jason_kb': {'mode': 'real'}}
@@ -195,6 +205,16 @@ def test_validate_config_rejects_non_finite_numbers():
     assert result['valid'] is False
     assert 'account.initial_capital 必须大于 0' in result['errors']
     assert 'monitor.alert_threshold 必须是数字' in result['errors']
+
+
+def test_validate_config_rejects_invalid_monitor_position_threshold():
+    config = deepcopy(SYSTEM_CONFIG)
+    config['monitor']['max_position'] = 'bad'
+
+    result = validate_config(config)
+
+    assert result['valid'] is False
+    assert 'monitor.max_position 必须是正整数' in result['errors']
 
 
 def test_validate_config_rejects_missing_required_section():

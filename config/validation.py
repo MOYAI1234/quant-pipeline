@@ -74,6 +74,12 @@ def _validate_risk_config(
     _validate_positive_int(risk_config.get('max_position'), 'risk.max_position', errors)
     for key in ('stop_loss', 'max_single_loss'):
         _validate_ratio(risk_config.get(key), f"risk.{key}", errors)
+    if 'max_single_weight' in risk_config:
+        _validate_ratio(
+            risk_config.get('max_single_weight'),
+            'risk.max_single_weight',
+            errors,
+        )
     for key in ('min_volume', 'min_size', 'max_tracking_error', 'max_premium'):
         _validate_non_negative_number(risk_config.get(key), f"risk.{key}", errors)
     if 'mx_data' in risk_config:
@@ -99,6 +105,12 @@ def _validate_monitor_config(monitor_config: dict | None, errors: list) -> None:
         'monitor.alert_threshold',
         errors,
     )
+    if 'max_position' in monitor_config:
+        _validate_positive_int(
+            monitor_config.get('max_position'),
+            'monitor.max_position',
+            errors,
+        )
     alert_file_path = monitor_config.get('alert_file_path')
     if alert_file_path is not None and not isinstance(alert_file_path, str):
         errors.append('monitor.alert_file_path 必须是字符串或 null')
