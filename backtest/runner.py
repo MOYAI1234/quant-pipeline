@@ -25,6 +25,7 @@ class BacktestRunner:
     def run(self, history: list) -> dict:
         if not history:
             raise ValueError('history 不能为空')
+        _validate_history_order(history)
 
         self.strategy = copy.deepcopy(self._strategy_template)
         self.executor = Simulator(dict(self._account_config))
@@ -166,6 +167,7 @@ class RotationBacktestRunner:
     def run(self, history: list) -> dict:
         if not history:
             raise ValueError('history 不能为空')
+        _validate_history_order(history)
 
         self.strategy = copy.deepcopy(self._strategy_template)
         self.executor = Simulator(dict(self._account_config))
@@ -381,6 +383,7 @@ def filter_history_by_date(
     ]
     if not filtered:
         raise ValueError('指定日期区间内没有历史行情')
+    _validate_history_order(filtered)
     return filtered
 
 
@@ -436,11 +439,20 @@ def _is_blank_row(row: dict) -> bool:
     return all(value in (None, '') for value in row.values())
 
 
-def _history_date(row: dict) -> str:
+def _history_date(row: dict) -> date:
     value = row.get('date', row.get('timestamp', ''))
     if not isinstance(value, str) or not value:
         raise ValueError('history 行日期必须是 YYYY-MM-DD')
     return _parse_date(value[:10], 'history 行日期')
+
+
+def _validate_history_order(history: list) -> None:
+    previous_date = None
+    for row in history:
+        current_date = _history_date(row)
+        if previous_date is not None and current_date <= previous_date:
+            raise ValueError('history 日期必须严格递增')
+        previous_date = current_date
 
 
 def _date_in_range(
