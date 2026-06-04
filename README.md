@@ -10,7 +10,7 @@ ETF 量化助手 Pipeline，目标是把数据适配、策略生成、风控检�
 
 - `adapters/` 中的 `mx-data`、`mx-xuangu`、`mx-search`、`jason-kb` 适配器目前仍是占位实现，未接真实外部服务。
 - adapter 支持 `mode=mock|real`。默认 `mock` 会返回占位数据；`real` 当前会明确标记为不可用并抛出 `ServiceUnavailableError`，避免把 0 或空列表误认为真实行情。
-- `DataManager` 会校验实时行情、净值和历史行情的基础字段契约；字段缺失或返回 shape 错误会抛出 `DataFetchError`，避免脏数据继续进入策略链路。
+- `DataManager` 会校验实时行情、净值和历史行情的基础字段、数值类型和可选时效契约；字段缺失、返回 shape 错误或启用时效校验后的过期数据会抛出 `DataFetchError`，避免脏数据继续进入策略链路。
 - `execution/Simulator` 是简化成交模型，支持整手、手续费、均价、持仓和市值估算；`OrderManager` 会记录 pipeline 内部订单的 pending/filled/failed/rejected 状态，但不包含真实券商撮合、滑点和报单回报同步。
 - `monitor/AlertManager` 已支持结构化告警事件和可选 JSONL 文件输出，日报/周报会展示最近告警摘要；当前还未接飞书、邮件等外部通知通道。
 - `backtest/BacktestRunner` 已支持最小 grid 历史样例回测，`RotationBacktestRunner` 已支持内置多 ETF 轮动样例回测，并复用 `Simulator`；当前还不是完整回测系统，不含交易日历、滑点、复杂组合和真实历史数据源。
@@ -115,6 +115,8 @@ python cli\commands.py start --strategy grid --no-state
 
 如需把本地模拟告警写入文件，可在 `SYSTEM_CONFIG['monitor']` 中设置 `alert_file_path`，例如 `data/alerts.jsonl`。每行是一条结构化 JSON 告警事件。
 
+如需在真实数据接入时启用行情时效门槛，可在 `SYSTEM_CONFIG['data']` 中设置 `max_realtime_age_seconds` 和 `max_nav_age_seconds`；默认值为 `None`，以兼容当前 mock 空时间戳。未来时间戳容忍窗口由 `max_timestamp_future_skew_seconds` 控制，默认 60 秒。不带时区的行情 timestamp 会按 `timestamp_timezone_offset` 解释，默认 `+08:00`。
+
 注意：当前默认数据适配器返回 mock/空数据，`start` 命令主要用于验证程序链路，不代表真实行情运行。
 
 ## 测试
@@ -137,7 +139,7 @@ python -m compileall -q .
 - CLI `health` 对数据源健康状态的文本/JSON 输出
 - CLI `alerts` 对本地 JSONL 告警事件的文本/JSON 输出、limit 和错误处理
 - CLI `config validate` 对内置配置和 JSON 配置文件的校验
-- `DataManager` 对实时行情、净值和历史行情的字段、数值类型和非负单位契约校验
+- `DataManager` 对实时行情、净值和历史行情的字段、数值类型、非负单位和可选时效契约校验
 - `DataManager` 缓存过期重取和 adapter 异常包装
 - `Simulator` 买入、卖出、均价、部分卖出和市值估算
 - `BacktestRunner` 的 grid 买卖周期、轮动样例回测、空历史保护、CSV 读取/错误处理和 CLI smoke

@@ -1,4 +1,5 @@
 import math
+from datetime import datetime, timedelta, timezone
 from numbers import Integral, Real
 
 from adapters.mx_data_adapter import MXDataAdapter
@@ -43,6 +44,15 @@ class DataManager:
         self.mx_xuangu = MX_XuanguAdapter(config.get('mx_xuangu', {}))
         self.mx_search = MX_SearchAdapter(config.get('mx_search', {}))
         self.cache = DataCache(config.get('cache_ttl', 300))
+        self.max_realtime_age_seconds = config.get('max_realtime_age_seconds')
+        self.max_nav_age_seconds = config.get('max_nav_age_seconds')
+        self.max_timestamp_future_skew_seconds = config.get(
+            'max_timestamp_future_skew_seconds',
+            60,
+        )
+        self.timestamp_timezone = self._parse_timezone_offset(
+            config.get('timestamp_timezone_offset', '+08:00')
+        )
 
     def connect(self):
         self.mx_data.connect()
@@ -58,6 +68,11 @@ class DataManager:
         cache_key = f"realtime_{symbol}"
         cached = self.cache.get(cache_key)
         if cached is not _SENTINEL:
+            self._validate_timestamp_freshness(
+                cached['timestamp'],
+                source='mx_data.realtime',
+                max_age_seconds=self.max_realtime_age_seconds,
+            )
             return cached
         raw_data = self._call_adapter(
             'mx_data.realtime',
@@ -69,7 +84,13 @@ class DataManager:
             self.QUOTE_FIELDS,
             source='mx_data.realtime',
         )
-        self.cache.set(cache_key, data, ttl=10)
+        cache_ttl = self._freshness_limited_ttl(
+            default_ttl=10,
+            timestamp=data['timestamp'],
+            source='mx_data.realtime',
+            max_age_seconds=self.max_realtime_age_seconds,
+        )
+        self.cache.set(cache_key, data, ttl=cache_ttl)
         return data
 
     def get_etf_history(self, symbol: str, start_date: str, end_date: str) -> list:
@@ -96,6 +117,11 @@ class DataManager:
         cache_key = f"nav_{symbol}"
         cached = self.cache.get(cache_key)
         if cached is not _SENTINEL:
+            self._validate_timestamp_freshness(
+                cached['timestamp'],
+                source='mx_data.nav',
+                max_age_seconds=self.max_nav_age_seconds,
+            )
             return cached
         raw_data = self._call_adapter(
             'mx_data.nav',
@@ -107,7 +133,13 @@ class DataManager:
             self.NAV_FIELDS,
             source='mx_data.nav',
         )
-        self.cache.set(cache_key, data, ttl=60)
+        cache_ttl = self._freshness_limited_ttl(
+            default_ttl=60,
+            timestamp=data['timestamp'],
+            source='mx_data.nav',
+            max_age_seconds=self.max_nav_age_seconds,
+        )
+        self.cache.set(cache_key, data, ttl=cache_ttl)
         return data
 
     def get_etf_list(self, etf_type: str = None) -> list:
@@ -260,3 +292,87 @@ class DataManager:
             error_code='INVALID_FIELD_VALUE',
             source=source,
         )
+
+    def _validate_timestamp_freshness(
+        self,
+        timestamp: str,
+        source: str,
+        max_age_seconds,
+    ) -> float | None:
+        if max_age_seconds is None:
+            return None
+        if not timestamp:
+            raise DataFetchError(
+                f"{source} timestamp 不能为空",
+                error_code='MISSING_TIMESTAMP',
+                source=source,
+            )
+
+        parsed = self._parse_timestamp(timestamp, source)
+        now = datetime.now(parsed.tzinfo)
+        age_seconds = (now - parsed).total_seconds()
+        future_skew = self.max_timestamp_future_skew_seconds
+        if future_skew is not None and age_seconds < -future_skew:
+            raise DataFetchError(
+                f"{source} timestamp 超出允许的未来偏移: timestamp={timestamp}",
+                error_code='FUTURE_DATA',
+                source=source,
+            )
+        if age_seconds > max_age_seconds:
+            raise DataFetchError(
+                f"{source} 数据已过期: timestamp={timestamp}",
+                error_code='STALE_DATA',
+                source=source,
+            )
+        return age_seconds
+
+    def _parse_timestamp(self, timestamp: str, source: str) -> datetime:
+        try:
+            normalized = (
+                timestamp[:-1] + '+00:00'
+                if timestamp.endswith('Z')
+                else timestamp
+            )
+            parsed = datetime.fromisoformat(normalized)
+        except ValueError as exc:
+            raise DataFetchError(
+                f"{source} timestamp 不是合法 ISO 时间: {timestamp}",
+                error_code='INVALID_TIMESTAMP',
+                source=source,
+            ) from exc
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=self.timestamp_timezone)
+        return parsed
+
+    def _parse_timezone_offset(self, offset: str) -> timezone:
+        if not isinstance(offset, str):
+            raise ValueError('timestamp_timezone_offset 必须是字符串')
+        if len(offset) != 6 or offset[0] not in '+-' or offset[3] != ':':
+            raise ValueError('timestamp_timezone_offset 必须是 +HH:MM 或 -HH:MM')
+        try:
+            hours = int(offset[1:3])
+            minutes = int(offset[4:6])
+        except ValueError as exc:
+            raise ValueError(
+                'timestamp_timezone_offset 必须是 +HH:MM 或 -HH:MM'
+            ) from exc
+        if hours > 23 or minutes > 59:
+            raise ValueError('timestamp_timezone_offset 超出合法时区偏移范围')
+        sign = 1 if offset[0] == '+' else -1
+        return timezone(sign * timedelta(hours=hours, minutes=minutes))
+
+    def _freshness_limited_ttl(
+        self,
+        default_ttl: int,
+        timestamp: str,
+        source: str,
+        max_age_seconds,
+    ):
+        age_seconds = self._validate_timestamp_freshness(
+            timestamp,
+            source,
+            max_age_seconds,
+        )
+        if age_seconds is None:
+            return default_ttl
+        return min(default_ttl, max(0, max_age_seconds - age_seconds))
