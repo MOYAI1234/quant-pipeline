@@ -145,7 +145,7 @@ python -m compileall -q .
 - `DataManager` 缓存过期重取和 adapter 异常包装
 - `RiskManager` 买入仓位上限、已有标的加仓、单笔权重、无持仓卖出、固定止损、单笔止损、跟踪止损和组合亏损告警
 - `Simulator` 买入、卖出、均价、部分卖出和市值估算
-- `BacktestRunner` 的 grid 买卖周期、日期区间过滤、历史日期顺序校验、胜率统计、滑点执行价、轮动样例回测、空历史保护、CSV 读取/错误处理和 CLI smoke
+- `BacktestRunner` 的 grid 买卖周期、日期区间过滤、历史日期/盘中时间顺序校验、胜率统计、滑点执行价、轮动样例回测、空历史保护、CSV 读取/错误处理和 CLI smoke
 - `GridStrategy` 多格买入、同格防重复、卖出、止损后 ledger 重置
 - `RotationStrategy` 首次调仓、卖旧买新、失败 pending 清理和重试
 - `JsonStateStore` 对账户、网格 ledger、轮动调仓状态、成交快照、订单状态、运行 metadata 和旧版状态迁移的保存/恢复

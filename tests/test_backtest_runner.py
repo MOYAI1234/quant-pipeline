@@ -209,6 +209,23 @@ def test_rotation_backtest_runner_rejects_non_chronological_snapshots():
         runner.run(history)
 
 
+def test_rotation_backtest_runner_accepts_chronological_intraday_snapshots():
+    runner = RotationBacktestRunner(_rotation_strategy(), {
+        'initial_capital': 100000,
+        'commission_rate': 0.0003,
+    })
+    history = sample_rotation_history()
+    history[0]['timestamp'] = '2026-01-01T09:30:00'
+    history[0].pop('date')
+    history[1]['timestamp'] = '2026-01-01T10:00:00'
+    history[1].pop('date')
+
+    result = runner.run(history)
+
+    assert result['start_date'] == '2026-01-01T09:30:00'
+    assert result['end_date'] == '2026-01-01T10:00:00'
+
+
 def test_backtest_runner_skips_grid_order_when_bar_does_not_touch_limit_price():
     runner = BacktestRunner(_grid_strategy(), {
         'initial_capital': 100000,
@@ -348,8 +365,11 @@ def test_backtest_runner_rejects_non_chronological_history():
     runner = BacktestRunner(_grid_strategy())
     history = list(reversed(sample_grid_history()))
 
-    with pytest.raises(ValueError, match='history 日期必须严格递增'):
+    with pytest.raises(ValueError, match='history 日期必须严格递增') as exc:
         runner.run(history)
+
+    assert '第 2 条 2026-01-02' in str(exc.value)
+    assert '第 1 条 2026-01-03' in str(exc.value)
 
 
 def test_backtest_runner_rejects_duplicate_history_dates():
@@ -361,6 +381,31 @@ def test_backtest_runner_rejects_duplicate_history_dates():
 
     with pytest.raises(ValueError, match='history 日期必须严格递增'):
         runner.run(history)
+
+
+def test_backtest_runner_accepts_chronological_intraday_history():
+    runner = BacktestRunner(_grid_strategy())
+    history = [
+        {
+            'timestamp': '2026-01-01T09:30:00',
+            'open': 4.0,
+            'high': 4.0,
+            'low': 4.0,
+            'close': 4.0,
+        },
+        {
+            'timestamp': '2026-01-01T10:00:00',
+            'open': 4.0,
+            'high': 4.0,
+            'low': 4.0,
+            'close': 4.0,
+        },
+    ]
+
+    result = runner.run(history)
+
+    assert result['start_date'] == '2026-01-01T09:30:00'
+    assert result['end_date'] == '2026-01-01T10:00:00'
 
 
 def test_backtest_runner_rejects_invalid_slippage_rate():
@@ -447,6 +492,21 @@ def test_filter_history_by_date_rejects_non_chronological_filtered_rows():
 
     with pytest.raises(ValueError, match='history 日期必须严格递增'):
         filter_history_by_date(history)
+
+
+def test_filter_history_by_date_keeps_chronological_intraday_rows():
+    history = [
+        {'timestamp': '2026-01-01T09:30:00'},
+        {'timestamp': '2026-01-01T10:00:00'},
+    ]
+
+    filtered = filter_history_by_date(
+        history,
+        start_date='2026-01-01',
+        end_date='2026-01-01',
+    )
+
+    assert filtered == history
 
 
 def test_load_history_csv_reads_basic_bar_fields(tmp_path):
