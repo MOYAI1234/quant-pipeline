@@ -7,9 +7,10 @@ class PositionManager:
 
     def check_position_limit(self, portfolio: dict, new_symbol: str = None) -> dict:
         checks = []
-        current_count = len(portfolio.get('positions', {}))
+        positions = portfolio.get('positions', {})
+        current_count = len(positions)
 
-        if current_count >= self.max_position:
+        if new_symbol not in positions and current_count >= self.max_position:
             checks.append(f"仓位已满: {current_count}/{self.max_position}")
 
         return {
