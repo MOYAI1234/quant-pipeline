@@ -16,6 +16,7 @@ from backtest.runner import (
 )
 from main import QuantPipeline
 from config.settings import SYSTEM_CONFIG
+from config.validation import validate_config
 from strategy.grid_strategy import GridStrategy
 from strategy.rotation_strategy import RotationStrategy
 
@@ -102,6 +103,17 @@ def cmd_alerts(args):
         print(json.dumps(events, ensure_ascii=False, indent=2))
     else:
         print(_render_alert_events(events))
+
+
+def cmd_config_validate(args):
+    config = _load_config_file(args.config) if args.config else deepcopy(SYSTEM_CONFIG)
+    result = validate_config(config)
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(_render_config_validation(result))
+    if not result['valid']:
+        raise SystemExit(1)
 
 
 def cmd_backtest(args):
@@ -342,6 +354,33 @@ def _resolve_project_path(path: str) -> Path:
     return Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) / resolved
 
 
+def _load_config_file(config_path: str) -> dict:
+    path = _resolve_project_path(config_path)
+    try:
+        config = json.loads(path.read_text(encoding='utf-8'))
+    except FileNotFoundError as exc:
+        raise ValueError(f"配置文件不存在: {path}") from exc
+    except OSError as exc:
+        raise ValueError(f"配置文件无法读取: {path}") from exc
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"配置文件不是合法 JSON: {exc.msg}") from exc
+    if not isinstance(config, dict):
+        raise TypeError('配置文件顶层必须是 JSON object')
+    return config
+
+
+def _render_config_validation(result: dict) -> str:
+    status = 'OK' if result['valid'] else 'FAIL'
+    lines = [f"配置校验: {status}"]
+    if result['errors']:
+        lines.append("错误:")
+        lines.extend(f"- {error}" for error in result['errors'])
+    if result['warnings']:
+        lines.append("警告:")
+        lines.extend(f"- {warning}" for warning in result['warnings'])
+    return "\n".join(lines)
+
+
 def _add_state_options(parser):
     parser.add_argument('--state-path', type=str, help='状态文件路径，默认 data/state.json')
     parser.add_argument('--no-state', action='store_true', help='禁用状态恢复和保存')
@@ -389,6 +428,12 @@ def main():
     alerts_parser.add_argument('--limit', type=int, default=10, help='显示最近 N 条告警，默认 10')
     alerts_parser.add_argument('--json', action='store_true', help='输出 JSON 格式')
 
+    config_parser = subparsers.add_parser('config', help='配置工具')
+    config_subparsers = config_parser.add_subparsers(dest='config_command')
+    validate_parser = config_subparsers.add_parser('validate', help='校验配置')
+    validate_parser.add_argument('--config', type=str, help='JSON 配置文件路径，默认校验内置配置')
+    validate_parser.add_argument('--json', action='store_true', help='输出 JSON 格式')
+
     backtest_parser = subparsers.add_parser('backtest', help='运行回测')
     backtest_parser.add_argument('--strategy', default='grid', choices=['grid', 'rotation'])
     backtest_parser.add_argument('--symbol', type=str, default=DEFAULT_BACKTEST_SYMBOL)
@@ -420,6 +465,14 @@ def main():
             cmd_alerts(args)
         except ValueError as exc:
             parser.error(str(exc))
+    elif args.command == 'config':
+        if args.config_command == 'validate':
+            try:
+                cmd_config_validate(args)
+            except (TypeError, ValueError) as exc:
+                parser.error(str(exc))
+        else:
+            config_parser.print_help()
     elif args.command == 'backtest':
         try:
             cmd_backtest(args)
