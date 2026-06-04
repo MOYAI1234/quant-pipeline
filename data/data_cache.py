@@ -22,9 +22,10 @@ class DataCache:
 
     def set(self, key: str, value: Any, ttl: int = None):
         """设置缓存值"""
+        effective_ttl = self._default_ttl if ttl is None else ttl
         self._cache[key] = {
             'value': value,
-            'expire_at': time.time() + (ttl or self._default_ttl)
+            'expire_at': time.time() + effective_ttl,
         }
 
     def delete(self, key: str):
