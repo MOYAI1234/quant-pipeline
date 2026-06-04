@@ -172,6 +172,26 @@ def test_validate_config_rejects_invalid_risk_weight_limit():
     assert 'risk.max_single_weight 必须在 0 到 1 之间' in result['errors']
 
 
+def test_validate_config_rejects_invalid_trailing_stop_flag():
+    config = deepcopy(SYSTEM_CONFIG)
+    config['risk']['trailing_stop'] = 'false'
+
+    result = validate_config(config)
+
+    assert result['valid'] is False
+    assert 'risk.trailing_stop 必须是 bool' in result['errors']
+
+
+def test_validate_config_rejects_invalid_trailing_stop_ratio():
+    config = deepcopy(SYSTEM_CONFIG)
+    config['risk']['trailing_pct'] = 'bad'
+
+    result = validate_config(config)
+
+    assert result['valid'] is False
+    assert 'risk.trailing_pct 必须在 0 到 1 之间' in result['errors']
+
+
 def test_validate_config_warns_for_analysis_real_adapter_mode():
     config = deepcopy(SYSTEM_CONFIG)
     config['analysis'] = {'jason_kb': {'mode': 'real'}}

@@ -74,6 +74,17 @@ def _validate_risk_config(
     _validate_positive_int(risk_config.get('max_position'), 'risk.max_position', errors)
     for key in ('stop_loss', 'max_single_loss'):
         _validate_ratio(risk_config.get(key), f"risk.{key}", errors)
+    if 'trailing_stop' in risk_config and not isinstance(
+        risk_config.get('trailing_stop'),
+        bool,
+    ):
+        errors.append('risk.trailing_stop 必须是 bool')
+    if 'trailing_pct' in risk_config:
+        _validate_ratio(
+            risk_config.get('trailing_pct'),
+            'risk.trailing_pct',
+            errors,
+        )
     if 'max_single_weight' in risk_config:
         _validate_ratio(
             risk_config.get('max_single_weight'),
