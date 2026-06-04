@@ -2,6 +2,7 @@ SYSTEM_CONFIG = {
     'data': {
         'max_realtime_age_seconds': None,
         'max_nav_age_seconds': None,
+        'max_timestamp_future_skew_seconds': 60,
         'mx_data': {
             'mode': 'mock',
             'timeout': 10,

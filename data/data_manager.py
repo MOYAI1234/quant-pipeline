@@ -46,6 +46,10 @@ class DataManager:
         self.cache = DataCache(config.get('cache_ttl', 300))
         self.max_realtime_age_seconds = config.get('max_realtime_age_seconds')
         self.max_nav_age_seconds = config.get('max_nav_age_seconds')
+        self.max_timestamp_future_skew_seconds = config.get(
+            'max_timestamp_future_skew_seconds',
+            60,
+        )
 
     def connect(self):
         self.mx_data.connect()
@@ -61,6 +65,11 @@ class DataManager:
         cache_key = f"realtime_{symbol}"
         cached = self.cache.get(cache_key)
         if cached is not _SENTINEL:
+            self._validate_timestamp_freshness(
+                cached['timestamp'],
+                source='mx_data.realtime',
+                max_age_seconds=self.max_realtime_age_seconds,
+            )
             return cached
         raw_data = self._call_adapter(
             'mx_data.realtime',
@@ -72,12 +81,13 @@ class DataManager:
             self.QUOTE_FIELDS,
             source='mx_data.realtime',
         )
-        self._validate_timestamp_freshness(
-            data['timestamp'],
+        cache_ttl = self._freshness_limited_ttl(
+            default_ttl=10,
+            timestamp=data['timestamp'],
             source='mx_data.realtime',
             max_age_seconds=self.max_realtime_age_seconds,
         )
-        self.cache.set(cache_key, data, ttl=10)
+        self.cache.set(cache_key, data, ttl=cache_ttl)
         return data
 
     def get_etf_history(self, symbol: str, start_date: str, end_date: str) -> list:
@@ -104,6 +114,11 @@ class DataManager:
         cache_key = f"nav_{symbol}"
         cached = self.cache.get(cache_key)
         if cached is not _SENTINEL:
+            self._validate_timestamp_freshness(
+                cached['timestamp'],
+                source='mx_data.nav',
+                max_age_seconds=self.max_nav_age_seconds,
+            )
             return cached
         raw_data = self._call_adapter(
             'mx_data.nav',
@@ -115,12 +130,13 @@ class DataManager:
             self.NAV_FIELDS,
             source='mx_data.nav',
         )
-        self._validate_timestamp_freshness(
-            data['timestamp'],
+        cache_ttl = self._freshness_limited_ttl(
+            default_ttl=60,
+            timestamp=data['timestamp'],
             source='mx_data.nav',
             max_age_seconds=self.max_nav_age_seconds,
         )
-        self.cache.set(cache_key, data, ttl=60)
+        self.cache.set(cache_key, data, ttl=cache_ttl)
         return data
 
     def get_etf_list(self, etf_type: str = None) -> list:
@@ -279,9 +295,9 @@ class DataManager:
         timestamp: str,
         source: str,
         max_age_seconds,
-    ) -> None:
+    ) -> float | None:
         if max_age_seconds is None:
-            return
+            return None
         if not timestamp:
             raise DataFetchError(
                 f"{source} timestamp 不能为空",
@@ -292,12 +308,20 @@ class DataManager:
         parsed = self._parse_timestamp(timestamp, source)
         now = datetime.now(parsed.tzinfo) if parsed.tzinfo else datetime.now()
         age_seconds = (now - parsed).total_seconds()
+        future_skew = self.max_timestamp_future_skew_seconds
+        if future_skew is not None and age_seconds < -future_skew:
+            raise DataFetchError(
+                f"{source} timestamp 超出允许的未来偏移: timestamp={timestamp}",
+                error_code='FUTURE_DATA',
+                source=source,
+            )
         if age_seconds > max_age_seconds:
             raise DataFetchError(
                 f"{source} 数据已过期: timestamp={timestamp}",
                 error_code='STALE_DATA',
                 source=source,
             )
+        return age_seconds
 
     def _parse_timestamp(self, timestamp: str, source: str) -> datetime:
         try:
@@ -313,3 +337,19 @@ class DataManager:
                 error_code='INVALID_TIMESTAMP',
                 source=source,
             ) from exc
+
+    def _freshness_limited_ttl(
+        self,
+        default_ttl: int,
+        timestamp: str,
+        source: str,
+        max_age_seconds,
+    ):
+        age_seconds = self._validate_timestamp_freshness(
+            timestamp,
+            source,
+            max_age_seconds,
+        )
+        if age_seconds is None:
+            return default_ttl
+        return min(default_ttl, max(0, max_age_seconds - age_seconds))

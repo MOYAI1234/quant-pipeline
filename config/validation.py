@@ -45,6 +45,12 @@ def _validate_data_config(data_config: dict | None, errors: list, warnings: list
             f"data.{key}",
             errors,
         )
+    _validate_optional_nullable_positive_number(
+        data_config,
+        'max_timestamp_future_skew_seconds',
+        'data.max_timestamp_future_skew_seconds',
+        errors,
+    )
     for adapter_name in ('mx_data', 'mx_xuangu', 'mx_search'):
         adapter_config = data_config.get(adapter_name)
         _validate_adapter_config(

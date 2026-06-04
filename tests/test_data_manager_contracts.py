@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import time
 
 import numpy as np
 import pytest
@@ -253,6 +254,65 @@ def test_get_etf_realtime_rejects_stale_timestamp_when_configured():
     assert exc.value.source == 'mx_data.realtime'
 
 
+def test_get_etf_realtime_revalidates_cached_timestamp_when_configured():
+    timestamp = datetime.now().isoformat(timespec='seconds')
+    manager = _manager_with_adapter(
+        BrokenMXDataAdapter(
+            realtime={
+                'symbol': '510300',
+                'price': 4.0,
+                'open': 4.0,
+                'high': 4.1,
+                'low': 3.9,
+                'pre_close': 3.95,
+                'volume': 100,
+                'amount': 40000.0,
+                'timestamp': timestamp,
+            }
+        ),
+        {'max_realtime_age_seconds': 60},
+    )
+    manager.get_etf_realtime('510300')
+    manager.cache._cache['realtime_510300']['value']['timestamp'] = (
+        '2000-01-01T10:00:00'
+    )
+
+    with pytest.raises(DataFetchError) as exc:
+        manager.get_etf_realtime('510300')
+
+    assert exc.value.error_code == 'STALE_DATA'
+    assert exc.value.source == 'mx_data.realtime'
+
+
+def test_get_etf_realtime_limits_cache_ttl_to_remaining_freshness():
+    timestamp = (datetime.now() - timedelta(seconds=59)).isoformat(
+        timespec='seconds'
+    )
+    manager = _manager_with_adapter(
+        BrokenMXDataAdapter(
+            realtime={
+                'symbol': '510300',
+                'price': 4.0,
+                'open': 4.0,
+                'high': 4.1,
+                'low': 3.9,
+                'pre_close': 3.95,
+                'volume': 100,
+                'amount': 40000.0,
+                'timestamp': timestamp,
+            }
+        ),
+        {'max_realtime_age_seconds': 60},
+    )
+
+    manager.get_etf_realtime('510300')
+
+    remaining_cache_ttl = (
+        manager.cache._cache['realtime_510300']['expire_at'] - time.time()
+    )
+    assert remaining_cache_ttl <= 2
+
+
 def test_get_etf_realtime_accepts_fresh_timestamp_when_configured():
     timestamp = datetime.now().isoformat(timespec='seconds')
     manager = _manager_with_adapter(
@@ -275,6 +335,37 @@ def test_get_etf_realtime_accepts_fresh_timestamp_when_configured():
     quote = manager.get_etf_realtime('510300')
 
     assert quote['timestamp'] == timestamp
+
+
+def test_get_etf_realtime_rejects_far_future_timestamp_when_configured():
+    timestamp = (datetime.now() + timedelta(minutes=5)).isoformat(
+        timespec='seconds'
+    )
+    manager = _manager_with_adapter(
+        BrokenMXDataAdapter(
+            realtime={
+                'symbol': '510300',
+                'price': 4.0,
+                'open': 4.0,
+                'high': 4.1,
+                'low': 3.9,
+                'pre_close': 3.95,
+                'volume': 100,
+                'amount': 40000.0,
+                'timestamp': timestamp,
+            }
+        ),
+        {
+            'max_realtime_age_seconds': 60,
+            'max_timestamp_future_skew_seconds': 60,
+        },
+    )
+
+    with pytest.raises(DataFetchError) as exc:
+        manager.get_etf_realtime('510300')
+
+    assert exc.value.error_code == 'FUTURE_DATA'
+    assert exc.value.source == 'mx_data.realtime'
 
 
 def test_get_etf_nav_rejects_missing_timestamp_when_freshness_configured():

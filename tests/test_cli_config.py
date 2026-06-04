@@ -183,6 +183,19 @@ def test_validate_config_rejects_invalid_data_freshness_threshold():
     assert 'data.max_realtime_age_seconds 必须大于 0' in result['errors']
 
 
+def test_validate_config_rejects_invalid_data_future_skew_threshold():
+    config = deepcopy(SYSTEM_CONFIG)
+    config['data']['max_timestamp_future_skew_seconds'] = 0
+
+    result = validate_config(config)
+
+    assert result['valid'] is False
+    assert (
+        'data.max_timestamp_future_skew_seconds 必须大于 0'
+        in result['errors']
+    )
+
+
 def test_validate_config_rejects_invalid_commission_rate():
     config = deepcopy(SYSTEM_CONFIG)
     config['account']['commission_rate'] = 2
