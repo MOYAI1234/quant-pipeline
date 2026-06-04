@@ -1,4 +1,5 @@
 import math
+from numbers import Integral, Real
 
 from adapters.mx_data_adapter import MXDataAdapter
 from adapters.mx_xuangu_adapter import MX_XuanguAdapter
@@ -20,6 +21,22 @@ class DataManager:
     NON_NEGATIVE_NUMBER_FIELDS = frozenset({
         'price', 'open', 'high', 'low', 'pre_close', 'nav', 'close', 'amount',
     })
+    VALIDATED_FIELDS = (
+        TEXT_FIELDS
+        | SIGNED_NUMBER_FIELDS
+        | INTEGER_FIELDS
+        | NON_NEGATIVE_NUMBER_FIELDS
+    )
+    CONTRACT_FIELDS = (
+        frozenset(QUOTE_FIELDS)
+        | frozenset(NAV_FIELDS)
+        | frozenset(HISTORY_FIELDS)
+    )
+    UNCLASSIFIED_FIELDS = CONTRACT_FIELDS - VALIDATED_FIELDS
+    if UNCLASSIFIED_FIELDS:
+        raise RuntimeError(
+            f"DataManager 缺少字段校验规则: {sorted(UNCLASSIFIED_FIELDS)}"
+        )
 
     def __init__(self, config):
         self.mx_data = MXDataAdapter(config.get('mx_data', {}))
@@ -201,11 +218,11 @@ class DataManager:
             return value
 
         if field in self.INTEGER_FIELDS:
-            if isinstance(value, bool) or not isinstance(value, int):
+            if isinstance(value, bool) or not isinstance(value, Integral):
                 self._raise_invalid_field(source, field, '必须是非负整数')
             if value < 0:
                 self._raise_invalid_field(source, field, '必须是非负整数')
-            return value
+            return int(value)
 
         if field in self.NON_NEGATIVE_NUMBER_FIELDS:
             number = self._normalize_number(field, value, source)
@@ -216,10 +233,14 @@ class DataManager:
         if field in self.SIGNED_NUMBER_FIELDS:
             return self._normalize_number(field, value, source)
 
-        return value
+        raise RuntimeError(
+            f"字段 {field} 缺少校验规则；已知分类: "
+            "TEXT_FIELDS, SIGNED_NUMBER_FIELDS, INTEGER_FIELDS, "
+            "NON_NEGATIVE_NUMBER_FIELDS"
+        )
 
     def _normalize_number(self, field: str, value, source: str) -> float:
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
+        if isinstance(value, bool) or not isinstance(value, Real):
             self._raise_invalid_field(source, field, '必须是有限数字')
         try:
             number = float(value)

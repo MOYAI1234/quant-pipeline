@@ -1,4 +1,5 @@
 import pytest
+import numpy as np
 
 from data.contracts import DataFetchError
 from data.data_manager import DataManager
@@ -164,6 +165,29 @@ def test_get_etf_realtime_rejects_negative_volume():
     assert '字段 volume 必须是非负整数' in str(exc.value)
 
 
+def test_get_etf_realtime_accepts_numpy_numeric_scalars():
+    manager = _manager_with_adapter(BrokenMXDataAdapter(
+        realtime={
+            'symbol': '510300',
+            'price': np.float32(4.0),
+            'open': np.float64(4.0),
+            'high': np.float64(4.1),
+            'low': np.float64(3.9),
+            'pre_close': np.float64(3.95),
+            'volume': np.int64(100),
+            'amount': np.float64(40000.0),
+            'timestamp': '2026-06-02 10:00:00',
+        }
+    ))
+
+    quote = manager.get_etf_realtime('510300')
+
+    assert quote['price'] == 4.0
+    assert quote['volume'] == 100
+    assert isinstance(quote['price'], float)
+    assert isinstance(quote['volume'], int)
+
+
 def test_get_etf_nav_allows_negative_premium():
     manager = _manager_with_adapter(BrokenMXDataAdapter(
         nav={
@@ -178,6 +202,13 @@ def test_get_etf_nav_allows_negative_premium():
     nav = manager.get_etf_nav('510300')
 
     assert nav['premium'] == -0.024
+
+
+def test_normalize_field_rejects_unclassified_contract_field():
+    manager = _manager_with_adapter(BrokenMXDataAdapter())
+
+    with pytest.raises(RuntimeError, match='字段 unclassified 缺少校验规则'):
+        manager._normalize_field('unclassified', 'value', 'test.source')
 
 
 def test_get_etf_history_rejects_non_list_shape():
