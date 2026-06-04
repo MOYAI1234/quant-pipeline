@@ -1,5 +1,6 @@
 import copy
 import csv
+from datetime import datetime
 from pathlib import Path
 
 from execution.simulator import Simulator
@@ -288,6 +289,25 @@ def load_history_csv(path: str) -> list:
     return rows
 
 
+def filter_history_by_date(
+    history: list,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> list:
+    start_date = _validate_date_bound(start_date, '--start-date')
+    end_date = _validate_date_bound(end_date, '--end-date')
+    if start_date and end_date and start_date > end_date:
+        raise ValueError('--start-date 不能晚于 --end-date')
+
+    filtered = [
+        row for row in history
+        if _date_in_range(_history_date(row), start_date, end_date)
+    ]
+    if not filtered:
+        raise ValueError('指定日期区间内没有历史行情')
+    return filtered
+
+
 def sample_grid_history() -> list:
     return [
         _bar('2026-01-01', 4.00, 4.05, 3.95, 4.00),
@@ -338,6 +358,39 @@ def _rotation_snapshot(date: str, prices_by_symbol: dict) -> dict:
 
 def _is_blank_row(row: dict) -> bool:
     return all(value in (None, '') for value in row.values())
+
+
+def _history_date(row: dict) -> str:
+    value = row.get('date', row.get('timestamp', ''))
+    if not isinstance(value, str):
+        return ''
+    return value[:10]
+
+
+def _date_in_range(date: str, start_date: str | None, end_date: str | None) -> bool:
+    if not date:
+        return False
+    if start_date and date < start_date:
+        return False
+    if end_date and date > end_date:
+        return False
+    return True
+
+
+def _validate_date_bound(value: str | None, option_name: str) -> str | None:
+    if not value:
+        return None
+    if (
+        len(value) != 10
+        or value[4] != '-'
+        or value[7] != '-'
+    ):
+        raise ValueError(f'{option_name} 必须是 YYYY-MM-DD')
+    try:
+        datetime.strptime(value, '%Y-%m-%d')
+    except ValueError as exc:
+        raise ValueError(f'{option_name} 必须是 YYYY-MM-DD') from exc
+    return value
 
 
 def _required_text(value, field: str, line_number: int) -> str:

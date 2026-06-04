@@ -7,6 +7,7 @@ import pytest
 from backtest.runner import (
     BacktestRunner,
     RotationBacktestRunner,
+    filter_history_by_date,
     load_history_csv,
     sample_grid_history,
     sample_rotation_history,
@@ -267,6 +268,45 @@ def test_backtest_runner_rejects_non_positive_initial_capital():
         runner.run(sample_grid_history())
 
 
+def test_filter_history_by_date_keeps_inclusive_range():
+    filtered = filter_history_by_date(
+        sample_grid_history(),
+        start_date='2026-01-02',
+        end_date='2026-01-03',
+    )
+
+    assert [bar['date'] for bar in filtered] == [
+        '2026-01-02',
+        '2026-01-03',
+    ]
+
+
+def test_filter_history_by_date_rejects_empty_range():
+    with pytest.raises(ValueError, match='指定日期区间内没有历史行情'):
+        filter_history_by_date(
+            sample_grid_history(),
+            start_date='2026-02-01',
+            end_date='2026-02-28',
+        )
+
+
+def test_filter_history_by_date_rejects_reversed_range():
+    with pytest.raises(ValueError, match='--start-date 不能晚于 --end-date'):
+        filter_history_by_date(
+            sample_grid_history(),
+            start_date='2026-01-03',
+            end_date='2026-01-02',
+        )
+
+
+def test_filter_history_by_date_rejects_invalid_date_format():
+    with pytest.raises(ValueError, match='--start-date 必须是 YYYY-MM-DD'):
+        filter_history_by_date(
+            sample_grid_history(),
+            start_date='2026-1-2',
+        )
+
+
 def test_load_history_csv_reads_basic_bar_fields(tmp_path):
     history_file = tmp_path / 'history.csv'
     history_file.write_text(
@@ -362,6 +402,27 @@ def test_cli_backtest_smoke_outputs_markdown_report():
     assert '- 交易次数: 2' in completed.stdout
 
 
+def test_cli_backtest_date_range_limits_report_period():
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'grid',
+            '--start-date',
+            '2026-01-02',
+            '--end-date',
+            '2026-01-03',
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert '- 区间: 2026-01-02 至 2026-01-03' in completed.stdout
+
+
 def test_cli_rotation_backtest_smoke_outputs_markdown_report():
     completed = subprocess.run(
         [
@@ -379,6 +440,27 @@ def test_cli_rotation_backtest_smoke_outputs_markdown_report():
     assert '# 回测报告 - 轮动回测' in completed.stdout
     assert '- 标的池: 510300,510500,159915' in completed.stdout
     assert '- 交易次数: 3' in completed.stdout
+
+
+def test_cli_rotation_backtest_date_range_limits_report_period():
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'rotation',
+            '--start-date',
+            '2026-01-02',
+            '--end-date',
+            '2026-01-02',
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert '- 区间: 2026-01-02 至 2026-01-02' in completed.stdout
 
 
 def test_cli_rotation_backtest_rejects_unknown_sample_symbol():
@@ -419,6 +501,48 @@ def test_cli_rotation_backtest_explains_history_is_not_supported_yet():
 
     assert completed.returncode == 2
     assert 'CSV 历史行情将在后续版本支持' in completed.stderr
+
+
+def test_cli_backtest_rejects_reversed_date_range():
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'grid',
+            '--start-date',
+            '2026-01-03',
+            '--end-date',
+            '2026-01-02',
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 2
+    assert '--start-date 不能晚于 --end-date' in completed.stderr
+
+
+def test_cli_backtest_rejects_invalid_date_format():
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'grid',
+            '--start-date',
+            '2026-1-2',
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 2
+    assert '--start-date 必须是 YYYY-MM-DD' in completed.stderr
 
 
 @pytest.mark.parametrize('option,value', [
