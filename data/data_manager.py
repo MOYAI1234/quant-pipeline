@@ -1,7 +1,7 @@
 from adapters.mx_data_adapter import MXDataAdapter
 from adapters.mx_xuangu_adapter import MX_XuanguAdapter
 from adapters.mx_search_adapter import MX_SearchAdapter
-from .contracts import DataFetchError
+from .contracts import AdapterError, DataFetchError
 from .data_cache import DataCache, _SENTINEL
 
 
@@ -34,8 +34,13 @@ class DataManager:
         cached = self.cache.get(cache_key)
         if cached is not _SENTINEL:
             return cached
+        raw_data = self._call_adapter(
+            'mx_data.realtime',
+            self.mx_data.get_etf_realtime,
+            symbol,
+        )
         data = self._normalize_record(
-            self.mx_data.get_etf_realtime(symbol),
+            raw_data,
             self.QUOTE_FIELDS,
             source='mx_data.realtime',
         )
@@ -47,8 +52,15 @@ class DataManager:
         cached = self.cache.get(cache_key)
         if cached is not _SENTINEL:
             return cached
+        raw_data = self._call_adapter(
+            'mx_data.history',
+            self.mx_data.get_etf_history,
+            symbol,
+            start_date,
+            end_date,
+        )
         data = self._normalize_records(
-            self.mx_data.get_etf_history(symbol, start_date, end_date),
+            raw_data,
             self.HISTORY_FIELDS,
             source='mx_data.history',
         )
@@ -60,8 +72,13 @@ class DataManager:
         cached = self.cache.get(cache_key)
         if cached is not _SENTINEL:
             return cached
+        raw_data = self._call_adapter(
+            'mx_data.nav',
+            self.mx_data.get_etf_nav,
+            symbol,
+        )
         data = self._normalize_record(
-            self.mx_data.get_etf_nav(symbol),
+            raw_data,
             self.NAV_FIELDS,
             source='mx_data.nav',
         )
@@ -73,15 +90,28 @@ class DataManager:
         cached = self.cache.get(cache_key)
         if cached is not _SENTINEL:
             return cached
-        data = self.mx_data.get_etf_list(etf_type)
+        data = self._call_adapter(
+            'mx_data.etf_list',
+            self.mx_data.get_etf_list,
+            etf_type,
+        )
         self.cache.set(cache_key, data, ttl=3600)
         return data
 
     def filter_etfs(self, conditions: dict) -> list:
-        return self.mx_xuangu.filter_etfs(conditions)
+        return self._call_adapter(
+            'mx_xuangu.filter_etfs',
+            self.mx_xuangu.filter_etfs,
+            conditions,
+        )
 
     def search_news(self, keyword: str, days: int = 7) -> list:
-        return self.mx_search.search_news(keyword, days)
+        return self._call_adapter(
+            'mx_search.search_news',
+            self.mx_search.search_news,
+            keyword,
+            days,
+        )
 
     def health_check(self) -> dict:
         return {
@@ -95,6 +125,18 @@ class DataManager:
             status.get('mock', False)
             for status in self.health_check().values()
         )
+
+    def _call_adapter(self, source: str, method, *args):
+        try:
+            return method(*args)
+        except AdapterError:
+            raise
+        except Exception as exc:
+            raise DataFetchError(
+                f"{source} 调用失败: {exc}",
+                error_code='ADAPTER_ERROR',
+                source=source,
+            ) from exc
 
     def _normalize_record(self, record: dict, required_fields: tuple, source: str) -> dict:
         if record is None:

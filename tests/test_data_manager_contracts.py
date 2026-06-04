@@ -37,6 +37,12 @@ class BrokenMXDataAdapter:
         return self.nav
 
 
+class ExplodingMXDataAdapter(BrokenMXDataAdapter):
+
+    def get_etf_realtime(self, symbol):
+        raise RuntimeError('upstream timeout')
+
+
 def _manager_with_adapter(adapter):
     manager = DataManager({
         'mx_data': {'mode': 'mock'},
@@ -162,3 +168,51 @@ def test_normalized_quote_is_cached_after_first_fetch():
     assert set(cached) == set(DataManager.QUOTE_FIELDS)
     assert 'adapter_extra' not in cached
     assert cached['price'] == 4.0
+
+
+def test_expired_quote_cache_refetches_from_adapter():
+    adapter = BrokenMXDataAdapter(
+        realtime={
+            'symbol': '510300',
+            'price': 4.0,
+            'open': 4.0,
+            'high': 4.1,
+            'low': 3.9,
+            'pre_close': 3.95,
+            'volume': 100,
+            'amount': 40000.0,
+            'timestamp': '2026-06-02 10:00:00',
+        }
+    )
+    manager = _manager_with_adapter(adapter)
+
+    first_quote = manager.get_etf_realtime('510300')
+    manager.cache._cache['realtime_510300']['expire_at'] = 0
+    adapter.realtime = {
+        'symbol': '510300',
+        'price': 4.2,
+        'open': 4.0,
+        'high': 4.3,
+        'low': 3.9,
+        'pre_close': 3.95,
+        'volume': 120,
+        'amount': 50400.0,
+        'timestamp': '2026-06-02 10:01:00',
+    }
+
+    refetched_quote = manager.get_etf_realtime('510300')
+
+    assert first_quote['price'] == 4.0
+    assert refetched_quote['price'] == 4.2
+    assert refetched_quote['timestamp'] == '2026-06-02 10:01:00'
+
+
+def test_data_manager_wraps_unexpected_adapter_errors():
+    manager = _manager_with_adapter(ExplodingMXDataAdapter())
+
+    with pytest.raises(DataFetchError) as exc:
+        manager.get_etf_realtime('510300')
+
+    assert exc.value.error_code == 'ADAPTER_ERROR'
+    assert exc.value.source == 'mx_data.realtime'
+    assert isinstance(exc.value.__cause__, RuntimeError)
