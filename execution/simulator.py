@@ -61,11 +61,13 @@ class Simulator(BaseExecutor):
             pos['shares'] = new_total_shares
             pos['avg_price'] = new_avg_price
             pos['cost'] += actual_amount
+            pos['commission'] = pos.get('commission', 0) + commission
         else:
             self.positions[symbol] = {
                 'shares': shares,
                 'avg_price': price,
-                'cost': actual_amount
+                'cost': actual_amount,
+                'commission': commission
             }
 
         self.trades.append({
@@ -108,11 +110,14 @@ class Simulator(BaseExecutor):
 
         cost_basis = shares_to_sell * pos['avg_price']
         profit = net_amount - cost_basis
+        entry_commission = self._allocated_entry_commission(pos, shares_to_sell)
+        net_profit = profit - entry_commission
 
         self.capital += net_amount
 
         pos['shares'] -= shares_to_sell
         pos['cost'] = pos['shares'] * pos['avg_price']
+        pos['commission'] = max(pos.get('commission', 0) - entry_commission, 0)
 
         if pos['shares'] <= 0:
             del self.positions[symbol]
@@ -124,7 +129,9 @@ class Simulator(BaseExecutor):
             'shares': shares_to_sell,
             'amount': sell_amount,
             'commission': commission,
+            'entry_commission': entry_commission,
             'profit': profit,
+            'net_profit': net_profit,
             'timestamp': datetime.now()
         })
         return True
@@ -192,13 +199,18 @@ class Simulator(BaseExecutor):
                 'shares': pos['shares'],
                 'avg_price': pos['avg_price'],
                 'cost': pos['cost'],
+                'commission': pos.get('commission', 0),
                 'current_price': current_price,
                 'market_value': market_value,
                 'unrealized_pnl': unrealized_pnl
             }
             total_market_value += market_value
 
-        realized_pnl = sum(t.get('profit', 0) for t in self.trades if t.get('action') == 'sell')
+        realized_pnl = sum(
+            self._trade_net_profit(trade)
+            for trade in self.trades
+            if trade.get('action') == 'sell'
+        )
 
         return {
             'capital': self.capital,
@@ -253,6 +265,17 @@ class Simulator(BaseExecutor):
         if isinstance(timestamp, str) and timestamp:
             restored['timestamp'] = datetime.fromisoformat(timestamp)
         return restored
+
+    def _allocated_entry_commission(self, position: dict, shares_to_sell: int) -> float:
+        position_shares = position.get('shares', 0)
+        if position_shares <= 0:
+            return 0
+        return position.get('commission', 0) * shares_to_sell / position_shares
+
+    def _trade_net_profit(self, trade: dict) -> float:
+        if 'net_profit' in trade:
+            return trade.get('net_profit', 0)
+        return trade.get('profit', 0) - trade.get('entry_commission', 0)
 
     def _validate_trade_snapshot(self, trade: dict):
         if not isinstance(trade, dict):

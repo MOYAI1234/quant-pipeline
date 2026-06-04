@@ -56,6 +56,30 @@ class TestSimulator:
         self.sim.execute_order({'action': 'sell', 'symbol': '510300', 'price': 4.2, 'amount': 42000})
         assert '510300' not in self.sim.positions
 
+    def test_sell_trade_net_profit_includes_entry_commission(self):
+        sim = Simulator({'initial_capital': 20000, 'commission_rate': 0.0003})
+        assert sim.execute_order({
+            'action': 'buy',
+            'symbol': '510300',
+            'price': 100,
+            'shares': 100,
+        }) is True
+
+        assert sim.execute_order({
+            'action': 'sell',
+            'symbol': '510300',
+            'price': 100.04,
+            'shares': 100,
+        }) is True
+
+        sell_trade = sim.trades[-1]
+        assert sell_trade['profit'] > 0
+        assert sell_trade['entry_commission'] == pytest.approx(3.0)
+        assert sell_trade['net_profit'] < 0
+        assert sim.get_portfolio()['realized_pnl'] == pytest.approx(
+            sell_trade['net_profit']
+        )
+
     def test_sell_no_position(self):
         result = self.sim.execute_order({'action': 'sell', 'symbol': '510300', 'price': 4.0, 'amount': 40000})
         assert result is False

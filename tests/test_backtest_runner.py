@@ -11,6 +11,7 @@ from backtest.runner import (
     load_history_csv,
     sample_grid_history,
     sample_rotation_history,
+    _trade_outcome_stats,
 )
 from strategy.grid_strategy import GridStrategy
 from strategy.rotation_strategy import RotationStrategy
@@ -50,11 +51,29 @@ def test_backtest_runner_executes_grid_buy_sell_cycle():
     assert result['strategy'] == '测试回测网格'
     assert result['symbol'] == '510300'
     assert result['trade_count'] == 2
+    assert result['closed_trade_count'] == 1
+    assert result['winning_trade_count'] == 1
+    assert result['win_rate'] == 1.0
     assert result['realized_pnl'] > 0
     assert result['total_return'] > 0
     assert result['max_drawdown'] >= 0
     assert len(result['equity_curve']) == 3
     assert '510300' not in result['portfolio']['positions']
+
+
+def test_trade_outcome_stats_uses_net_profit_for_win_classification():
+    stats = _trade_outcome_stats([
+        {
+            'action': 'sell',
+            'symbol': '510300',
+            'profit': 1.0,
+            'entry_commission': 3.0,
+        },
+    ])
+
+    assert stats['closed_trade_count'] == 1
+    assert stats['winning_trade_count'] == 0
+    assert stats['win_rate'] == 0.0
 
 
 def test_rotation_backtest_runner_buys_then_rotates_to_new_leader():
@@ -69,6 +88,9 @@ def test_rotation_backtest_runner_buys_then_rotates_to_new_leader():
     assert result['symbol'] == '510300,510500,159915'
     # day1 买入 leader1；day2 卖出 leader1 并买入 leader2。
     assert result['trade_count'] == 3
+    assert result['closed_trade_count'] == 1
+    assert result['winning_trade_count'] == 0
+    assert result['win_rate'] == 0.0
     assert len(result['equity_curve']) == 2
     assert '510300' not in result['portfolio']['positions']
     assert '510500' in result['portfolio']['positions']
@@ -216,6 +238,8 @@ def test_backtest_runner_resets_strategy_state_between_runs_with_open_position()
     second_result = runner.run(buy_only_history)
 
     assert first_result['trade_count'] == 1
+    assert first_result['closed_trade_count'] == 0
+    assert first_result['win_rate'] == 0.0
     assert second_result['trade_count'] == 1
     assert len(second_result['portfolio']['positions']) == 1
     assert runner.strategy.grid_ledger[3.9]['bought'] is True
@@ -250,6 +274,8 @@ def test_backtest_runner_drawdown_starts_from_initial_capital():
     ])
 
     assert result['trade_count'] == 1
+    assert result['closed_trade_count'] == 0
+    assert result['win_rate'] == 0.0
     assert result['equity_curve'][0]['total_value'] < result['initial_capital']
     assert result['max_drawdown'] > 0
 
@@ -435,6 +461,7 @@ def test_cli_backtest_smoke_outputs_markdown_report():
 
     assert '# 回测报告 - 网格回测' in completed.stdout
     assert '- 交易次数: 2' in completed.stdout
+    assert '- 胜率: 100.00%' in completed.stdout
 
 
 def test_cli_backtest_date_range_limits_report_period():
@@ -475,6 +502,7 @@ def test_cli_rotation_backtest_smoke_outputs_markdown_report():
     assert '# 回测报告 - 轮动回测' in completed.stdout
     assert '- 标的池: 510300,510500,159915' in completed.stdout
     assert '- 交易次数: 3' in completed.stdout
+    assert '- 胜率: 0.00%' in completed.stdout
 
 
 def test_cli_rotation_backtest_date_range_limits_report_period():
