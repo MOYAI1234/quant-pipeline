@@ -31,7 +31,7 @@ python cli\commands.py backtest --strategy rotation
 结果：
 
 - `compileall` 通过
-- `pytest` 通过，`141 passed`
+- `pytest` 通过，`147 passed`
 - CLI help 可用
 - CLI daily report 可生成包含数据源健康状态的空组合报告
 - CLI health 可输出数据源健康状态
@@ -45,7 +45,7 @@ python cli\commands.py backtest --strategy rotation
 | PRD 模块 | 当前状态 | 评价 |
 |---|---|---|
 | 数据适配层 | 部分完成 | 适配器类已存在，但 `mx-data` / `mx-xuangu` / `mx-search` / `jason-kb` 基本仍是 stub，未接真实服务 |
-| 数据管理器 | 部分完成 | `DataManager` 和 TTL 缓存已存在，但缺少数据有效性、行情时效、错误语义和契约转换 |
+| 数据管理器 | 部分完成 | `DataManager` 和 TTL 缓存已存在，已覆盖基础字段、数值类型、非负单位、缓存过期和 adapter 异常传播；仍缺行情时效和更完整单位归一 |
 | 网格策略 | 基础可用 | 已支持多格买入、成交确认后更新 ledger、卖出后允许再买；仍缺持久化和更丰富行情路径测试 |
 | 行业轮动策略 | 基础可用 | 已支持动量选择、卖旧买新、失败回调；仍缺独立测试和风控冲突场景覆盖 |
 | 回测功能 | 已启动 | 已新增最小 `BacktestRunner` 和 `RotationBacktestRunner`，可用历史 bar / 多 ETF 样例驱动 grid、rotation 策略并复用 `Simulator` 输出基础指标；仍缺完整交易日历、滑点、组合、多策略和真实历史数据源 |
@@ -56,7 +56,7 @@ python cli\commands.py backtest --strategy rotation
 | 监控告警 | 部分完成 | 状态指标、报告和结构化告警事件已存在，报告可展示最近告警摘要，并支持本地 JSONL 输出；外部通知通道尚未实现 |
 | CLI | 基础可用 | `start/status/report/health/alerts/config validate/backtest` 已有；仍缺更完整的配置解释、初始化和运行诊断命令 |
 | API/Web | 未完成 | PRD 中规划了 API 和 Web 界面，当前仓库没有对应模块 |
-| 测试体系 | 不足 | 现有 141 个测试覆盖 simulator、grid e2e、rotation、backtest runner、CLI smoke、状态持久化、报告健康状态、告警事件、配置校验、DataManager 缓存与 adapter 异常传播等；risk、adapter、report 仍有缺口 |
+| 测试体系 | 不足 | 现有 147 个测试覆盖 simulator、grid e2e、rotation、backtest runner、CLI smoke、状态持久化、报告健康状态、告警事件、配置校验、DataManager 缓存与数据契约等；risk、adapter、report 仍有缺口 |
 | 文档入口 | 不足 | `README.md` 已补充基础运行、测试和阶段边界；仍缺 `docs/testing.md`、`docs/architecture.md` 等专题文档 |
 
 ## 主要风险
@@ -168,7 +168,7 @@ PRD 将“可回测策略系统”列为阶段二交付物，但当前只有实�
 
 ### M1：数据适配契约和 mock/real 模式
 
-状态：已启动。当前 adapter 已支持显式 `mode=mock|real`，并通过结构化健康检查暴露 `mode`、`connected`、`available`、`mock` 和 `error`。`real` 模式尚未接入真实外部服务，会明确返回不可用并在数据调用时抛出 `ServiceUnavailableError`。`DataManager` 已开始校验实时行情、净值和历史行情的基础字段契约，字段缺失或返回 shape 错误会抛出 `DataFetchError`。
+状态：已启动。当前 adapter 已支持显式 `mode=mock|real`，并通过结构化健康检查暴露 `mode`、`connected`、`available`、`mock` 和 `error`。`real` 模式尚未接入真实外部服务，会明确返回不可用并在数据调用时抛出 `ServiceUnavailableError`。`DataManager` 已开始校验实时行情、净值和历史行情的基础字段、数值类型、非负单位和 adapter 异常传播，字段缺失、shape 错误或非法字段值会抛出 `DataFetchError`。
 
 目标：让系统能清楚地区分“真实数据可用”和“当前只是模拟数据”。
 

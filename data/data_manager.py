@@ -1,3 +1,6 @@
+import math
+from numbers import Integral, Real
+
 from adapters.mx_data_adapter import MXDataAdapter
 from adapters.mx_xuangu_adapter import MX_XuanguAdapter
 from adapters.mx_search_adapter import MX_SearchAdapter
@@ -12,6 +15,28 @@ class DataManager:
     )
     NAV_FIELDS = ('symbol', 'nav', 'price', 'premium', 'timestamp')
     HISTORY_FIELDS = ('date', 'open', 'high', 'low', 'close', 'volume', 'amount')
+    TEXT_FIELDS = frozenset({'symbol', 'date', 'timestamp'})
+    SIGNED_NUMBER_FIELDS = frozenset({'premium'})
+    INTEGER_FIELDS = frozenset({'volume'})
+    NON_NEGATIVE_NUMBER_FIELDS = frozenset({
+        'price', 'open', 'high', 'low', 'pre_close', 'nav', 'close', 'amount',
+    })
+    VALIDATED_FIELDS = (
+        TEXT_FIELDS
+        | SIGNED_NUMBER_FIELDS
+        | INTEGER_FIELDS
+        | NON_NEGATIVE_NUMBER_FIELDS
+    )
+    CONTRACT_FIELDS = (
+        frozenset(QUOTE_FIELDS)
+        | frozenset(NAV_FIELDS)
+        | frozenset(HISTORY_FIELDS)
+    )
+    UNCLASSIFIED_FIELDS = CONTRACT_FIELDS - VALIDATED_FIELDS
+    if UNCLASSIFIED_FIELDS:
+        raise RuntimeError(
+            f"DataManager 缺少字段校验规则: {sorted(UNCLASSIFIED_FIELDS)}"
+        )
 
     def __init__(self, config):
         self.mx_data = MXDataAdapter(config.get('mx_data', {}))
@@ -168,7 +193,10 @@ class DataManager:
                 source=source,
             )
 
-        return {field: record[field] for field in required_fields}
+        return {
+            field: self._normalize_field(field, record[field], source)
+            for field in required_fields
+        }
 
     def _normalize_records(self, records: list, required_fields: tuple, source: str) -> list:
         if not isinstance(records, list):
@@ -182,3 +210,53 @@ class DataManager:
             self._normalize_record(record, required_fields, source)
             for record in records
         ]
+
+    def _normalize_field(self, field: str, value, source: str):
+        if field in self.TEXT_FIELDS:
+            if not isinstance(value, str):
+                self._raise_invalid_field(source, field, '必须是字符串')
+            return value
+
+        if field in self.INTEGER_FIELDS:
+            if isinstance(value, bool) or not isinstance(value, Integral):
+                self._raise_invalid_field(source, field, '必须是非负整数')
+            if value < 0:
+                self._raise_invalid_field(source, field, '必须是非负整数')
+            return int(value)
+
+        if field in self.NON_NEGATIVE_NUMBER_FIELDS:
+            number = self._normalize_number(field, value, source)
+            if number < 0:
+                self._raise_invalid_field(source, field, '必须大于等于 0')
+            return number
+
+        if field in self.SIGNED_NUMBER_FIELDS:
+            return self._normalize_number(field, value, source)
+
+        raise RuntimeError(
+            f"字段 {field} 缺少校验规则；已知分类: "
+            "TEXT_FIELDS, SIGNED_NUMBER_FIELDS, INTEGER_FIELDS, "
+            "NON_NEGATIVE_NUMBER_FIELDS"
+        )
+
+    def _normalize_number(self, field: str, value, source: str) -> float:
+        if isinstance(value, bool) or not isinstance(value, Real):
+            self._raise_invalid_field(source, field, '必须是有限数字')
+        try:
+            number = float(value)
+        except (OverflowError, ValueError) as exc:
+            raise DataFetchError(
+                f"{source} 字段 {field} 必须是有限数字",
+                error_code='INVALID_FIELD_VALUE',
+                source=source,
+            ) from exc
+        if not math.isfinite(number):
+            self._raise_invalid_field(source, field, '必须是有限数字')
+        return number
+
+    def _raise_invalid_field(self, source: str, field: str, reason: str) -> None:
+        raise DataFetchError(
+            f"{source} 字段 {field} {reason}",
+            error_code='INVALID_FIELD_VALUE',
+            source=source,
+        )

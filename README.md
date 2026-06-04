@@ -137,7 +137,7 @@ python -m compileall -q .
 - CLI `health` 对数据源健康状态的文本/JSON 输出
 - CLI `alerts` 对本地 JSONL 告警事件的文本/JSON 输出、limit 和错误处理
 - CLI `config validate` 对内置配置和 JSON 配置文件的校验
-- `DataManager` 对实时行情、净值和历史行情的字段契约校验
+- `DataManager` 对实时行情、净值和历史行情的字段、数值类型和非负单位契约校验
 - `DataManager` 缓存过期重取和 adapter 异常包装
 - `Simulator` 买入、卖出、均价、部分卖出和市值估算
 - `BacktestRunner` 的 grid 买卖周期、轮动样例回测、空历史保护、CSV 读取/错误处理和 CLI smoke
