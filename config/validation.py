@@ -17,7 +17,8 @@ def validate_config(config: dict) -> dict:
     _validate_risk_config(config.get('risk'), errors, warnings)
     _validate_monitor_config(config.get('monitor'), errors)
     _validate_state_config(config.get('state'), errors)
-    _validate_analysis_config(config.get('analysis'), errors, warnings)
+    if 'analysis' in config:
+        _validate_analysis_config(config.get('analysis'), errors, warnings)
 
     return {
         'valid': not errors,
@@ -123,8 +124,6 @@ def _validate_analysis_config(
     errors: list,
     warnings: list,
 ) -> None:
-    if analysis_config is None:
-        return
     if not isinstance(analysis_config, dict):
         errors.append('analysis 必须是 dict')
         return
@@ -202,8 +201,16 @@ def _validate_number(value, name: str, errors: list) -> None:
 
 
 def _is_number(value) -> bool:
-    return (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(value)
-    )
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        try:
+            return math.isfinite(float(value))
+        except OverflowError:
+            return False
+    if not isinstance(value, float):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
