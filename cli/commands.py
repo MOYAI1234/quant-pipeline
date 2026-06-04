@@ -363,7 +363,7 @@ def _load_config_file(config_path: str) -> dict:
     except json.JSONDecodeError as exc:
         raise ValueError(f"配置文件不是合法 JSON: {exc.msg}") from exc
     if not isinstance(config, dict):
-        raise ValueError('配置文件顶层必须是 JSON object')
+        raise TypeError('配置文件顶层必须是 JSON object')
     return config
 
 
@@ -467,7 +467,7 @@ def main():
         if args.config_command == 'validate':
             try:
                 cmd_config_validate(args)
-            except ValueError as exc:
+            except (TypeError, ValueError) as exc:
                 parser.error(str(exc))
         else:
             config_parser.print_help()
