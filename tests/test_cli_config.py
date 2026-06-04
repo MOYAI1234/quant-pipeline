@@ -67,6 +67,7 @@ def test_cli_config_validate_file_reports_errors(tmp_path):
             '--config',
             str(config_path),
         ],
+        check=False,
         capture_output=True,
         text=True,
         cwd=PROJECT_ROOT,
@@ -74,6 +75,31 @@ def test_cli_config_validate_file_reports_errors(tmp_path):
 
     assert completed.returncode == 1
     assert '配置校验: FAIL' in completed.stdout
+    assert '- account.initial_capital 必须大于 0' in completed.stdout
+
+
+def test_cli_config_validate_file_rejects_non_finite_json_number(tmp_path):
+    config = deepcopy(SYSTEM_CONFIG)
+    config['account']['initial_capital'] = float('nan')
+    config_path = tmp_path / 'nan-config.json'
+    config_path.write_text(json.dumps(config), encoding='utf-8')
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / 'cli' / 'commands.py'),
+            'config',
+            'validate',
+            '--config',
+            str(config_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=PROJECT_ROOT,
+    )
+
+    assert completed.returncode == 1
     assert '- account.initial_capital 必须大于 0' in completed.stdout
 
 
@@ -100,6 +126,41 @@ def test_validate_config_rejects_invalid_adapter_mode():
     assert 'data.mx_data.mode 必须是 mock 或 real' in result['errors']
 
 
+def test_validate_config_rejects_invalid_risk_adapter_mode():
+    config = deepcopy(SYSTEM_CONFIG)
+    config['risk']['mx_data'] = {'mode': 'paper'}
+
+    result = validate_config(config)
+
+    assert result['valid'] is False
+    assert 'risk.mx_data.mode 必须是 mock 或 real' in result['errors']
+
+
+def test_validate_config_warns_for_analysis_real_adapter_mode():
+    config = deepcopy(SYSTEM_CONFIG)
+    config['analysis'] = {'jason_kb': {'mode': 'real'}}
+
+    result = validate_config(config)
+
+    assert result['valid'] is True
+    assert result['errors'] == []
+    assert result['warnings'] == [
+        'analysis.jason_kb.mode=real 当前仍是未实现适配器',
+    ]
+
+
+def test_validate_config_rejects_non_finite_numbers():
+    config = deepcopy(SYSTEM_CONFIG)
+    config['account']['initial_capital'] = float('nan')
+    config['monitor']['alert_threshold'] = float('inf')
+
+    result = validate_config(config)
+
+    assert result['valid'] is False
+    assert 'account.initial_capital 必须大于 0' in result['errors']
+    assert 'monitor.alert_threshold 必须是数字' in result['errors']
+
+
 def test_validate_config_rejects_missing_required_section():
     config = deepcopy(SYSTEM_CONFIG)
     del config['risk']
@@ -107,7 +168,7 @@ def test_validate_config_rejects_missing_required_section():
     result = validate_config(config)
 
     assert result['valid'] is False
-    assert '缺少配置段: risk' in result['errors']
+    assert result['errors'] == ['缺少配置段: risk']
 
 
 def test_load_config_file_rejects_non_object_json(tmp_path):
@@ -123,6 +184,7 @@ def test_load_config_file_rejects_non_object_json(tmp_path):
             '--config',
             str(config_path),
         ],
+        check=False,
         capture_output=True,
         text=True,
         cwd=PROJECT_ROOT,
