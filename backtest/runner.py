@@ -1,5 +1,6 @@
 import copy
 import csv
+from datetime import date, datetime
 from pathlib import Path
 
 from execution.simulator import Simulator
@@ -288,6 +289,25 @@ def load_history_csv(path: str) -> list:
     return rows
 
 
+def filter_history_by_date(
+    history: list,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> list:
+    start_date = _validate_date_bound(start_date, '--start-date')
+    end_date = _validate_date_bound(end_date, '--end-date')
+    if start_date and end_date and start_date > end_date:
+        raise ValueError('--start-date 不能晚于 --end-date')
+
+    filtered = [
+        row for row in history
+        if _date_in_range(_history_date(row), start_date, end_date)
+    ]
+    if not filtered:
+        raise ValueError('指定日期区间内没有历史行情')
+    return filtered
+
+
 def sample_grid_history() -> list:
     return [
         _bar('2026-01-01', 4.00, 4.05, 3.95, 4.00),
@@ -338,6 +358,47 @@ def _rotation_snapshot(date: str, prices_by_symbol: dict) -> dict:
 
 def _is_blank_row(row: dict) -> bool:
     return all(value in (None, '') for value in row.values())
+
+
+def _history_date(row: dict) -> str:
+    value = row.get('date', row.get('timestamp', ''))
+    if not isinstance(value, str) or not value:
+        raise ValueError('history 行日期必须是 YYYY-MM-DD')
+    return _parse_date(value[:10], 'history 行日期')
+
+
+def _date_in_range(
+    history_date: date,
+    start_date: str | None,
+    end_date: str | None,
+) -> bool:
+    start = _parse_date(start_date, '--start-date') if start_date else None
+    end = _parse_date(end_date, '--end-date') if end_date else None
+    if start and history_date < start:
+        return False
+    if end and history_date > end:
+        return False
+    return True
+
+
+def _validate_date_bound(value: str | None, option_name: str) -> str | None:
+    if value is None:
+        return None
+    if (
+        len(value) != 10
+        or value[4] != '-'
+        or value[7] != '-'
+    ):
+        raise ValueError(f'{option_name} 必须是 YYYY-MM-DD')
+    _parse_date(value, option_name)
+    return value
+
+
+def _parse_date(value: str, label: str) -> date:
+    try:
+        return datetime.strptime(value, '%Y-%m-%d').date()
+    except ValueError as exc:
+        raise ValueError(f'{label} 必须是 YYYY-MM-DD') from exc
 
 
 def _required_text(value, field: str, line_number: int) -> str:

@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from backtest.runner import (
     BacktestRunner,
     RotationBacktestRunner,
+    filter_history_by_date,
     load_history_csv,
     sample_grid_history,
     sample_rotation_history,
@@ -164,7 +165,10 @@ def _run_grid_backtest(args, initial_capital: float, commission_rate: float):
         'shares_per_grid': shares_per_grid,
         'max_grids': max_grids,
     })
-    history = load_history_csv(args.history) if args.history else sample_grid_history()
+    history = _resolve_backtest_history(
+        load_history_csv(args.history) if args.history else sample_grid_history(),
+        args,
+    )
     runner = BacktestRunner(strategy, {
         'initial_capital': initial_capital,
         'commission_rate': commission_rate,
@@ -177,7 +181,7 @@ def _run_rotation_backtest(args, initial_capital: float, commission_rate: float)
         raise ValueError('rotation 回测当前仅支持内置多 ETF 样例，CSV 历史行情将在后续版本支持')
 
     etf_pool = _resolve_etf_pool(args.etf_pool)
-    history = sample_rotation_history()
+    history = _resolve_backtest_history(sample_rotation_history(), args)
     available_symbols = set(history[0].get('symbols', {}))
     missing_symbols = [symbol for symbol in etf_pool if symbol not in available_symbols]
     if missing_symbols:
@@ -228,6 +232,14 @@ def _resolve_etf_pool(etf_pool: str) -> list:
     if not symbols:
         raise ValueError('--etf-pool 不能为空')
     return symbols
+
+
+def _resolve_backtest_history(history: list, args) -> list:
+    return filter_history_by_date(
+        history,
+        start_date=args.start_date,
+        end_date=args.end_date,
+    )
 
 
 def _value_or_default(value, default):
@@ -438,6 +450,8 @@ def main():
     backtest_parser.add_argument('--strategy', default='grid', choices=['grid', 'rotation'])
     backtest_parser.add_argument('--symbol', type=str, default=DEFAULT_BACKTEST_SYMBOL)
     backtest_parser.add_argument('--history', type=str, help='历史行情 CSV，字段: date,open,high,low,close,volume,amount')
+    backtest_parser.add_argument('--start-date', type=str, help='回测起始日期，格式 YYYY-MM-DD')
+    backtest_parser.add_argument('--end-date', type=str, help='回测结束日期，格式 YYYY-MM-DD')
     backtest_parser.add_argument('--center-price', type=float)
     backtest_parser.add_argument('--grid-size', type=float)
     backtest_parser.add_argument('--grid-count', type=int)
