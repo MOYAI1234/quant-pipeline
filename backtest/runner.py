@@ -1,5 +1,6 @@
 import copy
 import csv
+import math
 from datetime import date, datetime
 from pathlib import Path
 
@@ -15,6 +16,9 @@ class BacktestRunner:
         self._strategy_template = copy.deepcopy(strategy)
         self.strategy = copy.deepcopy(self._strategy_template)
         self._account_config = dict(account_config or {})
+        self.slippage_rate = _validate_slippage_rate(
+            self._account_config.get('slippage_rate', 0.0)
+        )
         self.executor = None
         self.equity_curve = []
 
@@ -36,7 +40,8 @@ class BacktestRunner:
             for signal in signals:
                 if not self._signal_executable(signal, quote):
                     continue
-                if self.executor.execute_order(signal):
+                execution_signal = _apply_slippage(signal, self.slippage_rate)
+                if self.executor.execute_order(execution_signal):
                     self.strategy.record_trade(signal)
                     if hasattr(self.strategy, 'on_trade_confirmed'):
                         self.strategy.on_trade_confirmed(signal)
@@ -66,6 +71,7 @@ class BacktestRunner:
             'max_drawdown': self._max_drawdown(),
             'trade_count': len(self.executor.trades),
             **_trade_outcome_stats(self.executor.trades),
+            'slippage_rate': self.slippage_rate,
             'realized_pnl': final_portfolio['realized_pnl'],
             'portfolio': final_portfolio,
             'equity_curve': list(self.equity_curve),
@@ -83,6 +89,7 @@ class BacktestRunner:
             f"- 最大回撤: {result['max_drawdown']:.2%}",
             f"- 交易次数: {result['trade_count']}",
             f"- 胜率: {result['win_rate']:.2%}",
+            f"- 滑点: {result['slippage_rate']:.2%}",
             f"- 已实现盈亏: {result['realized_pnl']:.2f}",
         ]
         return "\n".join(lines)
@@ -150,6 +157,9 @@ class RotationBacktestRunner:
         self._strategy_template = copy.deepcopy(strategy)
         self.strategy = copy.deepcopy(self._strategy_template)
         self._account_config = dict(account_config or {})
+        self.slippage_rate = _validate_slippage_rate(
+            self._account_config.get('slippage_rate', 0.0)
+        )
         self.executor = None
         self.equity_curve = []
 
@@ -169,7 +179,8 @@ class RotationBacktestRunner:
             signals = self.strategy.generate_signal(market_data, portfolio)
 
             for signal in signals:
-                if self.executor.execute_order(signal):
+                execution_signal = _apply_slippage(signal, self.slippage_rate)
+                if self.executor.execute_order(execution_signal):
                     self.strategy.record_trade(signal)
                     if hasattr(self.strategy, 'on_trade_confirmed'):
                         self.strategy.on_trade_confirmed(signal)
@@ -200,6 +211,7 @@ class RotationBacktestRunner:
             'max_drawdown': self._max_drawdown(),
             'trade_count': len(self.executor.trades),
             **_trade_outcome_stats(self.executor.trades),
+            'slippage_rate': self.slippage_rate,
             'realized_pnl': final_portfolio['realized_pnl'],
             'portfolio': final_portfolio,
             'equity_curve': list(self.equity_curve),
@@ -217,6 +229,7 @@ class RotationBacktestRunner:
             f"- 最大回撤: {result['max_drawdown']:.2%}",
             f"- 交易次数: {result['trade_count']}",
             f"- 胜率: {result['win_rate']:.2%}",
+            f"- 滑点: {result['slippage_rate']:.2%}",
             f"- 已实现盈亏: {result['realized_pnl']:.2f}",
         ]
         return "\n".join(lines)
@@ -317,6 +330,39 @@ def _trade_net_profit(trade: dict) -> float:
     if 'net_profit' in trade:
         return trade.get('net_profit', 0)
     return trade.get('profit', 0) - trade.get('entry_commission', 0)
+
+
+def _apply_slippage(signal: dict, slippage_rate: float) -> dict:
+    if slippage_rate == 0:
+        return signal
+    execution_signal = dict(signal)
+    price = execution_signal.get('price', 0)
+    if price <= 0:
+        return execution_signal
+
+    if execution_signal.get('action') == 'buy':
+        execution_price = price * (1 + slippage_rate)
+    elif execution_signal.get('action') == 'sell':
+        execution_price = price * (1 - slippage_rate)
+    else:
+        execution_price = price
+
+    execution_signal['price'] = execution_price
+    if execution_signal.get('shares', 0) > 0:
+        execution_signal['amount'] = execution_signal['shares'] * execution_price
+    return execution_signal
+
+
+def _validate_slippage_rate(value: float) -> float:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(float(value))
+        or value < 0
+        or value >= 1
+    ):
+        raise ValueError('slippage_rate 必须在 0 到 1 之间，且小于 1')
+    return float(value)
 
 
 def filter_history_by_date(
