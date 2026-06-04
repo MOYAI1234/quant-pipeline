@@ -1,5 +1,6 @@
 import argparse
 import json
+import math
 import sys
 import os
 from copy import deepcopy
@@ -29,6 +30,7 @@ DEFAULT_BACKTEST_GRID_COUNT = 5
 DEFAULT_BACKTEST_SHARES_PER_GRID = 1000
 DEFAULT_BACKTEST_INITIAL_CAPITAL = 100000
 DEFAULT_BACKTEST_COMMISSION_RATE = 0.0003
+DEFAULT_BACKTEST_SLIPPAGE_RATE = 0.0
 DEFAULT_BACKTEST_ETF_POOL = ['510300', '510500', '159915']
 DEFAULT_BACKTEST_ROTATION_LOOKBACK = 3
 DEFAULT_BACKTEST_ROTATION_TOP_N = 1
@@ -126,14 +128,23 @@ def cmd_backtest(args):
         _value_or_default(args.commission_rate, DEFAULT_BACKTEST_COMMISSION_RATE),
         '--commission-rate',
     )
+    slippage_rate = _slippage_rate(
+        _value_or_default(args.slippage_rate, DEFAULT_BACKTEST_SLIPPAGE_RATE),
+        '--slippage-rate',
+    )
 
     if args.strategy == 'grid':
-        _run_grid_backtest(args, initial_capital, commission_rate)
+        _run_grid_backtest(args, initial_capital, commission_rate, slippage_rate)
     elif args.strategy == 'rotation':
-        _run_rotation_backtest(args, initial_capital, commission_rate)
+        _run_rotation_backtest(args, initial_capital, commission_rate, slippage_rate)
 
 
-def _run_grid_backtest(args, initial_capital: float, commission_rate: float):
+def _run_grid_backtest(
+    args,
+    initial_capital: float,
+    commission_rate: float,
+    slippage_rate: float,
+):
     symbol = _resolve_symbol(args.symbol)
     center_price = _positive_number(
         _value_or_default(args.center_price, DEFAULT_BACKTEST_CENTER_PRICE),
@@ -172,11 +183,17 @@ def _run_grid_backtest(args, initial_capital: float, commission_rate: float):
     runner = BacktestRunner(strategy, {
         'initial_capital': initial_capital,
         'commission_rate': commission_rate,
+        'slippage_rate': slippage_rate,
     })
     print(runner.render_markdown(runner.run(history)))
 
 
-def _run_rotation_backtest(args, initial_capital: float, commission_rate: float):
+def _run_rotation_backtest(
+    args,
+    initial_capital: float,
+    commission_rate: float,
+    slippage_rate: float,
+):
     if args.history:
         raise ValueError('rotation 回测当前仅支持内置多 ETF 样例，CSV 历史行情将在后续版本支持')
 
@@ -214,6 +231,7 @@ def _run_rotation_backtest(args, initial_capital: float, commission_rate: float)
     runner = RotationBacktestRunner(strategy, {
         'initial_capital': initial_capital,
         'commission_rate': commission_rate,
+        'slippage_rate': slippage_rate,
     })
     print(runner.render_markdown(runner.run(history)))
 
@@ -267,6 +285,12 @@ def _non_negative_int(value: int, option_name: str) -> int:
 def _non_negative_number(value: float, option_name: str) -> float:
     if value < 0:
         raise ValueError(f"{option_name} 不能小于 0")
+    return value
+
+
+def _slippage_rate(value: float, option_name: str) -> float:
+    if not math.isfinite(value) or value < 0 or value >= 1:
+        raise ValueError(f"{option_name} 必须在 0 到 1 之间，且小于 1")
     return value
 
 
@@ -459,6 +483,7 @@ def main():
     backtest_parser.add_argument('--max-grids', type=int)
     backtest_parser.add_argument('--initial-capital', type=float)
     backtest_parser.add_argument('--commission-rate', type=float)
+    backtest_parser.add_argument('--slippage-rate', type=float)
     backtest_parser.add_argument('--etf-pool', type=str, help='ETF池，逗号分隔')
     backtest_parser.add_argument('--lookback', type=int, help='轮动回看周期')
     backtest_parser.add_argument('--top-n', type=int, help='轮动选择ETF数量')

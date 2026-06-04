@@ -61,6 +61,25 @@ def test_backtest_runner_executes_grid_buy_sell_cycle():
     assert '510300' not in result['portfolio']['positions']
 
 
+def test_backtest_runner_applies_slippage_to_execution_prices():
+    runner = BacktestRunner(_grid_strategy(), {
+        'initial_capital': 100000,
+        'commission_rate': 0.0003,
+        'slippage_rate': 0.01,
+    })
+
+    result = runner.run(sample_grid_history())
+
+    buy_trade, sell_trade = runner.executor.trades
+    assert buy_trade['price'] == pytest.approx(3.9 * 1.01)
+    assert sell_trade['price'] == pytest.approx(4.1 * 0.99)
+    assert runner.strategy.trades[0]['price'] == pytest.approx(3.9 * 1.01)
+    assert runner.strategy.trades[1]['price'] == pytest.approx(4.1 * 0.99)
+    assert result['slippage_rate'] == 0.01
+    assert result['portfolio']['positions'] == {}
+    assert runner.strategy.grid_ledger[3.9]['bought'] is False
+
+
 def test_trade_outcome_stats_uses_net_profit_for_win_classification():
     stats = _trade_outcome_stats([
         {
@@ -96,6 +115,26 @@ def test_rotation_backtest_runner_buys_then_rotates_to_new_leader():
     assert '510500' in result['portfolio']['positions']
     assert runner.strategy.selected_etfs == ['510500']
     assert len(runner.strategy.trades) == 3
+
+
+def test_rotation_backtest_runner_applies_slippage_to_rebalance_orders():
+    runner = RotationBacktestRunner(_rotation_strategy(), {
+        'initial_capital': 100000,
+        'commission_rate': 0.0003,
+        'slippage_rate': 0.001,
+    })
+
+    result = runner.run(sample_rotation_history())
+
+    first_buy, first_sell, second_buy = runner.executor.trades
+    assert first_buy['price'] == pytest.approx(12.0 * 1.001)
+    assert first_sell['price'] == pytest.approx(11.0 * 0.999)
+    assert second_buy['price'] == pytest.approx(12.0 * 1.001)
+    assert runner.strategy.trades[0]['price'] == pytest.approx(12.0 * 1.001)
+    assert runner.strategy.trades[1]['price'] == pytest.approx(11.0 * 0.999)
+    assert runner.strategy.trades[2]['price'] == pytest.approx(12.0 * 1.001)
+    assert result['slippage_rate'] == 0.001
+    assert runner.strategy.selected_etfs == ['510500']
 
 
 def test_rotation_backtest_runner_uses_snapshot_dates_for_rebalance_windows():
@@ -294,6 +333,11 @@ def test_backtest_runner_rejects_non_positive_initial_capital():
         runner.run(sample_grid_history())
 
 
+def test_backtest_runner_rejects_invalid_slippage_rate():
+    with pytest.raises(ValueError, match='slippage_rate 必须在 0 到 1 之间'):
+        BacktestRunner(_grid_strategy(), {'slippage_rate': 1})
+
+
 def test_filter_history_by_date_keeps_inclusive_range():
     filtered = filter_history_by_date(
         sample_grid_history(),
@@ -462,6 +506,26 @@ def test_cli_backtest_smoke_outputs_markdown_report():
     assert '# 回测报告 - 网格回测' in completed.stdout
     assert '- 交易次数: 2' in completed.stdout
     assert '- 胜率: 100.00%' in completed.stdout
+    assert '- 滑点: 0.00%' in completed.stdout
+
+
+def test_cli_backtest_accepts_slippage_rate():
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'grid',
+            '--slippage-rate',
+            '0.01',
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert '- 滑点: 1.00%' in completed.stdout
 
 
 def test_cli_backtest_date_range_limits_report_period():
@@ -503,6 +567,7 @@ def test_cli_rotation_backtest_smoke_outputs_markdown_report():
     assert '- 标的池: 510300,510500,159915' in completed.stdout
     assert '- 交易次数: 3' in completed.stdout
     assert '- 胜率: 0.00%' in completed.stdout
+    assert '- 滑点: 0.00%' in completed.stdout
 
 
 def test_cli_rotation_backtest_date_range_limits_report_period():
@@ -631,6 +696,7 @@ def test_cli_backtest_rejects_empty_date_format():
 @pytest.mark.parametrize('option,value', [
     ('--grid-size', '0'),
     ('--initial-capital', '-1'),
+    ('--slippage-rate', '1'),
 ])
 def test_cli_backtest_rejects_invalid_numeric_args(option, value):
     completed = subprocess.run(
