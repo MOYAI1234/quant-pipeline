@@ -360,6 +360,8 @@ def _load_config_file(config_path: str) -> dict:
         config = json.loads(path.read_text(encoding='utf-8'))
     except FileNotFoundError as exc:
         raise ValueError(f"配置文件不存在: {path}") from exc
+    except OSError as exc:
+        raise ValueError(f"配置文件无法读取: {path}") from exc
     except json.JSONDecodeError as exc:
         raise ValueError(f"配置文件不是合法 JSON: {exc.msg}") from exc
     if not isinstance(config, dict):

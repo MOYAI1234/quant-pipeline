@@ -78,6 +78,27 @@ def test_cli_config_validate_file_reports_errors(tmp_path):
     assert '- account.initial_capital 必须大于 0' in completed.stdout
 
 
+def test_cli_config_validate_file_rejects_directory_path(tmp_path):
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / 'cli' / 'commands.py'),
+            'config',
+            'validate',
+            '--config',
+            str(tmp_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=PROJECT_ROOT,
+    )
+
+    assert completed.returncode == 2
+    assert '配置文件无法读取:' in completed.stderr
+    assert 'Traceback' not in completed.stderr
+
+
 def test_cli_config_validate_file_rejects_non_finite_json_number(tmp_path):
     config = deepcopy(SYSTEM_CONFIG)
     config['account']['initial_capital'] = float('nan')
@@ -150,6 +171,16 @@ def test_validate_config_rejects_invalid_adapter_mode():
 
     assert result['valid'] is False
     assert 'data.mx_data.mode 必须是 mock 或 real' in result['errors']
+
+
+def test_validate_config_rejects_invalid_commission_rate():
+    config = deepcopy(SYSTEM_CONFIG)
+    config['account']['commission_rate'] = 2
+
+    result = validate_config(config)
+
+    assert result['valid'] is False
+    assert 'account.commission_rate 必须在 0 到 1 之间' in result['errors']
 
 
 def test_validate_config_rejects_invalid_risk_adapter_mode():

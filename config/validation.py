@@ -57,7 +57,7 @@ def _validate_account_config(account_config: dict | None, errors: list) -> None:
         'account.initial_capital',
         errors,
     )
-    _validate_non_negative_number(
+    _validate_ratio(
         account_config.get('commission_rate'),
         'account.commission_rate',
         errors,
