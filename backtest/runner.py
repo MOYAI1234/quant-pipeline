@@ -42,7 +42,7 @@ class BacktestRunner:
                     continue
                 execution_signal = _apply_slippage(signal, self.slippage_rate)
                 if self.executor.execute_order(execution_signal):
-                    self.strategy.record_trade(signal)
+                    self.strategy.record_trade(execution_signal)
                     if hasattr(self.strategy, 'on_trade_confirmed'):
                         self.strategy.on_trade_confirmed(signal)
                 elif hasattr(self.strategy, 'on_trade_failed'):
@@ -181,11 +181,11 @@ class RotationBacktestRunner:
             for signal in signals:
                 execution_signal = _apply_slippage(signal, self.slippage_rate)
                 if self.executor.execute_order(execution_signal):
-                    self.strategy.record_trade(signal)
+                    self.strategy.record_trade(execution_signal)
                     if hasattr(self.strategy, 'on_trade_confirmed'):
-                        self.strategy.on_trade_confirmed(signal)
+                        self.strategy.on_trade_confirmed(execution_signal)
                 elif hasattr(self.strategy, 'on_trade_failed'):
-                    self.strategy.on_trade_failed(signal)
+                    self.strategy.on_trade_failed(execution_signal)
 
             portfolio = self.executor.get_portfolio(current_prices)
             self.equity_curve.append({

@@ -73,6 +73,8 @@ def test_backtest_runner_applies_slippage_to_execution_prices():
     buy_trade, sell_trade = runner.executor.trades
     assert buy_trade['price'] == pytest.approx(3.9 * 1.01)
     assert sell_trade['price'] == pytest.approx(4.1 * 0.99)
+    assert runner.strategy.trades[0]['price'] == pytest.approx(3.9 * 1.01)
+    assert runner.strategy.trades[1]['price'] == pytest.approx(4.1 * 0.99)
     assert result['slippage_rate'] == 0.01
     assert result['portfolio']['positions'] == {}
     assert runner.strategy.grid_ledger[3.9]['bought'] is False
@@ -128,6 +130,9 @@ def test_rotation_backtest_runner_applies_slippage_to_rebalance_orders():
     assert first_buy['price'] == pytest.approx(12.0 * 1.001)
     assert first_sell['price'] == pytest.approx(11.0 * 0.999)
     assert second_buy['price'] == pytest.approx(12.0 * 1.001)
+    assert runner.strategy.trades[0]['price'] == pytest.approx(12.0 * 1.001)
+    assert runner.strategy.trades[1]['price'] == pytest.approx(11.0 * 0.999)
+    assert runner.strategy.trades[2]['price'] == pytest.approx(12.0 * 1.001)
     assert result['slippage_rate'] == 0.001
     assert runner.strategy.selected_etfs == ['510500']
 
