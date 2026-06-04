@@ -70,6 +70,14 @@ python cli\commands.py alerts --json --limit 20
 python cli\commands.py alerts --alert-file data\alerts.jsonl
 ```
 
+校验配置：
+
+```powershell
+python cli\commands.py config validate
+python cli\commands.py config validate --json
+python cli\commands.py config validate --config path\to\config.json
+```
+
 运行内置样例回测：
 
 ```powershell
@@ -128,6 +136,7 @@ python -m compileall -q .
 - adapter 的 mock/real 模式、结构化健康检查和未实现 real 模式错误
 - CLI `health` 对数据源健康状态的文本/JSON 输出
 - CLI `alerts` 对本地 JSONL 告警事件的文本/JSON 输出、limit 和错误处理
+- CLI `config validate` 对内置配置和 JSON 配置文件的校验
 - `DataManager` 对实时行情、净值和历史行情的字段契约校验
 - `Simulator` 买入、卖出、均价、部分卖出和市值估算
 - `BacktestRunner` 的 grid 买卖周期、轮动样例回测、空历史保护、CSV 读取/错误处理和 CLI smoke
