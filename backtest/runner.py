@@ -65,6 +65,7 @@ class BacktestRunner:
             ) / self.executor.initial_capital,
             'max_drawdown': self._max_drawdown(),
             'trade_count': len(self.executor.trades),
+            **_trade_outcome_stats(self.executor.trades),
             'realized_pnl': final_portfolio['realized_pnl'],
             'portfolio': final_portfolio,
             'equity_curve': list(self.equity_curve),
@@ -81,6 +82,7 @@ class BacktestRunner:
             f"- 总收益率: {result['total_return']:.2%}",
             f"- 最大回撤: {result['max_drawdown']:.2%}",
             f"- 交易次数: {result['trade_count']}",
+            f"- 胜率: {result['win_rate']:.2%}",
             f"- 已实现盈亏: {result['realized_pnl']:.2f}",
         ]
         return "\n".join(lines)
@@ -197,6 +199,7 @@ class RotationBacktestRunner:
             ) / self.executor.initial_capital,
             'max_drawdown': self._max_drawdown(),
             'trade_count': len(self.executor.trades),
+            **_trade_outcome_stats(self.executor.trades),
             'realized_pnl': final_portfolio['realized_pnl'],
             'portfolio': final_portfolio,
             'equity_curve': list(self.equity_curve),
@@ -213,6 +216,7 @@ class RotationBacktestRunner:
             f"- 总收益率: {result['total_return']:.2%}",
             f"- 最大回撤: {result['max_drawdown']:.2%}",
             f"- 交易次数: {result['trade_count']}",
+            f"- 胜率: {result['win_rate']:.2%}",
             f"- 已实现盈亏: {result['realized_pnl']:.2f}",
         ]
         return "\n".join(lines)
@@ -287,6 +291,26 @@ def load_history_csv(path: str) -> list:
     if not rows:
         raise ValueError('历史行情 CSV 没有数据行')
     return rows
+
+
+def _trade_outcome_stats(trades: list) -> dict:
+    closed_trades = [
+        trade for trade in trades
+        if trade.get('action') == 'sell' and 'profit' in trade
+    ]
+    winning_trades = [
+        trade for trade in closed_trades
+        if trade.get('profit', 0) > 0
+    ]
+    closed_trade_count = len(closed_trades)
+    return {
+        'closed_trade_count': closed_trade_count,
+        'winning_trade_count': len(winning_trades),
+        'win_rate': (
+            len(winning_trades) / closed_trade_count
+            if closed_trade_count else 0.0
+        ),
+    }
 
 
 def filter_history_by_date(
