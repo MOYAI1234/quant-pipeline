@@ -300,7 +300,7 @@ def _trade_outcome_stats(trades: list) -> dict:
     ]
     winning_trades = [
         trade for trade in closed_trades
-        if trade.get('profit', 0) > 0
+        if _trade_net_profit(trade) > 0
     ]
     closed_trade_count = len(closed_trades)
     return {
@@ -311,6 +311,12 @@ def _trade_outcome_stats(trades: list) -> dict:
             if closed_trade_count else 0.0
         ),
     }
+
+
+def _trade_net_profit(trade: dict) -> float:
+    if 'net_profit' in trade:
+        return trade.get('net_profit', 0)
+    return trade.get('profit', 0) - trade.get('entry_commission', 0)
 
 
 def filter_history_by_date(

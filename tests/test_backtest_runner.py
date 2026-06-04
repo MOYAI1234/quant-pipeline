@@ -11,6 +11,7 @@ from backtest.runner import (
     load_history_csv,
     sample_grid_history,
     sample_rotation_history,
+    _trade_outcome_stats,
 )
 from strategy.grid_strategy import GridStrategy
 from strategy.rotation_strategy import RotationStrategy
@@ -58,6 +59,21 @@ def test_backtest_runner_executes_grid_buy_sell_cycle():
     assert result['max_drawdown'] >= 0
     assert len(result['equity_curve']) == 3
     assert '510300' not in result['portfolio']['positions']
+
+
+def test_trade_outcome_stats_uses_net_profit_for_win_classification():
+    stats = _trade_outcome_stats([
+        {
+            'action': 'sell',
+            'symbol': '510300',
+            'profit': 1.0,
+            'entry_commission': 3.0,
+        },
+    ])
+
+    assert stats['closed_trade_count'] == 1
+    assert stats['winning_trade_count'] == 0
+    assert stats['win_rate'] == 0.0
 
 
 def test_rotation_backtest_runner_buys_then_rotates_to_new_leader():
