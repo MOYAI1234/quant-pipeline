@@ -281,6 +281,28 @@ def test_filter_history_by_date_keeps_inclusive_range():
     ]
 
 
+def test_filter_history_by_date_normalizes_history_dates_before_comparing():
+    history = [
+        {
+            'date': '2026-1-2',
+            'open': 4.0,
+            'high': 4.1,
+            'low': 3.9,
+            'close': 4.0,
+            'volume': 1000,
+            'amount': 4000.0,
+        },
+    ]
+
+    filtered = filter_history_by_date(
+        history,
+        start_date='2026-01-01',
+        end_date='2026-01-31',
+    )
+
+    assert filtered == history
+
+
 def test_filter_history_by_date_rejects_empty_range():
     with pytest.raises(ValueError, match='指定日期区间内没有历史行情'):
         filter_history_by_date(
@@ -305,6 +327,19 @@ def test_filter_history_by_date_rejects_invalid_date_format():
             sample_grid_history(),
             start_date='2026-1-2',
         )
+
+
+def test_filter_history_by_date_rejects_empty_date_bound():
+    with pytest.raises(ValueError, match='--start-date 必须是 YYYY-MM-DD'):
+        filter_history_by_date(
+            sample_grid_history(),
+            start_date='',
+        )
+
+
+def test_filter_history_by_date_rejects_missing_history_date():
+    with pytest.raises(ValueError, match='history 行日期必须是 YYYY-MM-DD'):
+        filter_history_by_date([{'close': 4.0}])
 
 
 def test_load_history_csv_reads_basic_bar_fields(tmp_path):
@@ -535,6 +570,26 @@ def test_cli_backtest_rejects_invalid_date_format():
             'grid',
             '--start-date',
             '2026-1-2',
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 2
+    assert '--start-date 必须是 YYYY-MM-DD' in completed.stderr
+
+
+def test_cli_backtest_rejects_empty_date_format():
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'grid',
+            '--start-date',
+            '',
         ],
         check=False,
         capture_output=True,

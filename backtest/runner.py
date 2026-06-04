@@ -362,9 +362,12 @@ def _is_blank_row(row: dict) -> bool:
 
 def _history_date(row: dict) -> str:
     value = row.get('date', row.get('timestamp', ''))
-    if not isinstance(value, str):
-        return ''
-    return value[:10]
+    if not isinstance(value, str) or not value:
+        raise ValueError('history 行日期必须是 YYYY-MM-DD')
+    try:
+        return datetime.strptime(value[:10], '%Y-%m-%d').strftime('%Y-%m-%d')
+    except ValueError as exc:
+        raise ValueError('history 行日期必须是 YYYY-MM-DD') from exc
 
 
 def _date_in_range(date: str, start_date: str | None, end_date: str | None) -> bool:
@@ -378,7 +381,7 @@ def _date_in_range(date: str, start_date: str | None, end_date: str | None) -> b
 
 
 def _validate_date_bound(value: str | None, option_name: str) -> str | None:
-    if not value:
+    if value is None:
         return None
     if (
         len(value) != 10
