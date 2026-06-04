@@ -1,6 +1,6 @@
 import copy
 import csv
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from execution.simulator import Simulator
@@ -364,18 +364,19 @@ def _history_date(row: dict) -> str:
     value = row.get('date', row.get('timestamp', ''))
     if not isinstance(value, str) or not value:
         raise ValueError('history 行日期必须是 YYYY-MM-DD')
-    try:
-        return datetime.strptime(value[:10], '%Y-%m-%d').strftime('%Y-%m-%d')
-    except ValueError as exc:
-        raise ValueError('history 行日期必须是 YYYY-MM-DD') from exc
+    return _parse_date(value[:10], 'history 行日期')
 
 
-def _date_in_range(date: str, start_date: str | None, end_date: str | None) -> bool:
-    if not date:
+def _date_in_range(
+    history_date: date,
+    start_date: str | None,
+    end_date: str | None,
+) -> bool:
+    start = _parse_date(start_date, '--start-date') if start_date else None
+    end = _parse_date(end_date, '--end-date') if end_date else None
+    if start and history_date < start:
         return False
-    if start_date and date < start_date:
-        return False
-    if end_date and date > end_date:
+    if end and history_date > end:
         return False
     return True
 
@@ -389,11 +390,15 @@ def _validate_date_bound(value: str | None, option_name: str) -> str | None:
         or value[7] != '-'
     ):
         raise ValueError(f'{option_name} 必须是 YYYY-MM-DD')
-    try:
-        datetime.strptime(value, '%Y-%m-%d')
-    except ValueError as exc:
-        raise ValueError(f'{option_name} 必须是 YYYY-MM-DD') from exc
+    _parse_date(value, option_name)
     return value
+
+
+def _parse_date(value: str, label: str) -> date:
+    try:
+        return datetime.strptime(value, '%Y-%m-%d').date()
+    except ValueError as exc:
+        raise ValueError(f'{label} 必须是 YYYY-MM-DD') from exc
 
 
 def _required_text(value, field: str, line_number: int) -> str:
