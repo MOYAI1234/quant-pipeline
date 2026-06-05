@@ -31,7 +31,7 @@ python cli\commands.py backtest --strategy rotation
 结果：
 
 - `compileall` 通过
-- `pytest` 通过，`190 passed`
+- `pytest` 通过，`198 passed`
 - CLI help 可用
 - CLI daily report 可生成包含数据源健康状态的空组合报告
 - CLI health 可输出数据源健康状态
@@ -48,7 +48,7 @@ python cli\commands.py backtest --strategy rotation
 | 数据管理器 | 部分完成 | `DataManager` 和 TTL 缓存已存在，已覆盖基础字段、数值类型、非负单位、可选行情时效、无时区 timestamp 的显式源时区解释、缓存过期和 adapter 异常传播；仍缺更完整单位归一 |
 | 网格策略 | 基础可用 | 已支持多格买入、成交确认后更新 ledger、卖出后允许再买；仍缺持久化和更丰富行情路径测试 |
 | 行业轮动策略 | 基础可用 | 已支持动量选择、卖旧买新、失败回调；仍缺独立测试和风控冲突场景覆盖 |
-| 回测功能 | 已启动 | 已新增最小 `BacktestRunner` 和 `RotationBacktestRunner`，可用历史 bar / 多 ETF 样例驱动 grid、rotation 策略并复用 `Simulator` 输出收益、最大回撤、交易次数、胜率和可配置滑点等基础指标，CLI 已支持回测日期区间过滤；仍缺完整交易日历、复杂组合、多策略和真实历史数据源 |
+| 回测功能 | 已启动 | 已新增最小 `BacktestRunner` 和 `RotationBacktestRunner`，可用历史 bar / 多 ETF 样例驱动 grid、rotation 策略并复用 `Simulator` 输出收益、最大回撤、交易次数、胜率和可配置滑点等基础指标，CLI 已支持回测日期区间过滤和历史日期/盘中时间顺序校验；仍缺完整交易日历、复杂组合、多策略和真实历史数据源 |
 | 模拟执行器 | 基础可用 | 买卖、整手、均价、手续费、估值和部分盈亏计算已实现；成交模型仍简化 |
 | QMT/实盘执行 | 未完成 | `qmt_executor.py` 不存在，实盘订单模型、状态同步、异常恢复都未开始 |
 | 风控模块 | 部分完成 | 仓位、ETF 质量、止损已存在；但真实 ETF 指标缺失，规则和策略目标可能冲突 |
@@ -56,7 +56,7 @@ python cli\commands.py backtest --strategy rotation
 | 监控告警 | 部分完成 | 状态指标、报告和结构化告警事件已存在，报告可展示最近告警摘要，并支持本地 JSONL 输出；外部通知通道尚未实现 |
 | CLI | 基础可用 | `start/status/report/health/alerts/config validate/backtest` 已有；仍缺更完整的配置解释、初始化和运行诊断命令 |
 | API/Web | 未完成 | PRD 中规划了 API 和 Web 界面，当前仓库没有对应模块 |
-| 测试体系 | 不足 | 现有 190 个测试覆盖 simulator、grid e2e、rotation、risk manager 边界、backtest runner、回测日期区间、回测滑点、CLI smoke、状态持久化、报告健康状态、告警事件、配置校验、DataManager 缓存与数据契约等；adapter、report 仍有缺口 |
+| 测试体系 | 不足 | 现有 198 个测试覆盖 simulator、grid e2e、rotation、risk manager 边界、backtest runner、回测日期区间、历史日期/盘中时间顺序校验、回测滑点、CLI smoke、状态持久化、报告健康状态、告警事件、配置校验、DataManager 缓存与数据契约等；adapter、report 仍有缺口 |
 | 文档入口 | 不足 | `README.md` 已补充基础运行、测试和阶段边界；仍缺 `docs/testing.md`、`docs/architecture.md` 等专题文档 |
 
 ## 主要风险
@@ -188,7 +188,7 @@ PRD 将“可回测策略系统”列为阶段二交付物，但当前只有实�
 
 ### M2：回测引擎
 
-状态：已启动。当前已新增最小 `BacktestRunner`，支持单策略、单标的、历史 bar list/CSV 输入；并新增 `RotationBacktestRunner`，支持内置多 ETF 历史样例驱动行业轮动。两者均复用 `Simulator` 输出收益、最大回撤、交易次数和按已平仓卖出统计的胜率等基础指标；CLI 已增加 `backtest --strategy grid|rotation`，并支持 `--start-date` / `--end-date` 过滤回测区间和 `--slippage-rate` 比例滑点。该能力仍是 M2 起步版，不包含完整交易日历、复杂成交模型、组合回测、多策略编排和真实历史数据源。
+状态：已启动。当前已新增最小 `BacktestRunner`，支持单策略、单标的、历史 bar list/CSV 输入；并新增 `RotationBacktestRunner`，支持内置多 ETF 历史样例驱动行业轮动。两者均复用 `Simulator` 输出收益、最大回撤、交易次数和按已平仓卖出统计的胜率等基础指标；CLI 已增加 `backtest --strategy grid|rotation`，并支持 `--start-date` / `--end-date` 过滤回测区间、历史日期/盘中时间严格递增校验和 `--slippage-rate` 比例滑点。该能力仍是 M2 起步版，不包含完整交易日历、复杂成交模型、组合回测、多策略编排和真实历史数据源。
 
 目标：让策略在历史数据上可验证。
 

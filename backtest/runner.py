@@ -25,6 +25,7 @@ class BacktestRunner:
     def run(self, history: list) -> dict:
         if not history:
             raise ValueError('history 不能为空')
+        _validate_history_order(history)
 
         self.strategy = copy.deepcopy(self._strategy_template)
         self.executor = Simulator(dict(self._account_config))
@@ -166,6 +167,7 @@ class RotationBacktestRunner:
     def run(self, history: list) -> dict:
         if not history:
             raise ValueError('history 不能为空')
+        _validate_history_order(history)
 
         self.strategy = copy.deepcopy(self._strategy_template)
         self.executor = Simulator(dict(self._account_config))
@@ -381,6 +383,7 @@ def filter_history_by_date(
     ]
     if not filtered:
         raise ValueError('指定日期区间内没有历史行情')
+    _validate_history_order(filtered)
     return filtered
 
 
@@ -436,11 +439,51 @@ def _is_blank_row(row: dict) -> bool:
     return all(value in (None, '') for value in row.values())
 
 
-def _history_date(row: dict) -> str:
+def _history_date(row: dict) -> date:
     value = row.get('date', row.get('timestamp', ''))
     if not isinstance(value, str) or not value:
         raise ValueError('history 行日期必须是 YYYY-MM-DD')
     return _parse_date(value[:10], 'history 行日期')
+
+
+def _validate_history_order(history: list) -> None:
+    previous_time = None
+    previous_value = None
+    for index, row in enumerate(history, start=1):
+        current_value = _history_time_value(row)
+        current_time = _parse_history_time(current_value)
+        if previous_time is not None:
+            try:
+                ordered = current_time > previous_time
+            except TypeError as exc:
+                raise ValueError('history 时间时区格式必须一致') from exc
+            if not ordered:
+                raise ValueError(
+                    'history 日期必须严格递增: '
+                    f'第 {index} 条 {current_value} 不晚于 '
+                    f'第 {index - 1} 条 {previous_value}'
+                )
+        previous_time = current_time
+        previous_value = current_value
+
+
+def _history_time_value(row: dict) -> str:
+    value = row.get('timestamp') or row.get('date')
+    if not isinstance(value, str) or not value:
+        raise ValueError('history 行日期必须是 YYYY-MM-DD')
+    return value
+
+
+def _parse_history_time(value: str) -> datetime:
+    if 'T' not in value and ' ' not in value:
+        return datetime.combine(
+            _parse_date(value, 'history 行日期'),
+            datetime.min.time(),
+        )
+    try:
+        return datetime.fromisoformat(value.replace('Z', '+00:00'))
+    except ValueError as exc:
+        raise ValueError('history 行时间必须是 ISO 日期或时间') from exc
 
 
 def _date_in_range(

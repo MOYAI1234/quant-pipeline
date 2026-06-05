@@ -198,6 +198,34 @@ def test_rotation_backtest_runner_rejects_missing_symbol_price():
         }])
 
 
+def test_rotation_backtest_runner_rejects_non_chronological_snapshots():
+    runner = RotationBacktestRunner(_rotation_strategy(), {
+        'initial_capital': 100000,
+        'commission_rate': 0.0003,
+    })
+    history = list(reversed(sample_rotation_history()))
+
+    with pytest.raises(ValueError, match='history 日期必须严格递增'):
+        runner.run(history)
+
+
+def test_rotation_backtest_runner_accepts_chronological_intraday_snapshots():
+    runner = RotationBacktestRunner(_rotation_strategy(), {
+        'initial_capital': 100000,
+        'commission_rate': 0.0003,
+    })
+    history = sample_rotation_history()
+    history[0]['timestamp'] = '2026-01-01T09:30:00'
+    history[0].pop('date')
+    history[1]['timestamp'] = '2026-01-01T10:00:00'
+    history[1].pop('date')
+
+    result = runner.run(history)
+
+    assert result['start_date'] == '2026-01-01T09:30:00'
+    assert result['end_date'] == '2026-01-01T10:00:00'
+
+
 def test_backtest_runner_skips_grid_order_when_bar_does_not_touch_limit_price():
     runner = BacktestRunner(_grid_strategy(), {
         'initial_capital': 100000,
@@ -333,6 +361,53 @@ def test_backtest_runner_rejects_non_positive_initial_capital():
         runner.run(sample_grid_history())
 
 
+def test_backtest_runner_rejects_non_chronological_history():
+    runner = BacktestRunner(_grid_strategy())
+    history = list(reversed(sample_grid_history()))
+
+    with pytest.raises(ValueError, match='history 日期必须严格递增') as exc:
+        runner.run(history)
+
+    assert '第 2 条 2026-01-02' in str(exc.value)
+    assert '第 1 条 2026-01-03' in str(exc.value)
+
+
+def test_backtest_runner_rejects_duplicate_history_dates():
+    runner = BacktestRunner(_grid_strategy())
+    history = [
+        sample_grid_history()[0],
+        dict(sample_grid_history()[0]),
+    ]
+
+    with pytest.raises(ValueError, match='history 日期必须严格递增'):
+        runner.run(history)
+
+
+def test_backtest_runner_accepts_chronological_intraday_history():
+    runner = BacktestRunner(_grid_strategy())
+    history = [
+        {
+            'timestamp': '2026-01-01T09:30:00',
+            'open': 4.0,
+            'high': 4.0,
+            'low': 4.0,
+            'close': 4.0,
+        },
+        {
+            'timestamp': '2026-01-01T10:00:00',
+            'open': 4.0,
+            'high': 4.0,
+            'low': 4.0,
+            'close': 4.0,
+        },
+    ]
+
+    result = runner.run(history)
+
+    assert result['start_date'] == '2026-01-01T09:30:00'
+    assert result['end_date'] == '2026-01-01T10:00:00'
+
+
 def test_backtest_runner_rejects_invalid_slippage_rate():
     with pytest.raises(ValueError, match='slippage_rate 必须在 0 到 1 之间'):
         BacktestRunner(_grid_strategy(), {'slippage_rate': 1})
@@ -410,6 +485,28 @@ def test_filter_history_by_date_rejects_empty_date_bound():
 def test_filter_history_by_date_rejects_missing_history_date():
     with pytest.raises(ValueError, match='history 行日期必须是 YYYY-MM-DD'):
         filter_history_by_date([{'close': 4.0}])
+
+
+def test_filter_history_by_date_rejects_non_chronological_filtered_rows():
+    history = list(reversed(sample_grid_history()))
+
+    with pytest.raises(ValueError, match='history 日期必须严格递增'):
+        filter_history_by_date(history)
+
+
+def test_filter_history_by_date_keeps_chronological_intraday_rows():
+    history = [
+        {'timestamp': '2026-01-01T09:30:00'},
+        {'timestamp': '2026-01-01T10:00:00'},
+    ]
+
+    filtered = filter_history_by_date(
+        history,
+        start_date='2026-01-01',
+        end_date='2026-01-01',
+    )
+
+    assert filtered == history
 
 
 def test_load_history_csv_reads_basic_bar_fields(tmp_path):
@@ -691,6 +788,34 @@ def test_cli_backtest_rejects_empty_date_format():
 
     assert completed.returncode == 2
     assert '--start-date 必须是 YYYY-MM-DD' in completed.stderr
+
+
+def test_cli_backtest_rejects_non_chronological_csv(tmp_path):
+    history_file = tmp_path / 'history.csv'
+    history_file.write_text(
+        'date,open,high,low,close,volume,amount\n'
+        '2026-01-02,4.0,4.1,3.9,4.0,1000,4000\n'
+        '2026-01-01,4.0,4.1,3.9,4.0,1000,4000\n',
+        encoding='utf-8',
+    )
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'grid',
+            '--history',
+            str(history_file),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 2
+    assert 'history 日期必须严格递增' in completed.stderr
 
 
 @pytest.mark.parametrize('option,value', [
