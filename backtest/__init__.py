@@ -5,6 +5,7 @@ from .runner import (
     load_history_csv,
     sample_grid_history,
     sample_rotation_history,
+    write_equity_curve_csv,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     'load_history_csv',
     'sample_grid_history',
     'sample_rotation_history',
+    'write_equity_curve_csv',
 ]

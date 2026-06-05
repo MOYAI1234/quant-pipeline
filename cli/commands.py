@@ -15,6 +15,7 @@ from backtest.runner import (
     load_history_csv,
     sample_grid_history,
     sample_rotation_history,
+    write_equity_curve_csv,
 )
 from main import QuantPipeline
 from config.settings import SYSTEM_CONFIG
@@ -185,7 +186,9 @@ def _run_grid_backtest(
         'commission_rate': commission_rate,
         'slippage_rate': slippage_rate,
     })
-    print(runner.render_markdown(runner.run(history)))
+    result = runner.run(history)
+    print(runner.render_markdown(result))
+    _write_backtest_equity_output(args.equity_output, result)
 
 
 def _run_rotation_backtest(
@@ -233,7 +236,9 @@ def _run_rotation_backtest(
         'commission_rate': commission_rate,
         'slippage_rate': slippage_rate,
     })
-    print(runner.render_markdown(runner.run(history)))
+    result = runner.run(history)
+    print(runner.render_markdown(result))
+    _write_backtest_equity_output(args.equity_output, result)
 
 
 def _resolve_symbol(symbol: str) -> str:
@@ -258,6 +263,16 @@ def _resolve_backtest_history(history: list, args) -> list:
         start_date=args.start_date,
         end_date=args.end_date,
     )
+
+
+def _write_backtest_equity_output(output_path: str | None, result: dict) -> None:
+    if not output_path:
+        return
+    path = write_equity_curve_csv(
+        str(_resolve_project_path(output_path)),
+        result['equity_curve'],
+    )
+    print(f"权益曲线 CSV: {path}")
 
 
 def _value_or_default(value, default):
@@ -484,6 +499,7 @@ def main():
     backtest_parser.add_argument('--initial-capital', type=float)
     backtest_parser.add_argument('--commission-rate', type=float)
     backtest_parser.add_argument('--slippage-rate', type=float)
+    backtest_parser.add_argument('--equity-output', type=str, help='导出权益曲线 CSV 路径')
     backtest_parser.add_argument('--etf-pool', type=str, help='ETF池，逗号分隔')
     backtest_parser.add_argument('--lookback', type=int, help='轮动回看周期')
     backtest_parser.add_argument('--top-n', type=int, help='轮动选择ETF数量')

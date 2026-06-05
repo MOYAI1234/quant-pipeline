@@ -1,3 +1,4 @@
+import csv
 import subprocess
 import sys
 from pathlib import Path
@@ -11,6 +12,7 @@ from backtest.runner import (
     load_history_csv,
     sample_grid_history,
     sample_rotation_history,
+    write_equity_curve_csv,
     _drawdown_stats,
     _trade_outcome_stats,
 )
@@ -674,6 +676,43 @@ def test_load_history_csv_rejects_fractional_integer_fields(tmp_path):
         load_history_csv(str(history_file))
 
 
+def test_write_equity_curve_csv_writes_header_and_rows(tmp_path):
+    output_file = tmp_path / 'nested' / 'equity.csv'
+
+    written_path = write_equity_curve_csv(str(output_file), [
+        {
+            'date': '2026-01-01',
+            'total_value': 100000.0,
+            'pnl': 0.0,
+            'pnl_percent': 0.0,
+        },
+        {
+            'date': '2026-01-02',
+            'total_value': 100500.5,
+            'pnl': 500.5,
+            'pnl_percent': 0.5005,
+        },
+    ])
+
+    assert written_path == output_file
+    with output_file.open(newline='', encoding='utf-8') as file:
+        rows = list(csv.DictReader(file))
+    assert rows == [
+        {
+            'date': '2026-01-01',
+            'total_value': '100000.0',
+            'pnl': '0.0',
+            'pnl_percent': '0.0',
+        },
+        {
+            'date': '2026-01-02',
+            'total_value': '100500.5',
+            'pnl': '500.5',
+            'pnl_percent': '0.5005',
+        },
+    ]
+
+
 def test_cli_backtest_smoke_outputs_markdown_report():
     completed = subprocess.run(
         [sys.executable, str(Path('cli') / 'commands.py'), 'backtest', '--strategy', 'grid'],
@@ -687,6 +726,38 @@ def test_cli_backtest_smoke_outputs_markdown_report():
     assert '- 胜率: 100.00%' in completed.stdout
     assert '- 滑点: 0.00%' in completed.stdout
     assert '- 最大回撤区间:' in completed.stdout
+
+
+def test_cli_backtest_exports_equity_curve_csv(tmp_path):
+    output_file = tmp_path / 'grid-equity.csv'
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'grid',
+            '--equity-output',
+            str(output_file),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert f'权益曲线 CSV: {output_file}' in completed.stdout
+    with output_file.open(newline='', encoding='utf-8') as file:
+        rows = list(csv.DictReader(file))
+    assert [row['date'] for row in rows] == [
+        '2026-01-01',
+        '2026-01-02',
+        '2026-01-03',
+    ]
+    assert set(rows[0]) == {'date', 'total_value', 'pnl', 'pnl_percent'}
+    assert float(rows[0]['total_value']) == pytest.approx(100000.0)
+    assert float(rows[0]['pnl']) == pytest.approx(0.0)
+    assert float(rows[0]['pnl_percent']) == pytest.approx(0.0)
 
 
 def test_cli_backtest_accepts_slippage_rate():
@@ -749,6 +820,36 @@ def test_cli_rotation_backtest_smoke_outputs_markdown_report():
     assert '- 胜率: 0.00%' in completed.stdout
     assert '- 滑点: 0.00%' in completed.stdout
     assert '- 最大回撤区间:' in completed.stdout
+
+
+def test_cli_rotation_backtest_exports_equity_curve_csv(tmp_path):
+    output_file = tmp_path / 'rotation-equity.csv'
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'rotation',
+            '--equity-output',
+            str(output_file),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert f'权益曲线 CSV: {output_file}' in completed.stdout
+    with output_file.open(newline='', encoding='utf-8') as file:
+        rows = list(csv.DictReader(file))
+    assert [row['date'] for row in rows] == [
+        '2026-01-01',
+        '2026-01-02',
+    ]
+    assert set(rows[0]) == {'date', 'total_value', 'pnl', 'pnl_percent'}
+    assert float(rows[0]['total_value']) > 0
+    assert float(rows[0]['pnl']) < 0
 
 
 def test_cli_rotation_backtest_date_range_limits_report_period():
