@@ -8,6 +8,7 @@ from execution.simulator import Simulator
 
 
 REQUIRED_CSV_FIELDS = ('date', 'open', 'high', 'low', 'close', 'volume', 'amount')
+EQUITY_CURVE_CSV_FIELDS = ('date', 'total_value', 'pnl', 'pnl_percent')
 
 
 class BacktestRunner:
@@ -298,6 +299,22 @@ def load_history_csv(path: str) -> list:
     if not rows:
         raise ValueError('历史行情 CSV 没有数据行')
     return rows
+
+
+def write_equity_curve_csv(path: str, equity_curve: list) -> Path:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open('w', newline='', encoding='utf-8') as file:
+        writer = csv.DictWriter(file, fieldnames=EQUITY_CURVE_CSV_FIELDS)
+        writer.writeheader()
+        for point in equity_curve:
+            writer.writerow({
+                'date': point.get('date', ''),
+                'total_value': point.get('total_value', 0),
+                'pnl': point.get('pnl', 0),
+                'pnl_percent': point.get('pnl_percent', 0),
+            })
+    return output_path
 
 
 def _trade_outcome_stats(trades: list) -> dict:
