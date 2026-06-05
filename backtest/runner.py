@@ -59,6 +59,11 @@ class BacktestRunner:
 
         final_portfolio = self.executor.get_portfolio({self.strategy.symbol: last_quote['price']})
 
+        drawdown_stats = _drawdown_stats(
+            self.equity_curve,
+            self.executor.initial_capital,
+        )
+
         return {
             'strategy': self.strategy.name,
             'symbol': self.strategy.symbol,
@@ -69,7 +74,7 @@ class BacktestRunner:
             'total_return': (
                 final_portfolio['total_value'] - self.executor.initial_capital
             ) / self.executor.initial_capital,
-            'max_drawdown': self._max_drawdown(),
+            **drawdown_stats,
             'trade_count': len(self.executor.trades),
             **_trade_outcome_stats(self.executor.trades),
             'slippage_rate': self.slippage_rate,
@@ -88,6 +93,7 @@ class BacktestRunner:
             f"- 期末总值: {result['final_value']:.2f}",
             f"- 总收益率: {result['total_return']:.2%}",
             f"- 最大回撤: {result['max_drawdown']:.2%}",
+            f"- 最大回撤区间: {result['max_drawdown_start']} 至 {result['max_drawdown_end']}",
             f"- 交易次数: {result['trade_count']}",
             f"- 胜率: {result['win_rate']:.2%}",
             f"- 滑点: {result['slippage_rate']:.2%}",
@@ -141,16 +147,6 @@ class BacktestRunner:
         price = signal.get('price', 0)
         return quote['low'] <= price <= quote['high']
 
-    def _max_drawdown(self) -> float:
-        peak = self.executor.initial_capital
-        max_drawdown = 0.0
-        for point in self.equity_curve:
-            value = point['total_value']
-            peak = max(peak, value)
-            if peak > 0:
-                max_drawdown = max(max_drawdown, (peak - value) / peak)
-        return max_drawdown
-
 
 class RotationBacktestRunner:
 
@@ -200,6 +196,11 @@ class RotationBacktestRunner:
         final_market_data = self._snapshot_to_market_data(last_snapshot)
         final_portfolio = self.executor.get_portfolio(self._current_prices(final_market_data))
 
+        drawdown_stats = _drawdown_stats(
+            self.equity_curve,
+            self.executor.initial_capital,
+        )
+
         return {
             'strategy': self.strategy.name,
             'symbol': ','.join(self.strategy.etf_pool),
@@ -210,7 +211,7 @@ class RotationBacktestRunner:
             'total_return': (
                 final_portfolio['total_value'] - self.executor.initial_capital
             ) / self.executor.initial_capital,
-            'max_drawdown': self._max_drawdown(),
+            **drawdown_stats,
             'trade_count': len(self.executor.trades),
             **_trade_outcome_stats(self.executor.trades),
             'slippage_rate': self.slippage_rate,
@@ -229,6 +230,7 @@ class RotationBacktestRunner:
             f"- 期末总值: {result['final_value']:.2f}",
             f"- 总收益率: {result['total_return']:.2%}",
             f"- 最大回撤: {result['max_drawdown']:.2%}",
+            f"- 最大回撤区间: {result['max_drawdown_start']} 至 {result['max_drawdown_end']}",
             f"- 交易次数: {result['trade_count']}",
             f"- 胜率: {result['win_rate']:.2%}",
             f"- 滑点: {result['slippage_rate']:.2%}",
@@ -262,16 +264,6 @@ class RotationBacktestRunner:
         if price is None or price <= 0:
             raise ValueError(f"rotation history 中 {symbol} 缺少有效价格")
         return price
-
-    def _max_drawdown(self) -> float:
-        peak = self.executor.initial_capital
-        max_drawdown = 0.0
-        for point in self.equity_curve:
-            value = point['total_value']
-            peak = max(peak, value)
-            if peak > 0:
-                max_drawdown = max(max_drawdown, (peak - value) / peak)
-        return max_drawdown
 
 
 def load_history_csv(path: str) -> list:
@@ -332,6 +324,39 @@ def _trade_net_profit(trade: dict) -> float:
     if 'net_profit' in trade:
         return trade.get('net_profit', 0)
     return trade.get('profit', 0) - trade.get('entry_commission', 0)
+
+
+def _drawdown_stats(equity_curve: list, initial_capital: float) -> dict:
+    if not equity_curve:
+        return {
+            'max_drawdown': 0.0,
+            'max_drawdown_start': '',
+            'max_drawdown_end': '',
+        }
+
+    peak = initial_capital
+    peak_date = equity_curve[0]['date']
+    max_drawdown = 0.0
+    max_drawdown_start = peak_date
+    max_drawdown_end = peak_date
+
+    for point in equity_curve:
+        value = point['total_value']
+        if value >= peak:
+            peak = value
+            peak_date = point['date']
+        if peak > 0:
+            drawdown = (peak - value) / peak
+            if drawdown > max_drawdown:
+                max_drawdown = drawdown
+                max_drawdown_start = peak_date
+                max_drawdown_end = point['date']
+
+    return {
+        'max_drawdown': max_drawdown,
+        'max_drawdown_start': max_drawdown_start,
+        'max_drawdown_end': max_drawdown_end,
+    }
 
 
 def _apply_slippage(signal: dict, slippage_rate: float) -> dict:

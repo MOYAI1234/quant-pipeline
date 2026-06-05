@@ -11,6 +11,7 @@ from backtest.runner import (
     load_history_csv,
     sample_grid_history,
     sample_rotation_history,
+    _drawdown_stats,
     _trade_outcome_stats,
 )
 from strategy.grid_strategy import GridStrategy
@@ -57,6 +58,8 @@ def test_backtest_runner_executes_grid_buy_sell_cycle():
     assert result['realized_pnl'] > 0
     assert result['total_return'] > 0
     assert result['max_drawdown'] >= 0
+    assert result['max_drawdown_start'] == '2026-01-01'
+    assert result['max_drawdown_end'] == '2026-01-01'
     assert len(result['equity_curve']) == 3
     assert '510300' not in result['portfolio']['positions']
 
@@ -180,6 +183,19 @@ def test_rotation_backtest_runner_uses_snapshot_dates_for_rebalance_windows():
     assert '510300' not in result['portfolio']['positions']
     assert '510500' in result['portfolio']['positions']
     assert runner.strategy.last_rebalance.isoformat() == '2026-01-20T00:00:00'
+
+
+def test_rotation_backtest_runner_reports_drawdown_window():
+    runner = RotationBacktestRunner(_rotation_strategy(), {
+        'initial_capital': 100000,
+        'commission_rate': 0.0003,
+    })
+
+    result = runner.run(sample_rotation_history())
+
+    assert result['max_drawdown'] > 0
+    assert result['max_drawdown_start'] == '2026-01-01'
+    assert result['max_drawdown_end'] == '2026-01-02'
 
 
 def test_rotation_backtest_runner_rejects_missing_symbol_price():
@@ -345,6 +361,72 @@ def test_backtest_runner_drawdown_starts_from_initial_capital():
     assert result['win_rate'] == 0.0
     assert result['equity_curve'][0]['total_value'] < result['initial_capital']
     assert result['max_drawdown'] > 0
+    assert result['max_drawdown_start'] == '2026-01-01'
+    assert result['max_drawdown_end'] == '2026-01-01'
+
+
+def test_backtest_runner_reports_drawdown_window_from_peak_to_trough():
+    strategy = GridStrategy({
+        'name': '测试回撤区间',
+        'symbol': '510300',
+        'center_price': 10.00,
+        'grid_size': 1.00,
+        'grid_count': 1,
+        'shares_per_grid': 1000,
+        'max_grids': 1,
+    })
+    runner = BacktestRunner(strategy, {
+        'initial_capital': 100000,
+        'commission_rate': 0.0003,
+    })
+
+    result = runner.run([
+        {
+            'date': '2026-01-01',
+            'open': 9.00,
+            'high': 9.00,
+            'low': 9.00,
+            'close': 9.00,
+            'volume': 1000000,
+            'amount': 9000000,
+        },
+        {
+            'date': '2026-01-02',
+            'open': 10.50,
+            'high': 10.50,
+            'low': 10.50,
+            'close': 10.50,
+            'volume': 1000000,
+            'amount': 10500000,
+        },
+        {
+            'date': '2026-01-03',
+            'open': 8.00,
+            'high': 8.00,
+            'low': 8.00,
+            'close': 8.00,
+            'volume': 1000000,
+            'amount': 8000000,
+        },
+    ])
+
+    assert result['trade_count'] == 1
+    assert result['max_drawdown'] > 0
+    assert result['max_drawdown_start'] == '2026-01-02'
+    assert result['max_drawdown_end'] == '2026-01-03'
+
+
+def test_drawdown_stats_uses_latest_repeated_peak_before_trough():
+    stats = _drawdown_stats([
+        {'date': '2026-01-01', 'total_value': 100000},
+        {'date': '2026-01-02', 'total_value': 90000},
+        {'date': '2026-01-03', 'total_value': 100000},
+        {'date': '2026-01-04', 'total_value': 80000},
+    ], initial_capital=100000)
+
+    assert stats['max_drawdown'] == pytest.approx(0.2)
+    assert stats['max_drawdown_start'] == '2026-01-03'
+    assert stats['max_drawdown_end'] == '2026-01-04'
 
 
 def test_backtest_runner_rejects_empty_history():
@@ -604,6 +686,7 @@ def test_cli_backtest_smoke_outputs_markdown_report():
     assert '- 交易次数: 2' in completed.stdout
     assert '- 胜率: 100.00%' in completed.stdout
     assert '- 滑点: 0.00%' in completed.stdout
+    assert '- 最大回撤区间:' in completed.stdout
 
 
 def test_cli_backtest_accepts_slippage_rate():
@@ -665,6 +748,7 @@ def test_cli_rotation_backtest_smoke_outputs_markdown_report():
     assert '- 交易次数: 3' in completed.stdout
     assert '- 胜率: 0.00%' in completed.stdout
     assert '- 滑点: 0.00%' in completed.stdout
+    assert '- 最大回撤区间:' in completed.stdout
 
 
 def test_cli_rotation_backtest_date_range_limits_report_period():
