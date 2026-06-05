@@ -16,6 +16,7 @@ from backtest.runner import (
     sample_grid_history,
     sample_rotation_history,
     write_equity_curve_csv,
+    write_trades_csv,
 )
 from main import QuantPipeline
 from config.settings import SYSTEM_CONFIG
@@ -188,7 +189,7 @@ def _run_grid_backtest(
     })
     result = runner.run(history)
     print(runner.render_markdown(result))
-    _write_backtest_equity_output(args.equity_output, result)
+    _write_backtest_outputs(args, result)
 
 
 def _run_rotation_backtest(
@@ -238,7 +239,7 @@ def _run_rotation_backtest(
     })
     result = runner.run(history)
     print(runner.render_markdown(result))
-    _write_backtest_equity_output(args.equity_output, result)
+    _write_backtest_outputs(args, result)
 
 
 def _resolve_symbol(symbol: str) -> str:
@@ -265,14 +266,19 @@ def _resolve_backtest_history(history: list, args) -> list:
     )
 
 
-def _write_backtest_equity_output(output_path: str | None, result: dict) -> None:
-    if not output_path:
-        return
-    path = write_equity_curve_csv(
-        str(_resolve_project_path(output_path)),
-        result['equity_curve'],
-    )
-    print(f"权益曲线 CSV: {path}")
+def _write_backtest_outputs(args, result: dict) -> None:
+    if args.equity_output:
+        equity_path = write_equity_curve_csv(
+            str(_resolve_project_path(args.equity_output)),
+            result['equity_curve'],
+        )
+        print(f"权益曲线 CSV: {equity_path}")
+    if args.trades_output:
+        trades_path = write_trades_csv(
+            str(_resolve_project_path(args.trades_output)),
+            result['trades'],
+        )
+        print(f"成交明细 CSV: {trades_path}")
 
 
 def _value_or_default(value, default):
@@ -500,6 +506,7 @@ def main():
     backtest_parser.add_argument('--commission-rate', type=float)
     backtest_parser.add_argument('--slippage-rate', type=float)
     backtest_parser.add_argument('--equity-output', type=str, help='导出权益曲线 CSV 路径')
+    backtest_parser.add_argument('--trades-output', type=str, help='导出成交明细 CSV 路径')
     backtest_parser.add_argument('--etf-pool', type=str, help='ETF池，逗号分隔')
     backtest_parser.add_argument('--lookback', type=int, help='轮动回看周期')
     backtest_parser.add_argument('--top-n', type=int, help='轮动选择ETF数量')

@@ -9,6 +9,18 @@ from execution.simulator import Simulator
 
 REQUIRED_CSV_FIELDS = ('date', 'open', 'high', 'low', 'close', 'volume', 'amount')
 EQUITY_CURVE_CSV_FIELDS = ('date', 'total_value', 'pnl', 'pnl_percent')
+TRADE_CSV_FIELDS = (
+    'timestamp',
+    'action',
+    'symbol',
+    'price',
+    'shares',
+    'amount',
+    'commission',
+    'entry_commission',
+    'profit',
+    'net_profit',
+)
 
 
 class BacktestRunner:
@@ -43,7 +55,9 @@ class BacktestRunner:
                 if not self._signal_executable(signal, quote):
                     continue
                 execution_signal = _apply_slippage(signal, self.slippage_rate)
+                previous_trade_count = len(self.executor.trades)
                 if self.executor.execute_order(execution_signal):
+                    self._stamp_new_trades(previous_trade_count, quote['timestamp'])
                     self.strategy.record_trade(execution_signal)
                     if hasattr(self.strategy, 'on_trade_confirmed'):
                         self.strategy.on_trade_confirmed(signal)
@@ -82,6 +96,7 @@ class BacktestRunner:
             'realized_pnl': final_portfolio['realized_pnl'],
             'portfolio': final_portfolio,
             'equity_curve': list(self.equity_curve),
+            'trades': _serialize_trades(self.executor.trades),
         }
 
     def render_markdown(self, result: dict) -> str:
@@ -148,6 +163,10 @@ class BacktestRunner:
         price = signal.get('price', 0)
         return quote['low'] <= price <= quote['high']
 
+    def _stamp_new_trades(self, previous_trade_count: int, timestamp: str) -> None:
+        for trade in self.executor.trades[previous_trade_count:]:
+            trade['timestamp'] = timestamp
+
 
 class RotationBacktestRunner:
 
@@ -179,7 +198,9 @@ class RotationBacktestRunner:
 
             for signal in signals:
                 execution_signal = _apply_slippage(signal, self.slippage_rate)
+                previous_trade_count = len(self.executor.trades)
                 if self.executor.execute_order(execution_signal):
+                    self._stamp_new_trades(previous_trade_count, market_data['_date'])
                     self.strategy.record_trade(execution_signal)
                     if hasattr(self.strategy, 'on_trade_confirmed'):
                         self.strategy.on_trade_confirmed(execution_signal)
@@ -219,6 +240,7 @@ class RotationBacktestRunner:
             'realized_pnl': final_portfolio['realized_pnl'],
             'portfolio': final_portfolio,
             'equity_curve': list(self.equity_curve),
+            'trades': _serialize_trades(self.executor.trades),
         }
 
     def render_markdown(self, result: dict) -> str:
@@ -265,6 +287,10 @@ class RotationBacktestRunner:
         if price is None or price <= 0:
             raise ValueError(f"rotation history 中 {symbol} 缺少有效价格")
         return price
+
+    def _stamp_new_trades(self, previous_trade_count: int, timestamp: str) -> None:
+        for trade in self.executor.trades[previous_trade_count:]:
+            trade['timestamp'] = timestamp
 
 
 def load_history_csv(path: str) -> list:
@@ -317,6 +343,20 @@ def write_equity_curve_csv(path: str, equity_curve: list) -> Path:
     return output_path
 
 
+def write_trades_csv(path: str, trades: list) -> Path:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open('w', newline='', encoding='utf-8') as file:
+        writer = csv.DictWriter(file, fieldnames=TRADE_CSV_FIELDS)
+        writer.writeheader()
+        for trade in trades:
+            writer.writerow({
+                field: _csv_value(trade.get(field, ''))
+                for field in TRADE_CSV_FIELDS
+            })
+    return output_path
+
+
 def _trade_outcome_stats(trades: list) -> dict:
     closed_trades = [
         trade for trade in trades
@@ -341,6 +381,22 @@ def _trade_net_profit(trade: dict) -> float:
     if 'net_profit' in trade:
         return trade.get('net_profit', 0)
     return trade.get('profit', 0) - trade.get('entry_commission', 0)
+
+
+def _serialize_trades(trades: list) -> list:
+    return [
+        {
+            key: _csv_value(value)
+            for key, value in trade.items()
+        }
+        for trade in trades
+    ]
+
+
+def _csv_value(value):
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return value
 
 
 def _drawdown_stats(equity_curve: list, initial_capital: float) -> dict:
