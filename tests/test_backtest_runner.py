@@ -13,6 +13,7 @@ from backtest.runner import (
     sample_grid_history,
     sample_rotation_history,
     write_equity_curve_csv,
+    write_trades_csv,
     _drawdown_stats,
     _trade_outcome_stats,
 )
@@ -63,6 +64,11 @@ def test_backtest_runner_executes_grid_buy_sell_cycle():
     assert result['max_drawdown_start'] == '2026-01-01'
     assert result['max_drawdown_end'] == '2026-01-01'
     assert len(result['equity_curve']) == 3
+    assert [trade['action'] for trade in result['trades']] == ['buy', 'sell']
+    assert [trade['timestamp'] for trade in result['trades']] == [
+        '2026-01-02',
+        '2026-01-03',
+    ]
     assert '510300' not in result['portfolio']['positions']
 
 
@@ -713,6 +719,43 @@ def test_write_equity_curve_csv_writes_header_and_rows(tmp_path):
     ]
 
 
+def test_write_trades_csv_writes_optional_sell_fields(tmp_path):
+    output_file = tmp_path / 'nested' / 'trades.csv'
+
+    written_path = write_trades_csv(str(output_file), [
+        {
+            'timestamp': '2026-01-01T09:30:00',
+            'action': 'buy',
+            'symbol': '510300',
+            'price': 3.9,
+            'shares': 1000,
+            'amount': 3900.0,
+            'commission': 1.17,
+        },
+        {
+            'timestamp': '2026-01-02T09:30:00',
+            'action': 'sell',
+            'symbol': '510300',
+            'price': 4.1,
+            'shares': 1000,
+            'amount': 4100.0,
+            'commission': 1.23,
+            'entry_commission': 1.17,
+            'profit': 198.77,
+            'net_profit': 197.6,
+        },
+    ])
+
+    assert written_path == output_file
+    with output_file.open(newline='', encoding='utf-8') as file:
+        rows = list(csv.DictReader(file))
+    assert rows[0]['action'] == 'buy'
+    assert rows[0]['entry_commission'] == ''
+    assert rows[1]['action'] == 'sell'
+    assert rows[1]['entry_commission'] == '1.17'
+    assert rows[1]['net_profit'] == '197.6'
+
+
 def test_cli_backtest_smoke_outputs_markdown_report():
     completed = subprocess.run(
         [sys.executable, str(Path('cli') / 'commands.py'), 'backtest', '--strategy', 'grid'],
@@ -758,6 +801,37 @@ def test_cli_backtest_exports_equity_curve_csv(tmp_path):
     assert float(rows[0]['total_value']) == pytest.approx(100000.0)
     assert float(rows[0]['pnl']) == pytest.approx(0.0)
     assert float(rows[0]['pnl_percent']) == pytest.approx(0.0)
+
+
+def test_cli_backtest_exports_trades_csv(tmp_path):
+    output_file = tmp_path / 'grid-trades.csv'
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'grid',
+            '--trades-output',
+            str(output_file),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert f'成交明细 CSV: {output_file}' in completed.stdout
+    with output_file.open(newline='', encoding='utf-8') as file:
+        rows = list(csv.DictReader(file))
+    assert [row['action'] for row in rows] == ['buy', 'sell']
+    assert [row['timestamp'] for row in rows] == [
+        '2026-01-02',
+        '2026-01-03',
+    ]
+    assert rows[0]['symbol'] == '510300'
+    assert float(rows[0]['amount']) > 0
+    assert float(rows[1]['net_profit']) > 0
 
 
 def test_cli_backtest_accepts_slippage_rate():
@@ -850,6 +924,37 @@ def test_cli_rotation_backtest_exports_equity_curve_csv(tmp_path):
     assert set(rows[0]) == {'date', 'total_value', 'pnl', 'pnl_percent'}
     assert float(rows[0]['total_value']) > 0
     assert float(rows[0]['pnl']) < 0
+
+
+def test_cli_rotation_backtest_exports_trades_csv(tmp_path):
+    output_file = tmp_path / 'rotation-trades.csv'
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'rotation',
+            '--trades-output',
+            str(output_file),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert f'成交明细 CSV: {output_file}' in completed.stdout
+    with output_file.open(newline='', encoding='utf-8') as file:
+        rows = list(csv.DictReader(file))
+    assert [row['action'] for row in rows] == ['buy', 'sell', 'buy']
+    assert [row['timestamp'] for row in rows] == [
+        '2026-01-01',
+        '2026-01-02',
+        '2026-01-02',
+    ]
+    assert {row['symbol'] for row in rows} == {'510300', '510500'}
+    assert rows[1]['entry_commission']
 
 
 def test_cli_rotation_backtest_date_range_limits_report_period():
