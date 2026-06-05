@@ -64,6 +64,9 @@ def test_backtest_runner_executes_grid_buy_sell_cycle():
     assert result['max_drawdown_start'] == '2026-01-01'
     assert result['max_drawdown_end'] == '2026-01-01'
     assert len(result['equity_curve']) == 3
+    assert result['equity_curve'][0]['period_return'] == pytest.approx(0.0)
+    assert result['equity_curve'][0]['drawdown'] == pytest.approx(0.0)
+    assert result['equity_curve'][1]['drawdown'] >= 0
     assert [trade['action'] for trade in result['trades']] == ['buy', 'sell']
     assert [trade['timestamp'] for trade in result['trades']] == [
         '2026-01-02',
@@ -691,12 +694,16 @@ def test_write_equity_curve_csv_writes_header_and_rows(tmp_path):
             'total_value': 100000.0,
             'pnl': 0.0,
             'pnl_percent': 0.0,
+            'period_return': 0.0,
+            'drawdown': 0.0,
         },
         {
             'date': '2026-01-02',
             'total_value': 100500.5,
             'pnl': 500.5,
             'pnl_percent': 0.5005,
+            'period_return': 0.005005,
+            'drawdown': 0.0,
         },
     ])
 
@@ -709,12 +716,16 @@ def test_write_equity_curve_csv_writes_header_and_rows(tmp_path):
             'total_value': '100000.0',
             'pnl': '0.0',
             'pnl_percent': '0.0',
+            'period_return': '0.0',
+            'drawdown': '0.0',
         },
         {
             'date': '2026-01-02',
             'total_value': '100500.5',
             'pnl': '500.5',
             'pnl_percent': '0.5005',
+            'period_return': '0.005005',
+            'drawdown': '0.0',
         },
     ]
 
@@ -797,10 +808,19 @@ def test_cli_backtest_exports_equity_curve_csv(tmp_path):
         '2026-01-02',
         '2026-01-03',
     ]
-    assert set(rows[0]) == {'date', 'total_value', 'pnl', 'pnl_percent'}
+    assert set(rows[0]) == {
+        'date',
+        'total_value',
+        'pnl',
+        'pnl_percent',
+        'period_return',
+        'drawdown',
+    }
     assert float(rows[0]['total_value']) == pytest.approx(100000.0)
     assert float(rows[0]['pnl']) == pytest.approx(0.0)
     assert float(rows[0]['pnl_percent']) == pytest.approx(0.0)
+    assert float(rows[0]['period_return']) == pytest.approx(0.0)
+    assert float(rows[0]['drawdown']) == pytest.approx(0.0)
 
 
 def test_cli_backtest_exports_trades_csv(tmp_path):
@@ -921,9 +941,18 @@ def test_cli_rotation_backtest_exports_equity_curve_csv(tmp_path):
         '2026-01-01',
         '2026-01-02',
     ]
-    assert set(rows[0]) == {'date', 'total_value', 'pnl', 'pnl_percent'}
+    assert set(rows[0]) == {
+        'date',
+        'total_value',
+        'pnl',
+        'pnl_percent',
+        'period_return',
+        'drawdown',
+    }
     assert float(rows[0]['total_value']) > 0
     assert float(rows[0]['pnl']) < 0
+    assert float(rows[0]['period_return']) < 0
+    assert float(rows[0]['drawdown']) > 0
 
 
 def test_cli_rotation_backtest_exports_trades_csv(tmp_path):
