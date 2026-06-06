@@ -96,6 +96,9 @@ python cli\commands.py backtest --strategy rotation --equity-output data\rotatio
 python cli\commands.py backtest --strategy rotation --trades-output data\rotation-trades.csv
 ```
 
+权益曲线 CSV 字段：`date,total_value,pnl,pnl_percent,period_return,drawdown`。
+成交明细 CSV 字段：`timestamp,action,symbol,price,shares,amount,commission,entry_commission,profit,net_profit`。
+
 使用 CSV 历史行情回测：
 
 ```powershell

@@ -8,7 +8,14 @@ from execution.simulator import Simulator
 
 
 REQUIRED_CSV_FIELDS = ('date', 'open', 'high', 'low', 'close', 'volume', 'amount')
-EQUITY_CURVE_CSV_FIELDS = ('date', 'total_value', 'pnl', 'pnl_percent')
+EQUITY_CURVE_CSV_FIELDS = (
+    'date',
+    'total_value',
+    'pnl',
+    'pnl_percent',
+    'period_return',
+    'drawdown',
+)
 TRADE_CSV_FIELDS = (
     'timestamp',
     'action',
@@ -73,6 +80,10 @@ class BacktestRunner:
             })
 
         final_portfolio = self.executor.get_portfolio({self.strategy.symbol: last_quote['price']})
+        self.equity_curve = _annotate_equity_curve(
+            self.equity_curve,
+            self.executor.initial_capital,
+        )
 
         drawdown_stats = _drawdown_stats(
             self.equity_curve,
@@ -217,6 +228,10 @@ class RotationBacktestRunner:
 
         final_market_data = self._snapshot_to_market_data(last_snapshot)
         final_portfolio = self.executor.get_portfolio(self._current_prices(final_market_data))
+        self.equity_curve = _annotate_equity_curve(
+            self.equity_curve,
+            self.executor.initial_capital,
+        )
 
         drawdown_stats = _drawdown_stats(
             self.equity_curve,
@@ -339,6 +354,8 @@ def write_equity_curve_csv(path: str, equity_curve: list) -> Path:
                 'total_value': point.get('total_value', 0),
                 'pnl': point.get('pnl', 0),
                 'pnl_percent': point.get('pnl_percent', 0),
+                'period_return': point.get('period_return', 0),
+                'drawdown': point.get('drawdown', 0),
             })
     return output_path
 
@@ -397,6 +414,29 @@ def _csv_value(value):
     if isinstance(value, datetime):
         return value.isoformat()
     return value
+
+
+def _annotate_equity_curve(equity_curve: list, initial_capital: float) -> list:
+    annotated = []
+    peak = initial_capital
+    previous_value = initial_capital
+
+    for point in equity_curve:
+        value = point['total_value']
+        peak = max(peak, value)
+        period_return = (
+            (value - previous_value) / previous_value
+            if previous_value else 0.0
+        )
+        drawdown = (peak - value) / peak if peak > 0 else 0.0
+        annotated.append({
+            **point,
+            'period_return': period_return,
+            'drawdown': drawdown,
+        })
+        previous_value = value
+
+    return annotated
 
 
 def _drawdown_stats(equity_curve: list, initial_capital: float) -> dict:
