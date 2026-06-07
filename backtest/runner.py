@@ -89,6 +89,10 @@ class BacktestRunner:
             self.equity_curve,
             self.executor.initial_capital,
         )
+        cost_stats = _trade_cost_stats(
+            self.executor.trades,
+            self.executor.initial_capital,
+        )
 
         return {
             'strategy': self.strategy.name,
@@ -103,6 +107,7 @@ class BacktestRunner:
             **drawdown_stats,
             'trade_count': len(self.executor.trades),
             **_trade_outcome_stats(self.executor.trades),
+            **cost_stats,
             'slippage_rate': self.slippage_rate,
             'realized_pnl': final_portfolio['realized_pnl'],
             'portfolio': final_portfolio,
@@ -123,6 +128,8 @@ class BacktestRunner:
             f"- 最大回撤区间: {result['max_drawdown_start']} 至 {result['max_drawdown_end']}",
             f"- 交易次数: {result['trade_count']}",
             f"- 胜率: {result['win_rate']:.2%}",
+            f"- 总手续费: {result['total_commission']:.2f}",
+            f"- 手续费占初始资金: {result['commission_ratio']:.4%}",
             f"- 滑点: {result['slippage_rate']:.2%}",
             f"- 已实现盈亏: {result['realized_pnl']:.2f}",
         ]
@@ -237,6 +244,10 @@ class RotationBacktestRunner:
             self.equity_curve,
             self.executor.initial_capital,
         )
+        cost_stats = _trade_cost_stats(
+            self.executor.trades,
+            self.executor.initial_capital,
+        )
 
         return {
             'strategy': self.strategy.name,
@@ -251,6 +262,7 @@ class RotationBacktestRunner:
             **drawdown_stats,
             'trade_count': len(self.executor.trades),
             **_trade_outcome_stats(self.executor.trades),
+            **cost_stats,
             'slippage_rate': self.slippage_rate,
             'realized_pnl': final_portfolio['realized_pnl'],
             'portfolio': final_portfolio,
@@ -271,6 +283,8 @@ class RotationBacktestRunner:
             f"- 最大回撤区间: {result['max_drawdown_start']} 至 {result['max_drawdown_end']}",
             f"- 交易次数: {result['trade_count']}",
             f"- 胜率: {result['win_rate']:.2%}",
+            f"- 总手续费: {result['total_commission']:.2f}",
+            f"- 手续费占初始资金: {result['commission_ratio']:.4%}",
             f"- 滑点: {result['slippage_rate']:.2%}",
             f"- 已实现盈亏: {result['realized_pnl']:.2f}",
         ]
@@ -390,6 +404,20 @@ def _trade_outcome_stats(trades: list) -> dict:
         'win_rate': (
             len(winning_trades) / closed_trade_count
             if closed_trade_count else 0.0
+        ),
+    }
+
+
+def _trade_cost_stats(trades: list, initial_capital: float) -> dict:
+    total_commission = sum(
+        trade.get('commission', 0)
+        for trade in trades
+    )
+    return {
+        'total_commission': total_commission,
+        'commission_ratio': (
+            total_commission / initial_capital
+            if initial_capital > 0 else 0.0
         ),
     }
 

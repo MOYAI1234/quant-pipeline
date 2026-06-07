@@ -15,6 +15,7 @@ from backtest.runner import (
     write_equity_curve_csv,
     write_trades_csv,
     _drawdown_stats,
+    _trade_cost_stats,
     _trade_outcome_stats,
 )
 from strategy.grid_strategy import GridStrategy
@@ -58,6 +59,8 @@ def test_backtest_runner_executes_grid_buy_sell_cycle():
     assert result['closed_trade_count'] == 1
     assert result['winning_trade_count'] == 1
     assert result['win_rate'] == 1.0
+    assert result['total_commission'] == pytest.approx(2.4)
+    assert result['commission_ratio'] == pytest.approx(0.000024)
     assert result['realized_pnl'] > 0
     assert result['total_return'] > 0
     assert result['max_drawdown'] >= 0
@@ -109,6 +112,23 @@ def test_trade_outcome_stats_uses_net_profit_for_win_classification():
     assert stats['win_rate'] == 0.0
 
 
+def test_trade_cost_stats_does_not_double_count_entry_commission():
+    stats = _trade_cost_stats([
+        {
+            'action': 'buy',
+            'commission': 3.0,
+        },
+        {
+            'action': 'sell',
+            'commission': 3.0,
+            'entry_commission': 3.0,
+        },
+    ], initial_capital=10000)
+
+    assert stats['total_commission'] == pytest.approx(6.0)
+    assert stats['commission_ratio'] == pytest.approx(0.0006)
+
+
 def test_rotation_backtest_runner_buys_then_rotates_to_new_leader():
     runner = RotationBacktestRunner(_rotation_strategy(), {
         'initial_capital': 100000,
@@ -124,6 +144,8 @@ def test_rotation_backtest_runner_buys_then_rotates_to_new_leader():
     assert result['closed_trade_count'] == 1
     assert result['winning_trade_count'] == 0
     assert result['win_rate'] == 0.0
+    assert result['total_commission'] > 0
+    assert result['commission_ratio'] > 0
     assert len(result['equity_curve']) == 2
     assert '510300' not in result['portfolio']['positions']
     assert '510500' in result['portfolio']['positions']
@@ -778,6 +800,8 @@ def test_cli_backtest_smoke_outputs_markdown_report():
     assert '# 回测报告 - 网格回测' in completed.stdout
     assert '- 交易次数: 2' in completed.stdout
     assert '- 胜率: 100.00%' in completed.stdout
+    assert '- 总手续费:' in completed.stdout
+    assert '- 手续费占初始资金:' in completed.stdout
     assert '- 滑点: 0.00%' in completed.stdout
     assert '- 最大回撤区间:' in completed.stdout
 
@@ -912,6 +936,8 @@ def test_cli_rotation_backtest_smoke_outputs_markdown_report():
     assert '- 标的池: 510300,510500,159915' in completed.stdout
     assert '- 交易次数: 3' in completed.stdout
     assert '- 胜率: 0.00%' in completed.stdout
+    assert '- 总手续费:' in completed.stdout
+    assert '- 手续费占初始资金:' in completed.stdout
     assert '- 滑点: 0.00%' in completed.stdout
     assert '- 最大回撤区间:' in completed.stdout
 
