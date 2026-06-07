@@ -1,4 +1,5 @@
 import csv
+import math
 import subprocess
 import sys
 from pathlib import Path
@@ -521,6 +522,105 @@ def test_backtest_runner_accepts_chronological_intraday_history():
 
     assert result['start_date'] == '2026-01-01T09:30:00'
     assert result['end_date'] == '2026-01-01T10:00:00'
+
+
+def test_backtest_runner_accepts_price_only_history():
+    runner = BacktestRunner(_grid_strategy())
+
+    result = runner.run([{
+        'date': '2026-01-01',
+        'price': 4.0,
+    }])
+
+    assert result['start_date'] == '2026-01-01'
+    assert result['final_value'] == result['initial_capital']
+
+
+def test_backtest_runner_rejects_non_positive_price():
+    runner = BacktestRunner(_grid_strategy())
+    bar = dict(sample_grid_history()[0], close=0)
+
+    with pytest.raises(
+        ValueError,
+        match='history 第 1 条字段 close/price 必须大于 0',
+    ):
+        runner.run([bar])
+
+
+@pytest.mark.parametrize(
+    ('field', 'value', 'label'),
+    [
+        ('close', math.nan, 'close/price'),
+        ('high', math.inf, 'high'),
+    ],
+)
+def test_backtest_runner_rejects_non_finite_prices(field, value, label):
+    runner = BacktestRunner(_grid_strategy())
+    bar = dict(sample_grid_history()[0], **{field: value})
+
+    with pytest.raises(
+        ValueError,
+        match=f'history 第 1 条字段 {label} 必须是有限数字',
+    ):
+        runner.run([bar])
+
+
+def test_backtest_runner_rejects_high_below_low():
+    runner = BacktestRunner(_grid_strategy())
+    bar = dict(
+        sample_grid_history()[0],
+        open=3.95,
+        high=3.9,
+        low=4.0,
+        close=3.95,
+    )
+
+    with pytest.raises(ValueError, match='history 第 1 条 high 不能小于 low'):
+        runner.run([bar])
+
+
+def test_backtest_runner_rejects_close_outside_bar_range():
+    runner = BacktestRunner(_grid_strategy())
+    bar = dict(sample_grid_history()[0], close=4.1)
+
+    with pytest.raises(
+        ValueError,
+        match='history 第 1 条 close/price 必须在 low 和 high 之间',
+    ):
+        runner.run([bar])
+
+
+def test_backtest_runner_rejects_open_outside_bar_range():
+    runner = BacktestRunner(_grid_strategy())
+    bar = dict(sample_grid_history()[0], open=4.1)
+
+    with pytest.raises(
+        ValueError,
+        match='history 第 1 条 open 必须在 low 和 high 之间',
+    ):
+        runner.run([bar])
+
+
+def test_backtest_runner_rejects_negative_volume():
+    runner = BacktestRunner(_grid_strategy())
+    bar = dict(sample_grid_history()[0], volume=-1)
+
+    with pytest.raises(
+        ValueError,
+        match='history 第 1 条字段 volume 不能小于 0',
+    ):
+        runner.run([bar])
+
+
+def test_backtest_runner_rejects_negative_amount():
+    runner = BacktestRunner(_grid_strategy())
+    bar = dict(sample_grid_history()[0], amount=-1)
+
+    with pytest.raises(
+        ValueError,
+        match='history 第 1 条字段 amount 不能小于 0',
+    ):
+        runner.run([bar])
 
 
 def test_backtest_runner_rejects_invalid_slippage_rate():
@@ -1161,6 +1261,33 @@ def test_cli_backtest_rejects_non_chronological_csv(tmp_path):
 
     assert completed.returncode == 2
     assert 'history 日期必须严格递增' in completed.stderr
+
+
+def test_cli_backtest_rejects_invalid_ohlc_csv(tmp_path):
+    history_file = tmp_path / 'history.csv'
+    history_file.write_text(
+        'date,open,high,low,close,volume,amount\n'
+        '2026-01-01,4.0,3.9,4.0,4.0,1000,4000\n',
+        encoding='utf-8',
+    )
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'grid',
+            '--history',
+            str(history_file),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 2
+    assert 'history 第 1 条 high 不能小于 low' in completed.stderr
 
 
 @pytest.mark.parametrize('option,value', [

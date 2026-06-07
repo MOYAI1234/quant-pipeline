@@ -51,8 +51,9 @@ class BacktestRunner:
         self.executor = Simulator(dict(self._account_config))
         self.equity_curve = []
         last_quote = None
-        for bar in history:
+        for index, bar in enumerate(history, start=1):
             quote = self._bar_to_quote(bar)
+            _validate_grid_quote(quote, index)
             last_quote = quote
             current_prices = {self.strategy.symbol: quote['price']}
             portfolio = self.executor.get_portfolio(current_prices)
@@ -531,6 +532,52 @@ def _validate_slippage_rate(value: float) -> float:
     ):
         raise ValueError('slippage_rate 必须在 0 到 1 之间，且小于 1')
     return float(value)
+
+
+def _validate_grid_quote(quote: dict, index: int) -> None:
+    for field in ('price', 'open', 'high', 'low'):
+        label = 'close/price' if field == 'price' else field
+        _validate_finite_number(
+            quote[field],
+            f'history 第 {index} 条字段 {label}',
+            positive=True,
+        )
+    for field in ('volume', 'amount'):
+        _validate_finite_number(
+            quote[field],
+            f'history 第 {index} 条字段 {field}',
+            non_negative=True,
+        )
+
+    if quote['high'] < quote['low']:
+        raise ValueError(f'history 第 {index} 条 high 不能小于 low')
+    if not quote['low'] <= quote['open'] <= quote['high']:
+        raise ValueError(
+            f'history 第 {index} 条 open 必须在 low 和 high 之间'
+        )
+    if not quote['low'] <= quote['price'] <= quote['high']:
+        raise ValueError(
+            f'history 第 {index} 条 close/price 必须在 low 和 high 之间'
+        )
+
+
+def _validate_finite_number(
+    value: int | float,
+    label: str,
+    *,
+    positive: bool = False,
+    non_negative: bool = False,
+) -> None:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(float(value))
+    ):
+        raise ValueError(f'{label} 必须是有限数字')
+    if positive and value <= 0:
+        raise ValueError(f'{label} 必须大于 0')
+    if non_negative and value < 0:
+        raise ValueError(f'{label} 不能小于 0')
 
 
 def filter_history_by_date(
