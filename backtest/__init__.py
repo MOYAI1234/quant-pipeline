@@ -6,6 +6,7 @@ from .runner import (
     sample_grid_history,
     sample_rotation_history,
     write_equity_curve_csv,
+    write_positions_csv,
     write_rejected_orders_csv,
     write_trades_csv,
 )
@@ -19,6 +20,7 @@ __all__ = [
     'sample_grid_history',
     'sample_rotation_history',
     'write_equity_curve_csv',
+    'write_positions_csv',
     'write_rejected_orders_csv',
     'write_trades_csv',
     'TradingCalendar',

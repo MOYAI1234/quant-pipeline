@@ -40,6 +40,17 @@ REJECTED_ORDER_CSV_FIELDS = (
     'reason',
     'signal_reason',
 )
+POSITION_CSV_FIELDS = (
+    'date',
+    'symbol',
+    'shares',
+    'avg_price',
+    'cost',
+    'commission',
+    'current_price',
+    'market_value',
+    'unrealized_pnl',
+)
 
 
 class BacktestRunner:
@@ -62,6 +73,7 @@ class BacktestRunner:
         )
         self.executor = None
         self.equity_curve = []
+        self.positions_curve = []
         self.rejected_orders = []
 
     def run(self, history: list) -> dict:
@@ -73,6 +85,7 @@ class BacktestRunner:
         self.strategy = copy.deepcopy(self._strategy_template)
         self.executor = Simulator(dict(self._account_config))
         self.equity_curve = []
+        self.positions_curve = []
         self.rejected_orders = []
         last_quote = None
         for index, bar in enumerate(history, start=1):
@@ -128,6 +141,9 @@ class BacktestRunner:
                 'pnl': portfolio['pnl'],
                 'pnl_percent': portfolio['pnl_percent'],
             })
+            self.positions_curve.extend(
+                _serialize_portfolio_positions(quote['timestamp'], portfolio)
+            )
 
         final_portfolio = self.executor.get_portfolio({self.strategy.symbol: last_quote['price']})
         self.equity_curve = _annotate_equity_curve(
@@ -164,6 +180,7 @@ class BacktestRunner:
             'realized_pnl': final_portfolio['realized_pnl'],
             'portfolio': final_portfolio,
             'equity_curve': list(self.equity_curve),
+            'positions_curve': list(self.positions_curve),
             'trades': _serialize_trades(self.executor.trades),
         }
 
@@ -260,6 +277,7 @@ class RotationBacktestRunner:
         )
         self.executor = None
         self.equity_curve = []
+        self.positions_curve = []
         self.rejected_orders = []
 
     def run(self, history: list) -> dict:
@@ -271,6 +289,7 @@ class RotationBacktestRunner:
         self.strategy = copy.deepcopy(self._strategy_template)
         self.executor = Simulator(dict(self._account_config))
         self.equity_curve = []
+        self.positions_curve = []
         self.rejected_orders = []
         last_snapshot = None
         for snapshot in history:
@@ -327,6 +346,12 @@ class RotationBacktestRunner:
                 'pnl': portfolio['pnl'],
                 'pnl_percent': portfolio['pnl_percent'],
             })
+            self.positions_curve.extend(
+                _serialize_portfolio_positions(
+                    snapshot.get('date', snapshot.get('timestamp', '')),
+                    portfolio,
+                )
+            )
 
         final_market_data = self._snapshot_to_market_data(last_snapshot)
         final_portfolio = self.executor.get_portfolio(self._current_prices(final_market_data))
@@ -364,6 +389,7 @@ class RotationBacktestRunner:
             'realized_pnl': final_portfolio['realized_pnl'],
             'portfolio': final_portfolio,
             'equity_curve': list(self.equity_curve),
+            'positions_curve': list(self.positions_curve),
             'trades': _serialize_trades(self.executor.trades),
         }
 
@@ -517,6 +543,20 @@ def write_rejected_orders_csv(path: str, rejected_orders: list) -> Path:
     return output_path
 
 
+def write_positions_csv(path: str, positions_curve: list) -> Path:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open('w', newline='', encoding='utf-8') as file:
+        writer = csv.DictWriter(file, fieldnames=POSITION_CSV_FIELDS)
+        writer.writeheader()
+        for position in positions_curve:
+            writer.writerow({
+                field: _csv_value(position.get(field, ''))
+                for field in POSITION_CSV_FIELDS
+            })
+    return output_path
+
+
 def _trade_outcome_stats(trades: list) -> dict:
     closed_trades = [
         trade for trade in trades
@@ -575,6 +615,24 @@ def _serialize_rejected_order(
         'reason': reason,
         'signal_reason': signal.get('reason', ''),
     }
+
+
+def _serialize_portfolio_positions(date_value: str, portfolio: dict) -> list:
+    positions = portfolio.get('positions', {})
+    return [
+        {
+            'date': date_value,
+            'symbol': symbol,
+            'shares': position.get('shares', 0),
+            'avg_price': position.get('avg_price', 0),
+            'cost': position.get('cost', 0),
+            'commission': position.get('commission', 0),
+            'current_price': position.get('current_price', 0),
+            'market_value': position.get('market_value', 0),
+            'unrealized_pnl': position.get('unrealized_pnl', 0),
+        }
+        for symbol, position in sorted(positions.items())
+    ]
 
 
 def _render_rejection_reasons(reasons: dict) -> str:
