@@ -14,6 +14,7 @@ from backtest.runner import (
     sample_grid_history,
     sample_rotation_history,
     write_equity_curve_csv,
+    write_rejected_orders_csv,
     write_trades_csv,
     _build_volume_limits,
     _consume_signal_volume,
@@ -1071,6 +1072,50 @@ def test_write_trades_csv_writes_optional_sell_fields(tmp_path):
     assert rows[1]['net_profit'] == '197.6'
 
 
+def test_write_rejected_orders_csv_writes_reason_fields(tmp_path):
+    output_file = tmp_path / 'nested' / 'rejections.csv'
+
+    written_path = write_rejected_orders_csv(str(output_file), [
+        {
+            'timestamp': '2026-01-02',
+            'action': 'buy',
+            'symbol': '510300',
+            'price': 3.9,
+            'shares': 1000,
+            'amount': 3900.0,
+            'reason': 'volume_limit',
+            'signal_reason': '网格买入，价格3.9',
+        },
+        {
+            'timestamp': '2026-01-03',
+            'action': 'sell',
+            'symbol': '510300',
+            'price': 4.1,
+            'shares': 0,
+            'amount': 0,
+            'reason': 'executor_rejected',
+        },
+    ])
+
+    assert written_path == output_file
+    with output_file.open(newline='', encoding='utf-8') as file:
+        rows = list(csv.DictReader(file))
+    assert set(rows[0]) == {
+        'timestamp',
+        'action',
+        'symbol',
+        'price',
+        'shares',
+        'amount',
+        'reason',
+        'signal_reason',
+    }
+    assert rows[0]['reason'] == 'volume_limit'
+    assert rows[0]['signal_reason'] == '网格买入，价格3.9'
+    assert rows[1]['reason'] == 'executor_rejected'
+    assert rows[1]['signal_reason'] == ''
+
+
 def test_cli_backtest_smoke_outputs_markdown_report():
     completed = subprocess.run(
         [sys.executable, str(Path('cli') / 'commands.py'), 'backtest', '--strategy', 'grid'],
@@ -1158,6 +1203,72 @@ def test_cli_backtest_exports_trades_csv(tmp_path):
     assert rows[0]['symbol'] == '510300'
     assert float(rows[0]['amount']) > 0
     assert float(rows[1]['net_profit']) > 0
+
+
+def test_cli_backtest_exports_rejected_orders_csv(tmp_path):
+    output_file = tmp_path / 'grid-rejections.csv'
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'grid',
+            '--max-volume-participation',
+            '0.0001',
+            '--rejections-output',
+            str(output_file),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert f'拒单明细 CSV: {output_file}' in completed.stdout
+    with output_file.open(newline='', encoding='utf-8') as file:
+        rows = list(csv.DictReader(file))
+    assert len(rows) == 1
+    assert rows[0]['timestamp'] == '2026-01-02'
+    assert rows[0]['action'] == 'buy'
+    assert rows[0]['symbol'] == '510300'
+    assert rows[0]['reason'] == 'volume_limit'
+    assert rows[0]['signal_reason'] == '网格买入，价格3.9'
+
+
+def test_cli_backtest_exports_empty_rejected_orders_csv(tmp_path):
+    output_file = tmp_path / 'grid-rejections.csv'
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'grid',
+            '--rejections-output',
+            str(output_file),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert f'拒单明细 CSV: {output_file}' in completed.stdout
+    with output_file.open(newline='', encoding='utf-8') as file:
+        reader = csv.DictReader(file)
+        rows = list(reader)
+    assert rows == []
+    assert reader.fieldnames == [
+        'timestamp',
+        'action',
+        'symbol',
+        'price',
+        'shares',
+        'amount',
+        'reason',
+        'signal_reason',
+    ]
 
 
 def test_cli_backtest_accepts_slippage_rate():

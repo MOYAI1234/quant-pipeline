@@ -31,7 +31,7 @@ python cli\commands.py backtest --strategy rotation
 结果：
 
 - `compileall` 通过
-- `pytest` 通过，`247 passed`
+- `pytest` 通过，`250 passed`
 - CLI help 可用
 - CLI daily report 可生成包含数据源健康状态的空组合报告
 - CLI health 可输出数据源健康状态
@@ -188,7 +188,7 @@ PRD 将“可回测策略系统”列为阶段二交付物，但当前只有实�
 
 ### M2：回测引擎
 
-状态：已启动。当前已新增最小 `BacktestRunner`，支持单策略、单标的、历史 bar list/CSV 输入，并校验价格、成交量/成交额和 OHLC 区间一致性；并新增 `RotationBacktestRunner`，支持内置多 ETF 历史样例驱动行业轮动。两者均复用 `Simulator` 输出收益、最大回撤、最大回撤区间、交易次数、拒单次数与原因、按已平仓卖出统计的胜率、总手续费及其初始资金占比等基础指标；CLI 已增加 `backtest --strategy grid|rotation`，并支持 `--start-date` / `--end-date` 过滤回测区间、历史日期/盘中时间严格递增校验、可选严格交易日历、`--slippage-rate` 比例滑点、`--max-volume-participation` 成交量参与率限制、`--equity-output` 权益曲线 CSV 导出和 `--trades-output` 成交明细 CSV 导出。权益曲线 CSV 已包含逐期收益率和回撤列。该能力仍是 M2 起步版，不包含交易所官方日历、部分成交、复杂组合回测、多策略编排和真实历史数据源。
+状态：已启动。当前已新增最小 `BacktestRunner`，支持单策略、单标的、历史 bar list/CSV 输入，并校验价格、成交量/成交额和 OHLC 区间一致性；并新增 `RotationBacktestRunner`，支持内置多 ETF 历史样例驱动行业轮动。两者均复用 `Simulator` 输出收益、最大回撤、最大回撤区间、交易次数、拒单次数与原因、按已平仓卖出统计的胜率、总手续费及其初始资金占比等基础指标；CLI 已增加 `backtest --strategy grid|rotation`，并支持 `--start-date` / `--end-date` 过滤回测区间、历史日期/盘中时间严格递增校验、可选严格交易日历、`--slippage-rate` 比例滑点、`--max-volume-participation` 成交量参与率限制、`--equity-output` 权益曲线 CSV 导出、`--trades-output` 成交明细 CSV 导出和 `--rejections-output` 拒单明细 CSV 导出。权益曲线 CSV 已包含逐期收益率和回撤列，拒单明细 CSV 会保留拒单归因和策略原始信号原因。该能力仍是 M2 起步版，不包含交易所官方日历、部分成交、复杂组合回测、多策略编排和真实历史数据源。
 
 目标：让策略在历史数据上可验证。
 
