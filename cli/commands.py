@@ -16,6 +16,7 @@ from backtest.runner import (
     sample_grid_history,
     sample_rotation_history,
     write_equity_curve_csv,
+    write_positions_csv,
     write_rejected_orders_csv,
     write_trades_csv,
 )
@@ -325,6 +326,12 @@ def _write_backtest_outputs(args, result: dict) -> None:
             result['trades'],
         )
         print(f"成交明细 CSV: {trades_path}")
+    if args.positions_output:
+        positions_path = write_positions_csv(
+            str(_resolve_project_path(args.positions_output)),
+            result['positions_curve'],
+        )
+        print(f"持仓明细 CSV: {positions_path}")
     if args.rejections_output:
         rejections_path = write_rejected_orders_csv(
             str(_resolve_project_path(args.rejections_output)),
@@ -590,6 +597,7 @@ def main():
     )
     backtest_parser.add_argument('--equity-output', type=str, help='导出权益曲线 CSV 路径')
     backtest_parser.add_argument('--trades-output', type=str, help='导出成交明细 CSV 路径')
+    backtest_parser.add_argument('--positions-output', type=str, help='导出逐期持仓明细 CSV 路径')
     backtest_parser.add_argument('--rejections-output', type=str, help='导出拒单明细 CSV 路径')
     backtest_parser.add_argument('--etf-pool', type=str, help='ETF池，逗号分隔')
     backtest_parser.add_argument('--lookback', type=int, help='轮动回看周期')
