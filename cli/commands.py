@@ -34,6 +34,7 @@ DEFAULT_BACKTEST_SHARES_PER_GRID = 1000
 DEFAULT_BACKTEST_INITIAL_CAPITAL = 100000
 DEFAULT_BACKTEST_COMMISSION_RATE = 0.0003
 DEFAULT_BACKTEST_SLIPPAGE_RATE = 0.0
+DEFAULT_BACKTEST_MAX_VOLUME_PARTICIPATION = None
 DEFAULT_BACKTEST_ETF_POOL = ['510300', '510500', '159915']
 DEFAULT_BACKTEST_ROTATION_LOOKBACK = 3
 DEFAULT_BACKTEST_ROTATION_TOP_N = 1
@@ -135,6 +136,13 @@ def cmd_backtest(args):
         _value_or_default(args.slippage_rate, DEFAULT_BACKTEST_SLIPPAGE_RATE),
         '--slippage-rate',
     )
+    max_volume_participation = _volume_participation(
+        _value_or_default(
+            args.max_volume_participation,
+            DEFAULT_BACKTEST_MAX_VOLUME_PARTICIPATION,
+        ),
+        '--max-volume-participation',
+    )
     trading_calendar = _build_trading_calendar(args)
 
     if args.strategy == 'grid':
@@ -143,6 +151,7 @@ def cmd_backtest(args):
             initial_capital,
             commission_rate,
             slippage_rate,
+            max_volume_participation,
             trading_calendar,
         )
     elif args.strategy == 'rotation':
@@ -151,6 +160,7 @@ def cmd_backtest(args):
             initial_capital,
             commission_rate,
             slippage_rate,
+            max_volume_participation,
             trading_calendar,
         )
 
@@ -160,6 +170,7 @@ def _run_grid_backtest(
     initial_capital: float,
     commission_rate: float,
     slippage_rate: float,
+    max_volume_participation: float | None,
     trading_calendar: TradingCalendar | None,
 ):
     symbol = _resolve_symbol(args.symbol)
@@ -201,6 +212,7 @@ def _run_grid_backtest(
         'initial_capital': initial_capital,
         'commission_rate': commission_rate,
         'slippage_rate': slippage_rate,
+        'max_volume_participation': max_volume_participation,
     }, trading_calendar=trading_calendar)
     result = runner.run(history)
     print(runner.render_markdown(result))
@@ -212,6 +224,7 @@ def _run_rotation_backtest(
     initial_capital: float,
     commission_rate: float,
     slippage_rate: float,
+    max_volume_participation: float | None,
     trading_calendar: TradingCalendar | None,
 ):
     if args.history:
@@ -252,6 +265,7 @@ def _run_rotation_backtest(
         'initial_capital': initial_capital,
         'commission_rate': commission_rate,
         'slippage_rate': slippage_rate,
+        'max_volume_participation': max_volume_participation,
     }, trading_calendar=trading_calendar)
     result = runner.run(history)
     print(runner.render_markdown(result))
@@ -343,6 +357,17 @@ def _non_negative_number(value: float, option_name: str) -> float:
 def _slippage_rate(value: float, option_name: str) -> float:
     if not math.isfinite(value) or value < 0 or value >= 1:
         raise ValueError(f"{option_name} 必须在 0 到 1 之间，且小于 1")
+    return value
+
+
+def _volume_participation(
+    value: float | None,
+    option_name: str,
+) -> float | None:
+    if value is None:
+        return None
+    if not math.isfinite(value) or value <= 0 or value > 1:
+        raise ValueError(f"{option_name} 必须大于 0 且不大于 1")
     return value
 
 
@@ -536,6 +561,11 @@ def main():
     backtest_parser.add_argument('--initial-capital', type=float)
     backtest_parser.add_argument('--commission-rate', type=float)
     backtest_parser.add_argument('--slippage-rate', type=float)
+    backtest_parser.add_argument(
+        '--max-volume-participation',
+        type=float,
+        help='单标的单根 bar 最大成交量参与率，范围 (0, 1]',
+    )
     backtest_parser.add_argument(
         '--strict-trading-calendar',
         action='store_true',

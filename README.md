@@ -13,7 +13,7 @@ ETF 量化助手 Pipeline，目标是把数据适配、策略生成、风控检�
 - `DataManager` 会校验实时行情、净值和历史行情的基础字段、数值类型和可选时效契约；字段缺失、返回 shape 错误或启用时效校验后的过期数据会抛出 `DataFetchError`，避免脏数据继续进入策略链路。
 - `execution/Simulator` 是简化成交模型，支持整手、手续费、均价、持仓和市值估算；`OrderManager` 会记录 pipeline 内部订单的 pending/filled/failed/rejected 状态，但不包含真实券商撮合、滑点和报单回报同步。
 - `monitor/AlertManager` 已支持结构化告警事件和可选 JSONL 文件输出，日报/周报会展示最近告警摘要；当前还未接飞书、邮件等外部通知通道。
-- `backtest/BacktestRunner` 已支持最小 grid 历史样例回测和 OHLC 数据质量校验，`RotationBacktestRunner` 已支持内置多 ETF 轮动样例回测，并复用 `Simulator` 输出收益、最大回撤、最大回撤区间、交易次数、胜率、总手续费及其占初始资金占比、权益曲线/成交明细 CSV 导出、可配置滑点和可选严格交易日历等基础指标；当前还不是完整回测系统，不含交易所官方日历、复杂组合和真实历史数据源。
+- `backtest/BacktestRunner` 已支持最小 grid 历史样例回测和 OHLC 数据质量校验，`RotationBacktestRunner` 已支持内置多 ETF 轮动样例回测，并复用 `Simulator` 输出收益、最大回撤、最大回撤区间、交易次数、胜率、总手续费及其占初始资金占比、权益曲线/成交明细 CSV 导出、可配置滑点、可选成交量参与率限制和可选严格交易日历等基础指标；当前还不是完整回测系统，不含交易所官方日历、部分成交、复杂组合和真实历史数据源。
 - `persistence/JsonStateStore` 已支持保存和恢复 `Simulator`、`GridStrategy`、`RotationStrategy`、`OrderManager` 的 JSON 快照和运行 metadata，并提供旧版无顶层 `version` 状态到 v1 的最小迁移入口；`QuantPipeline` 默认会在启动时恢复、停止时保存到 `data/state.json`，但完整多版本迁移和 SQLite 存储仍未实现。
 - QMT/实盘执行、API、Web、完整回测引擎仍未实现。
 
@@ -84,6 +84,7 @@ python cli\commands.py config validate --config path\to\config.json
 python cli\commands.py backtest --strategy grid
 python cli\commands.py backtest --strategy grid --start-date 2026-01-02 --end-date 2026-01-03
 python cli\commands.py backtest --strategy grid --slippage-rate 0.001
+python cli\commands.py backtest --strategy grid --max-volume-participation 0.05
 python cli\commands.py backtest --strategy grid --history path\to\history.csv --strict-trading-calendar
 python cli\commands.py backtest --strategy grid --history path\to\history.csv --strict-trading-calendar --holiday 2026-01-02
 python cli\commands.py backtest --strategy grid --equity-output data\grid-equity.csv
@@ -108,6 +109,8 @@ python cli\commands.py backtest --strategy grid --history path\to\history.csv
 ```
 
 严格交易日历默认按周一至周五判断；`--holiday YYYY-MM-DD` 可重复指定额外休市日，`--trading-day YYYY-MM-DD` 可显式覆盖周末或休市日。未启用 `--strict-trading-calendar` 时保持原有行为，不额外拒绝历史日期。
+
+`--max-volume-participation` 可选范围为 `(0, 1]`，限制同一根 bar 内单标的全部买入和卖出成交合计最多占该 bar 成交量的比例。超限订单（含卖出订单）当前整笔按不成交处理，不进行部分成交；少于 100 股的非整手信号也会被拒绝。未配置时保持原有无限流动性假设。
 
 CSV 字段：`date,open,high,low,close,volume,amount`。
 
