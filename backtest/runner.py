@@ -46,6 +46,9 @@ class BacktestRunner:
         self.slippage_rate = _validate_slippage_rate(
             self._account_config.get('slippage_rate', 0.0)
         )
+        self.max_volume_participation = _validate_volume_participation(
+            self._account_config.get('max_volume_participation')
+        )
         self.executor = None
         self.equity_curve = []
 
@@ -66,13 +69,25 @@ class BacktestRunner:
             current_prices = {self.strategy.symbol: quote['price']}
             portfolio = self.executor.get_portfolio(current_prices)
             signals = self._generate_signals(quote, portfolio)
+            volume_limits = _build_volume_limits(
+                {self.strategy.symbol: quote['volume']},
+                self.max_volume_participation,
+            )
 
             for signal in signals:
                 if not self._signal_executable(signal, quote):
                     continue
                 execution_signal = _apply_slippage(signal, self.slippage_rate)
+                if not _signal_within_volume_limit(
+                    execution_signal,
+                    volume_limits,
+                ):
+                    if hasattr(self.strategy, 'on_trade_failed'):
+                        self.strategy.on_trade_failed(signal)
+                    continue
                 previous_trade_count = len(self.executor.trades)
                 if self.executor.execute_order(execution_signal):
+                    _consume_signal_volume(execution_signal, volume_limits)
                     self._stamp_new_trades(previous_trade_count, quote['timestamp'])
                     self.strategy.record_trade(execution_signal)
                     if hasattr(self.strategy, 'on_trade_confirmed'):
@@ -118,6 +133,7 @@ class BacktestRunner:
             **_trade_outcome_stats(self.executor.trades),
             **cost_stats,
             'slippage_rate': self.slippage_rate,
+            'max_volume_participation': self.max_volume_participation,
             'realized_pnl': final_portfolio['realized_pnl'],
             'portfolio': final_portfolio,
             'equity_curve': list(self.equity_curve),
@@ -140,6 +156,7 @@ class BacktestRunner:
             f"- 总手续费: {result['total_commission']:.2f}",
             f"- 手续费占初始资金: {result['commission_ratio']:.4%}",
             f"- 滑点: {result['slippage_rate']:.2%}",
+            _render_volume_participation(result['max_volume_participation']),
             f"- 已实现盈亏: {result['realized_pnl']:.2f}",
         ]
         return "\n".join(lines)
@@ -210,6 +227,9 @@ class RotationBacktestRunner:
         self.slippage_rate = _validate_slippage_rate(
             self._account_config.get('slippage_rate', 0.0)
         )
+        self.max_volume_participation = _validate_volume_participation(
+            self._account_config.get('max_volume_participation')
+        )
         self.executor = None
         self.equity_curve = []
 
@@ -229,11 +249,27 @@ class RotationBacktestRunner:
             current_prices = self._current_prices(market_data)
             portfolio = self.executor.get_portfolio(current_prices)
             signals = self.strategy.generate_signal(market_data, portfolio)
+            volume_limits = _build_volume_limits(
+                {
+                    symbol: data.get('volume', 0)
+                    for symbol, data in market_data.items()
+                    if isinstance(data, dict)
+                },
+                self.max_volume_participation,
+            )
 
             for signal in signals:
                 execution_signal = _apply_slippage(signal, self.slippage_rate)
+                if not _signal_within_volume_limit(
+                    execution_signal,
+                    volume_limits,
+                ):
+                    if hasattr(self.strategy, 'on_trade_failed'):
+                        self.strategy.on_trade_failed(execution_signal)
+                    continue
                 previous_trade_count = len(self.executor.trades)
                 if self.executor.execute_order(execution_signal):
+                    _consume_signal_volume(execution_signal, volume_limits)
                     self._stamp_new_trades(previous_trade_count, market_data['_date'])
                     self.strategy.record_trade(execution_signal)
                     if hasattr(self.strategy, 'on_trade_confirmed'):
@@ -280,6 +316,7 @@ class RotationBacktestRunner:
             **_trade_outcome_stats(self.executor.trades),
             **cost_stats,
             'slippage_rate': self.slippage_rate,
+            'max_volume_participation': self.max_volume_participation,
             'realized_pnl': final_portfolio['realized_pnl'],
             'portfolio': final_portfolio,
             'equity_curve': list(self.equity_curve),
@@ -302,6 +339,7 @@ class RotationBacktestRunner:
             f"- 总手续费: {result['total_commission']:.2f}",
             f"- 手续费占初始资金: {result['commission_ratio']:.4%}",
             f"- 滑点: {result['slippage_rate']:.2%}",
+            _render_volume_participation(result['max_volume_participation']),
             f"- 已实现盈亏: {result['realized_pnl']:.2f}",
         ]
         return "\n".join(lines)
@@ -317,6 +355,7 @@ class RotationBacktestRunner:
             market_data[symbol] = {
                 'price': self._required_snapshot_price(symbol, bar),
                 'prices': list(bar.get('prices', [])),
+                'volume': self._snapshot_volume(symbol, bar),
             }
         return market_data
 
@@ -332,6 +371,21 @@ class RotationBacktestRunner:
         if price is None or price <= 0:
             raise ValueError(f"rotation history 中 {symbol} 缺少有效价格")
         return price
+
+    def _snapshot_volume(self, symbol: str, bar: dict) -> int | float:
+        if self.max_volume_participation is not None:
+            if 'volume' not in bar:
+                raise ValueError(
+                    f'rotation history 中 {symbol} 缺少 volume 字段'
+                )
+            volume = bar['volume']
+            _validate_finite_number(
+                volume,
+                f'rotation history 中 {symbol} 字段 volume',
+                non_negative=True,
+            )
+            return volume
+        return bar.get('volume', 0)
 
     def _stamp_new_trades(self, previous_trade_count: int, timestamp: str) -> None:
         for trade in self.executor.trades[previous_trade_count:]:
@@ -549,6 +603,70 @@ def _validate_slippage_rate(value: float) -> float:
     return float(value)
 
 
+def _validate_volume_participation(value: float | None) -> float | None:
+    if value is None:
+        return None
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(float(value))
+        or value <= 0
+        or value > 1
+    ):
+        raise ValueError('max_volume_participation 必须大于 0 且不大于 1')
+    return float(value)
+
+
+def _build_volume_limits(
+    volumes: dict,
+    max_volume_participation: float | None,
+) -> dict | None:
+    if max_volume_participation is None:
+        return None
+    return {
+        symbol: volume * max_volume_participation
+        for symbol, volume in volumes.items()
+    }
+
+
+def _signal_within_volume_limit(
+    signal: dict,
+    volume_limits: dict | None,
+) -> bool:
+    if volume_limits is None:
+        return True
+    shares = _signal_shares(signal)
+    return shares > 0 and shares <= volume_limits.get(signal.get('symbol'), 0)
+
+
+def _consume_signal_volume(signal: dict, volume_limits: dict | None) -> None:
+    if volume_limits is None:
+        return
+    symbol = signal.get('symbol')
+    volume_limits[symbol] = max(
+        volume_limits.get(symbol, 0) - _signal_shares(signal),
+        0,
+    )
+
+
+def _signal_shares(signal: dict) -> int:
+    """按 Simulator 的 100 股整手规则计算参与率占用；不足整手返回 0。"""
+    shares = signal.get('shares', 0)
+    if shares > 0:
+        return int(shares / 100) * 100
+    price = signal.get('price', 0)
+    amount = signal.get('amount', 0)
+    if price <= 0 or amount <= 0:
+        return 0
+    return int(amount / price / 100) * 100
+
+
+def _render_volume_participation(value: float | None) -> str:
+    if value is None:
+        return '- 成交量参与率上限: 未启用'
+    return f'- 成交量参与率上限: {value:.2%}'
+
+
 def _validate_grid_quote(quote: dict, index: int) -> None:
     for field in ('price', 'open', 'high', 'low'):
         label = 'close/price' if field == 'price' else field
@@ -657,6 +775,7 @@ def _rotation_snapshot(date: str, prices_by_symbol: dict) -> dict:
             symbol: {
                 'close': prices[-1],
                 'prices': prices,
+                'volume': 1000000,
             }
             for symbol, prices in prices_by_symbol.items()
         },

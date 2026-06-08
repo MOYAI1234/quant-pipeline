@@ -15,7 +15,10 @@ from backtest.runner import (
     sample_rotation_history,
     write_equity_curve_csv,
     write_trades_csv,
+    _build_volume_limits,
+    _consume_signal_volume,
     _drawdown_stats,
+    _signal_within_volume_limit,
     _trade_cost_stats,
     _trade_outcome_stats,
 )
@@ -99,6 +102,66 @@ def test_backtest_runner_applies_slippage_to_execution_prices():
     assert runner.strategy.grid_ledger[3.9]['bought'] is False
 
 
+def test_backtest_runner_rejects_order_above_volume_participation_limit():
+    runner = BacktestRunner(_grid_strategy(), {
+        'initial_capital': 100000,
+        'max_volume_participation': 0.1,
+    })
+    bar = dict(sample_grid_history()[1], volume=5000)
+
+    result = runner.run([bar])
+
+    assert result['trade_count'] == 0
+    assert result['max_volume_participation'] == 0.1
+    assert runner.strategy.grid_ledger[3.9]['bought'] is False
+
+
+def test_backtest_runner_executes_order_at_volume_participation_limit():
+    runner = BacktestRunner(_grid_strategy(), {
+        'initial_capital': 100000,
+        'max_volume_participation': 0.1,
+    })
+    bar = dict(sample_grid_history()[1], volume=10000)
+
+    result = runner.run([bar])
+
+    assert result['trade_count'] == 1
+    assert result['trades'][0]['shares'] == 1000
+    assert result['max_volume_participation'] == 0.1
+
+
+@pytest.mark.parametrize('value', [0, -0.1, 1.1, math.nan, True])
+def test_backtest_runner_rejects_invalid_volume_participation(value):
+    with pytest.raises(
+        ValueError,
+        match='max_volume_participation 必须大于 0 且不大于 1',
+    ):
+        BacktestRunner(
+            _grid_strategy(),
+            {'max_volume_participation': value},
+        )
+
+
+def test_volume_participation_limit_is_shared_within_bar():
+    limits = _build_volume_limits({'510300': 10000}, 0.1)
+    first_order = {
+        'action': 'buy',
+        'symbol': '510300',
+        'price': 4.0,
+        'shares': 600,
+    }
+    second_order = {
+        'action': 'buy',
+        'symbol': '510300',
+        'price': 4.0,
+        'shares': 500,
+    }
+
+    assert _signal_within_volume_limit(first_order, limits)
+    _consume_signal_volume(first_order, limits)
+    assert not _signal_within_volume_limit(second_order, limits)
+
+
 def test_trade_outcome_stats_uses_net_profit_for_win_classification():
     stats = _trade_outcome_stats([
         {
@@ -173,6 +236,35 @@ def test_rotation_backtest_runner_applies_slippage_to_rebalance_orders():
     assert runner.strategy.trades[2]['price'] == pytest.approx(12.0 * 1.001)
     assert result['slippage_rate'] == 0.001
     assert runner.strategy.selected_etfs == ['510500']
+
+
+def test_rotation_backtest_runner_retries_after_volume_rejection():
+    runner = RotationBacktestRunner(_rotation_strategy(), {
+        'initial_capital': 100000,
+        'max_volume_participation': 0.001,
+    })
+
+    result = runner.run(sample_rotation_history())
+
+    assert result['trade_count'] == 0
+    assert result['max_volume_participation'] == 0.001
+    assert runner.strategy.pending_rebalance_count == 0
+    assert runner.strategy.last_rebalance is None
+
+
+def test_rotation_backtest_runner_rejects_missing_volume_when_limit_enabled():
+    runner = RotationBacktestRunner(_rotation_strategy(), {
+        'initial_capital': 100000,
+        'max_volume_participation': 0.1,
+    })
+    history = sample_rotation_history()
+    history[0]['symbols']['510300'].pop('volume')
+
+    with pytest.raises(
+        ValueError,
+        match='rotation history 中 510300 缺少 volume 字段',
+    ):
+        runner.run(history)
 
 
 def test_rotation_backtest_runner_uses_snapshot_dates_for_rebalance_windows():
@@ -1024,6 +1116,25 @@ def test_cli_backtest_accepts_slippage_rate():
     assert '- 滑点: 1.00%' in completed.stdout
 
 
+def test_cli_backtest_accepts_volume_participation_limit():
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'grid',
+            '--max-volume-participation',
+            '0.001',
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert '- 成交量参与率上限: 0.10%' in completed.stdout
+
+
 def test_cli_backtest_date_range_limits_report_period():
     completed = subprocess.run(
         [
@@ -1412,6 +1523,7 @@ def test_cli_backtest_rejects_non_standard_calendar_date(value):
     ('--grid-size', '0'),
     ('--initial-capital', '-1'),
     ('--slippage-rate', '1'),
+    ('--max-volume-participation', '0'),
 ])
 def test_cli_backtest_rejects_invalid_numeric_args(option, value):
     completed = subprocess.run(
