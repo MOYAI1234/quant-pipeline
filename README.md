@@ -89,6 +89,7 @@ python cli\commands.py backtest --strategy grid --history path\to\history.csv --
 python cli\commands.py backtest --strategy grid --history path\to\history.csv --strict-trading-calendar --holiday 2026-01-02
 python cli\commands.py backtest --strategy grid --equity-output data\grid-equity.csv
 python cli\commands.py backtest --strategy grid --trades-output data\grid-trades.csv
+python cli\commands.py backtest --strategy grid --rejections-output data\grid-rejections.csv
 ```
 
 运行内置轮动样例回测：
@@ -97,10 +98,12 @@ python cli\commands.py backtest --strategy grid --trades-output data\grid-trades
 python cli\commands.py backtest --strategy rotation
 python cli\commands.py backtest --strategy rotation --equity-output data\rotation-equity.csv
 python cli\commands.py backtest --strategy rotation --trades-output data\rotation-trades.csv
+python cli\commands.py backtest --strategy rotation --rejections-output data\rotation-rejections.csv
 ```
 
 权益曲线 CSV 字段：`date,total_value,pnl,pnl_percent,period_return,drawdown`。
 成交明细 CSV 字段：`timestamp,action,symbol,price,shares,amount,commission,entry_commission,profit,net_profit`。
+拒单明细 CSV 字段：`timestamp,action,symbol,price,shares,amount,reason,signal_reason`。
 
 使用 CSV 历史行情回测：
 

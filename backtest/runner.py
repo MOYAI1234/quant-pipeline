@@ -30,6 +30,16 @@ TRADE_CSV_FIELDS = (
     'profit',
     'net_profit',
 )
+REJECTED_ORDER_CSV_FIELDS = (
+    'timestamp',
+    'action',
+    'symbol',
+    'price',
+    'shares',
+    'amount',
+    'reason',
+    'signal_reason',
+)
 
 
 class BacktestRunner:
@@ -489,6 +499,20 @@ def write_trades_csv(path: str, trades: list) -> Path:
             writer.writerow({
                 field: _csv_value(trade.get(field, ''))
                 for field in TRADE_CSV_FIELDS
+            })
+    return output_path
+
+
+def write_rejected_orders_csv(path: str, rejected_orders: list) -> Path:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open('w', newline='', encoding='utf-8') as file:
+        writer = csv.DictWriter(file, fieldnames=REJECTED_ORDER_CSV_FIELDS)
+        writer.writeheader()
+        for order in rejected_orders:
+            writer.writerow({
+                field: _csv_value(order.get(field, ''))
+                for field in REJECTED_ORDER_CSV_FIELDS
             })
     return output_path
 

@@ -6,6 +6,7 @@ from .runner import (
     sample_grid_history,
     sample_rotation_history,
     write_equity_curve_csv,
+    write_rejected_orders_csv,
     write_trades_csv,
 )
 from .trading_calendar import TradingCalendar
@@ -18,6 +19,7 @@ __all__ = [
     'sample_grid_history',
     'sample_rotation_history',
     'write_equity_curve_csv',
+    'write_rejected_orders_csv',
     'write_trades_csv',
     'TradingCalendar',
 ]
