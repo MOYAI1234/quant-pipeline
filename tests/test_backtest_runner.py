@@ -19,6 +19,7 @@ from backtest.runner import (
     _trade_cost_stats,
     _trade_outcome_stats,
 )
+from backtest.trading_calendar import TradingCalendar
 from strategy.grid_strategy import GridStrategy
 from strategy.rotation_strategy import RotationStrategy
 
@@ -522,6 +523,32 @@ def test_backtest_runner_accepts_chronological_intraday_history():
 
     assert result['start_date'] == '2026-01-01T09:30:00'
     assert result['end_date'] == '2026-01-01T10:00:00'
+
+
+def test_backtest_runner_rejects_weekend_with_strict_trading_calendar():
+    runner = BacktestRunner(
+        _grid_strategy(),
+        trading_calendar=TradingCalendar(),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match='history 第 3 条日期 2026-01-03 不是交易日',
+    ):
+        runner.run(sample_grid_history())
+
+
+def test_rotation_backtest_runner_rejects_configured_holiday():
+    runner = RotationBacktestRunner(
+        _rotation_strategy(),
+        trading_calendar=TradingCalendar(holidays=['2026-01-02']),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match='history 第 2 条日期 2026-01-02 不是交易日',
+    ):
+        runner.run(sample_rotation_history())
 
 
 def test_backtest_runner_accepts_price_only_history():
@@ -1288,6 +1315,97 @@ def test_cli_backtest_rejects_invalid_ohlc_csv(tmp_path):
 
     assert completed.returncode == 2
     assert 'history 第 1 条 high 不能小于 low' in completed.stderr
+
+
+def test_cli_backtest_rejects_weekend_in_strict_calendar_mode(tmp_path):
+    history_file = tmp_path / 'history.csv'
+    history_file.write_text(
+        'date,open,high,low,close,volume,amount\n'
+        '2026-01-03,4.0,4.1,3.9,4.0,1000,4000\n',
+        encoding='utf-8',
+    )
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'grid',
+            '--history',
+            str(history_file),
+            '--strict-trading-calendar',
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 2
+    assert 'history 第 1 条日期 2026-01-03 不是交易日' in completed.stderr
+
+
+def test_cli_backtest_allows_explicit_weekend_trading_day():
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'grid',
+            '--strict-trading-calendar',
+            '--trading-day',
+            '2026-01-03',
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0
+    assert '# 回测报告 - 网格回测' in completed.stdout
+
+
+def test_cli_backtest_requires_strict_mode_for_calendar_overrides():
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'grid',
+            '--holiday',
+            '2026-01-02',
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 2
+    assert '--holiday/--trading-day 需要同时启用' in completed.stderr
+
+
+@pytest.mark.parametrize('value', ['20260102', '2026-W01-5'])
+def test_cli_backtest_rejects_non_standard_calendar_date(value):
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'grid',
+            '--strict-trading-calendar',
+            '--holiday',
+            value,
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 2
+    assert f'交易日历日期必须是 YYYY-MM-DD: {value}' in completed.stderr
 
 
 @pytest.mark.parametrize('option,value', [

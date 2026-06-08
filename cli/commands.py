@@ -18,6 +18,7 @@ from backtest.runner import (
     write_equity_curve_csv,
     write_trades_csv,
 )
+from backtest.trading_calendar import TradingCalendar
 from main import QuantPipeline
 from config.settings import SYSTEM_CONFIG
 from config.validation import validate_config
@@ -134,11 +135,24 @@ def cmd_backtest(args):
         _value_or_default(args.slippage_rate, DEFAULT_BACKTEST_SLIPPAGE_RATE),
         '--slippage-rate',
     )
+    trading_calendar = _build_trading_calendar(args)
 
     if args.strategy == 'grid':
-        _run_grid_backtest(args, initial_capital, commission_rate, slippage_rate)
+        _run_grid_backtest(
+            args,
+            initial_capital,
+            commission_rate,
+            slippage_rate,
+            trading_calendar,
+        )
     elif args.strategy == 'rotation':
-        _run_rotation_backtest(args, initial_capital, commission_rate, slippage_rate)
+        _run_rotation_backtest(
+            args,
+            initial_capital,
+            commission_rate,
+            slippage_rate,
+            trading_calendar,
+        )
 
 
 def _run_grid_backtest(
@@ -146,6 +160,7 @@ def _run_grid_backtest(
     initial_capital: float,
     commission_rate: float,
     slippage_rate: float,
+    trading_calendar: TradingCalendar | None,
 ):
     symbol = _resolve_symbol(args.symbol)
     center_price = _positive_number(
@@ -186,7 +201,7 @@ def _run_grid_backtest(
         'initial_capital': initial_capital,
         'commission_rate': commission_rate,
         'slippage_rate': slippage_rate,
-    })
+    }, trading_calendar=trading_calendar)
     result = runner.run(history)
     print(runner.render_markdown(result))
     _write_backtest_outputs(args, result)
@@ -197,6 +212,7 @@ def _run_rotation_backtest(
     initial_capital: float,
     commission_rate: float,
     slippage_rate: float,
+    trading_calendar: TradingCalendar | None,
 ):
     if args.history:
         raise ValueError('rotation 回测当前仅支持内置多 ETF 样例，CSV 历史行情将在后续版本支持')
@@ -236,7 +252,7 @@ def _run_rotation_backtest(
         'initial_capital': initial_capital,
         'commission_rate': commission_rate,
         'slippage_rate': slippage_rate,
-    })
+    }, trading_calendar=trading_calendar)
     result = runner.run(history)
     print(runner.render_markdown(result))
     _write_backtest_outputs(args, result)
@@ -263,6 +279,21 @@ def _resolve_backtest_history(history: list, args) -> list:
         history,
         start_date=args.start_date,
         end_date=args.end_date,
+    )
+
+
+def _build_trading_calendar(args) -> TradingCalendar | None:
+    holidays = args.holiday or []
+    extra_trading_days = args.trading_day or []
+    if not args.strict_trading_calendar:
+        if holidays or extra_trading_days:
+            raise ValueError(
+                '--holiday/--trading-day 需要同时启用 --strict-trading-calendar'
+            )
+        return None
+    return TradingCalendar(
+        holidays=holidays,
+        extra_trading_days=extra_trading_days,
     )
 
 
@@ -505,6 +536,21 @@ def main():
     backtest_parser.add_argument('--initial-capital', type=float)
     backtest_parser.add_argument('--commission-rate', type=float)
     backtest_parser.add_argument('--slippage-rate', type=float)
+    backtest_parser.add_argument(
+        '--strict-trading-calendar',
+        action='store_true',
+        help='拒绝周末及通过 --holiday 指定的休市日',
+    )
+    backtest_parser.add_argument(
+        '--holiday',
+        action='append',
+        help='额外休市日，格式 YYYY-MM-DD，可重复指定',
+    )
+    backtest_parser.add_argument(
+        '--trading-day',
+        action='append',
+        help='显式交易日，格式 YYYY-MM-DD，可重复指定并覆盖周末或休市日',
+    )
     backtest_parser.add_argument('--equity-output', type=str, help='导出权益曲线 CSV 路径')
     backtest_parser.add_argument('--trades-output', type=str, help='导出成交明细 CSV 路径')
     backtest_parser.add_argument('--etf-pool', type=str, help='ETF池，逗号分隔')

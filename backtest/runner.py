@@ -4,6 +4,7 @@ import math
 from datetime import date, datetime
 from pathlib import Path
 
+from backtest.trading_calendar import TradingCalendar
 from execution.simulator import Simulator
 
 
@@ -32,10 +33,16 @@ TRADE_CSV_FIELDS = (
 
 class BacktestRunner:
 
-    def __init__(self, strategy, account_config: dict = None):
+    def __init__(
+        self,
+        strategy,
+        account_config: dict = None,
+        trading_calendar: TradingCalendar | None = None,
+    ):
         self._strategy_template = copy.deepcopy(strategy)
         self.strategy = copy.deepcopy(self._strategy_template)
         self._account_config = dict(account_config or {})
+        self.trading_calendar = trading_calendar
         self.slippage_rate = _validate_slippage_rate(
             self._account_config.get('slippage_rate', 0.0)
         )
@@ -46,6 +53,7 @@ class BacktestRunner:
         if not history:
             raise ValueError('history 不能为空')
         _validate_history_order(history)
+        _validate_history_trading_days(history, self.trading_calendar)
 
         self.strategy = copy.deepcopy(self._strategy_template)
         self.executor = Simulator(dict(self._account_config))
@@ -189,10 +197,16 @@ class BacktestRunner:
 
 class RotationBacktestRunner:
 
-    def __init__(self, strategy, account_config: dict = None):
+    def __init__(
+        self,
+        strategy,
+        account_config: dict = None,
+        trading_calendar: TradingCalendar | None = None,
+    ):
         self._strategy_template = copy.deepcopy(strategy)
         self.strategy = copy.deepcopy(self._strategy_template)
         self._account_config = dict(account_config or {})
+        self.trading_calendar = trading_calendar
         self.slippage_rate = _validate_slippage_rate(
             self._account_config.get('slippage_rate', 0.0)
         )
@@ -203,6 +217,7 @@ class RotationBacktestRunner:
         if not history:
             raise ValueError('history 不能为空')
         _validate_history_order(history)
+        _validate_history_trading_days(history, self.trading_calendar)
 
         self.strategy = copy.deepcopy(self._strategy_template)
         self.executor = Simulator(dict(self._account_config))
@@ -678,6 +693,20 @@ def _validate_history_order(history: list) -> None:
                 )
         previous_time = current_time
         previous_value = current_value
+
+
+def _validate_history_trading_days(
+    history: list,
+    trading_calendar: TradingCalendar | None,
+) -> None:
+    if trading_calendar is None:
+        return
+    for index, row in enumerate(history, start=1):
+        trading_date = _history_date(row)
+        if not trading_calendar.is_trading_day(trading_date):
+            raise ValueError(
+                f'history 第 {index} 条日期 {trading_date.isoformat()} 不是交易日'
+            )
 
 
 def _history_time_value(row: dict) -> str:
