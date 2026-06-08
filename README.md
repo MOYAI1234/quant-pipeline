@@ -13,7 +13,7 @@ ETF 量化助手 Pipeline，目标是把数据适配、策略生成、风控检�
 - `DataManager` 会校验实时行情、净值和历史行情的基础字段、数值类型和可选时效契约；字段缺失、返回 shape 错误或启用时效校验后的过期数据会抛出 `DataFetchError`，避免脏数据继续进入策略链路。
 - `execution/Simulator` 是简化成交模型，支持整手、手续费、均价、持仓和市值估算；`OrderManager` 会记录 pipeline 内部订单的 pending/filled/failed/rejected 状态，但不包含真实券商撮合、滑点和报单回报同步。
 - `monitor/AlertManager` 已支持结构化告警事件和可选 JSONL 文件输出，日报/周报会展示最近告警摘要；当前还未接飞书、邮件等外部通知通道。
-- `backtest/BacktestRunner` 已支持最小 grid 历史样例回测和 OHLC 数据质量校验，`RotationBacktestRunner` 已支持内置多 ETF 轮动样例回测，并复用 `Simulator` 输出收益、最大回撤、最大回撤区间、交易次数、拒单次数与原因、胜率、总手续费及其占初始资金占比、权益曲线/成交明细/持仓明细/拒单明细 CSV 导出、可配置滑点、可选成交量参与率限制和可选严格交易日历等基础指标；当前还不是完整回测系统，不含交易所官方日历、部分成交、复杂组合和真实历史数据源。
+- `backtest/BacktestRunner` 已支持最小 grid 历史样例回测和 OHLC 数据质量校验，`RotationBacktestRunner` 已支持内置多 ETF 轮动样例和外部 JSON snapshot 历史回测，并复用 `Simulator` 输出收益、最大回撤、最大回撤区间、交易次数、拒单次数与原因、胜率、总手续费及其占初始资金占比、权益曲线/成交明细/持仓明细/拒单明细 CSV 导出、可配置滑点、可选成交量参与率限制和可选严格交易日历等基础指标；当前还不是完整回测系统，不含交易所官方日历、部分成交、复杂组合和真实历史数据源。
 - `persistence/JsonStateStore` 已支持保存和恢复 `Simulator`、`GridStrategy`、`RotationStrategy`、`OrderManager` 的 JSON 快照和运行 metadata，并提供旧版无顶层 `version` 状态到 v1 的最小迁移入口；`QuantPipeline` 默认会在启动时恢复、停止时保存到 `data/state.json`，但完整多版本迁移和 SQLite 存储仍未实现。
 - QMT/实盘执行、API、Web、完整回测引擎仍未实现。
 
@@ -97,10 +97,23 @@ python cli\commands.py backtest --strategy grid --rejections-output data\grid-re
 
 ```powershell
 python cli\commands.py backtest --strategy rotation
+python cli\commands.py backtest --strategy rotation --history path\to\rotation-history.json
 python cli\commands.py backtest --strategy rotation --equity-output data\rotation-equity.csv
 python cli\commands.py backtest --strategy rotation --trades-output data\rotation-trades.csv
 python cli\commands.py backtest --strategy rotation --positions-output data\rotation-positions.csv
 python cli\commands.py backtest --strategy rotation --rejections-output data\rotation-rejections.csv
+```
+
+rotation 历史 JSON 使用 snapshot 数组，单条结构如下：
+
+```json
+{
+  "date": "2026-01-01",
+  "symbols": {
+    "510300": {"close": 12.0, "prices": [10.0, 11.0, 12.0], "volume": 1000000},
+    "510500": {"close": 9.0, "prices": [10.0, 9.5, 9.0], "volume": 1000000}
+  }
+}
 ```
 
 权益曲线 CSV 字段：`date,total_value,pnl,pnl_percent,period_return,drawdown`。
@@ -120,7 +133,7 @@ python cli\commands.py backtest --strategy grid --history path\to\history.csv
 
 回测结果中的 `rejected_order_count`、`rejection_reasons` 和 `rejected_orders` 会区分成交量超限（`volume_limit`）与模拟执行器拒绝（`executor_rejected`）；拒单明细同时保留策略原始 `signal_reason`，便于判断零成交究竟来自无信号还是有信号但未成交。
 
-CSV 字段：`date,open,high,low,close,volume,amount`。
+grid 历史 CSV 字段：`date,open,high,low,close,volume,amount`。
 
 启动网格策略模拟循环：
 

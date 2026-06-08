@@ -1,4 +1,5 @@
 import csv
+import json
 import math
 import subprocess
 import sys
@@ -11,6 +12,7 @@ from backtest.runner import (
     RotationBacktestRunner,
     filter_history_by_date,
     load_history_csv,
+    load_rotation_history_json,
     sample_grid_history,
     sample_rotation_history,
     write_equity_curve_csv,
@@ -991,6 +993,61 @@ def test_load_history_csv_rejects_fractional_integer_fields(tmp_path):
         load_history_csv(str(history_file))
 
 
+def test_load_rotation_history_json_reads_snapshot_array(tmp_path):
+    history_file = tmp_path / 'rotation-history.json'
+    history_file.write_text(json.dumps([
+        {
+            'date': '2026-01-01',
+            'symbols': {
+                '510300': {
+                    'close': 12.0,
+                    'prices': [10.0, 11.0, 12.0],
+                    'volume': 1000000,
+                },
+                '510500': {
+                    'price': 9.0,
+                    'prices': [10.0, 9.5, 9.0],
+                },
+            },
+        },
+    ]), encoding='utf-8')
+
+    rows = load_rotation_history_json(str(history_file))
+
+    assert rows == [{
+        'date': '2026-01-01',
+        'symbols': {
+            '510300': {
+                'close': 12.0,
+                'prices': [10.0, 11.0, 12.0],
+                'volume': 1000000,
+            },
+            '510500': {
+                'close': 9.0,
+                'prices': [10.0, 9.5, 9.0],
+            },
+        },
+    }]
+
+
+def test_load_rotation_history_json_rejects_missing_prices(tmp_path):
+    history_file = tmp_path / 'rotation-history.json'
+    history_file.write_text(json.dumps([
+        {
+            'date': '2026-01-01',
+            'symbols': {
+                '510300': {'close': 12.0},
+            },
+        },
+    ]), encoding='utf-8')
+
+    with pytest.raises(
+        ValueError,
+        match='轮动历史 JSON 第 1 条 510300 prices 必须是非空数组',
+    ):
+        load_rotation_history_json(str(history_file))
+
+
 def test_write_equity_curve_csv_writes_header_and_rows(tmp_path):
     output_file = tmp_path / 'nested' / 'equity.csv'
 
@@ -1558,7 +1615,10 @@ def test_cli_rotation_backtest_rejects_unknown_sample_symbol():
     assert 'rotation 内置样例不包含 ETF: UNKNOWN' in completed.stderr
 
 
-def test_cli_rotation_backtest_explains_history_is_not_supported_yet():
+def test_cli_rotation_backtest_accepts_history_json(tmp_path):
+    history_file = tmp_path / 'rotation-history.json'
+    history_file.write_text(json.dumps(sample_rotation_history()), encoding='utf-8')
+
     completed = subprocess.run(
         [
             sys.executable,
@@ -1567,15 +1627,15 @@ def test_cli_rotation_backtest_explains_history_is_not_supported_yet():
             '--strategy',
             'rotation',
             '--history',
-            str(Path('history.csv')),
+            str(history_file),
         ],
-        check=False,
+        check=True,
         capture_output=True,
         text=True,
     )
 
-    assert completed.returncode == 2
-    assert 'CSV 历史行情将在后续版本支持' in completed.stderr
+    assert '# 回测报告 - 轮动回测' in completed.stdout
+    assert '- 标的池: 510300,510500,159915' in completed.stdout
 
 
 def test_cli_backtest_rejects_reversed_date_range():
