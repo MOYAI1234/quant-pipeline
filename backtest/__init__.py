@@ -8,6 +8,7 @@ from .runner import (
     write_equity_curve_csv,
     write_trades_csv,
 )
+from .trading_calendar import TradingCalendar
 
 __all__ = [
     'BacktestRunner',
@@ -18,4 +19,5 @@ __all__ = [
     'sample_rotation_history',
     'write_equity_curve_csv',
     'write_trades_csv',
+    'TradingCalendar',
 ]
