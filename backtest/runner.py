@@ -1,6 +1,7 @@
 import copy
 import csv
 import math
+from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
 
@@ -51,6 +52,7 @@ class BacktestRunner:
         )
         self.executor = None
         self.equity_curve = []
+        self.rejected_orders = []
 
     def run(self, history: list) -> dict:
         if not history:
@@ -61,6 +63,7 @@ class BacktestRunner:
         self.strategy = copy.deepcopy(self._strategy_template)
         self.executor = Simulator(dict(self._account_config))
         self.equity_curve = []
+        self.rejected_orders = []
         last_quote = None
         for index, bar in enumerate(history, start=1):
             quote = self._bar_to_quote(bar)
@@ -82,6 +85,12 @@ class BacktestRunner:
                     execution_signal,
                     volume_limits,
                 ):
+                    _record_rejection(
+                        self.rejected_orders,
+                        execution_signal,
+                        quote['timestamp'],
+                        'volume_limit',
+                    )
                     if hasattr(self.strategy, 'on_trade_failed'):
                         self.strategy.on_trade_failed(signal)
                     continue
@@ -92,8 +101,15 @@ class BacktestRunner:
                     self.strategy.record_trade(execution_signal)
                     if hasattr(self.strategy, 'on_trade_confirmed'):
                         self.strategy.on_trade_confirmed(signal)
-                elif hasattr(self.strategy, 'on_trade_failed'):
-                    self.strategy.on_trade_failed(signal)
+                else:
+                    _record_rejection(
+                        self.rejected_orders,
+                        execution_signal,
+                        quote['timestamp'],
+                        'executor_rejected',
+                    )
+                    if hasattr(self.strategy, 'on_trade_failed'):
+                        self.strategy.on_trade_failed(signal)
 
             portfolio = self.executor.get_portfolio(current_prices)
             self.equity_curve.append({
@@ -130,6 +146,7 @@ class BacktestRunner:
             ) / self.executor.initial_capital,
             **drawdown_stats,
             'trade_count': len(self.executor.trades),
+            **_rejection_stats(self.rejected_orders),
             **_trade_outcome_stats(self.executor.trades),
             **cost_stats,
             'slippage_rate': self.slippage_rate,
@@ -152,6 +169,8 @@ class BacktestRunner:
             f"- 最大回撤: {result['max_drawdown']:.2%}",
             f"- 最大回撤区间: {result['max_drawdown_start']} 至 {result['max_drawdown_end']}",
             f"- 交易次数: {result['trade_count']}",
+            f"- 拒单次数: {result['rejected_order_count']}",
+            _render_rejection_reasons(result['rejection_reasons']),
             f"- 胜率: {result['win_rate']:.2%}",
             f"- 总手续费: {result['total_commission']:.2f}",
             f"- 手续费占初始资金: {result['commission_ratio']:.4%}",
@@ -211,7 +230,6 @@ class BacktestRunner:
         for trade in self.executor.trades[previous_trade_count:]:
             trade['timestamp'] = timestamp
 
-
 class RotationBacktestRunner:
 
     def __init__(
@@ -232,6 +250,7 @@ class RotationBacktestRunner:
         )
         self.executor = None
         self.equity_curve = []
+        self.rejected_orders = []
 
     def run(self, history: list) -> dict:
         if not history:
@@ -242,6 +261,7 @@ class RotationBacktestRunner:
         self.strategy = copy.deepcopy(self._strategy_template)
         self.executor = Simulator(dict(self._account_config))
         self.equity_curve = []
+        self.rejected_orders = []
         last_snapshot = None
         for snapshot in history:
             last_snapshot = snapshot
@@ -264,6 +284,12 @@ class RotationBacktestRunner:
                     execution_signal,
                     volume_limits,
                 ):
+                    _record_rejection(
+                        self.rejected_orders,
+                        execution_signal,
+                        market_data['_date'],
+                        'volume_limit',
+                    )
                     if hasattr(self.strategy, 'on_trade_failed'):
                         self.strategy.on_trade_failed(execution_signal)
                     continue
@@ -274,8 +300,15 @@ class RotationBacktestRunner:
                     self.strategy.record_trade(execution_signal)
                     if hasattr(self.strategy, 'on_trade_confirmed'):
                         self.strategy.on_trade_confirmed(execution_signal)
-                elif hasattr(self.strategy, 'on_trade_failed'):
-                    self.strategy.on_trade_failed(execution_signal)
+                else:
+                    _record_rejection(
+                        self.rejected_orders,
+                        execution_signal,
+                        market_data['_date'],
+                        'executor_rejected',
+                    )
+                    if hasattr(self.strategy, 'on_trade_failed'):
+                        self.strategy.on_trade_failed(execution_signal)
 
             portfolio = self.executor.get_portfolio(current_prices)
             self.equity_curve.append({
@@ -313,6 +346,7 @@ class RotationBacktestRunner:
             ) / self.executor.initial_capital,
             **drawdown_stats,
             'trade_count': len(self.executor.trades),
+            **_rejection_stats(self.rejected_orders),
             **_trade_outcome_stats(self.executor.trades),
             **cost_stats,
             'slippage_rate': self.slippage_rate,
@@ -335,6 +369,8 @@ class RotationBacktestRunner:
             f"- 最大回撤: {result['max_drawdown']:.2%}",
             f"- 最大回撤区间: {result['max_drawdown_start']} 至 {result['max_drawdown_end']}",
             f"- 交易次数: {result['trade_count']}",
+            f"- 拒单次数: {result['rejected_order_count']}",
+            _render_rejection_reasons(result['rejection_reasons']),
             f"- 胜率: {result['win_rate']:.2%}",
             f"- 总手续费: {result['total_commission']:.2f}",
             f"- 手续费占初始资金: {result['commission_ratio']:.4%}",
@@ -390,7 +426,6 @@ class RotationBacktestRunner:
     def _stamp_new_trades(self, previous_trade_count: int, timestamp: str) -> None:
         for trade in self.executor.trades[previous_trade_count:]:
             trade['timestamp'] = timestamp
-
 
 def load_history_csv(path: str) -> list:
     csv_path = Path(path)
@@ -476,6 +511,60 @@ def _trade_outcome_stats(trades: list) -> dict:
             if closed_trade_count else 0.0
         ),
     }
+
+
+def _rejection_stats(rejected_orders: list) -> dict:
+    reasons = Counter(
+        order.get('reason', 'unknown')
+        for order in rejected_orders
+    )
+    return {
+        'rejected_order_count': len(rejected_orders),
+        'rejection_reasons': dict(sorted(reasons.items())),
+        'rejected_orders': [dict(order) for order in rejected_orders],
+    }
+
+
+def _record_rejection(
+    rejected_orders: list,
+    signal: dict,
+    timestamp: str,
+    reason: str,
+) -> None:
+    rejected_orders.append(
+        _serialize_rejected_order(signal, timestamp, reason)
+    )
+
+
+def _serialize_rejected_order(
+    signal: dict,
+    timestamp: str,
+    reason: str,
+) -> dict:
+    return {
+        'timestamp': timestamp,
+        'action': signal.get('action', ''),
+        'symbol': signal.get('symbol', ''),
+        'price': signal.get('price', 0),
+        'shares': _signal_shares(signal),
+        'amount': signal.get('amount', 0),
+        'reason': reason,
+        'signal_reason': signal.get('reason', ''),
+    }
+
+
+def _render_rejection_reasons(reasons: dict) -> str:
+    if not reasons:
+        return '- 拒单原因: 无'
+    labels = {
+        'volume_limit': '成交量上限',
+        'executor_rejected': '执行器拒绝',
+    }
+    summary = ', '.join(
+        f'{labels.get(reason, reason)}={count}'
+        for reason, count in reasons.items()
+    )
+    return f'- 拒单原因: {summary}'
 
 
 def _trade_cost_stats(trades: list, initial_capital: float) -> dict:
@@ -636,7 +725,9 @@ def _signal_within_volume_limit(
     if volume_limits is None:
         return True
     shares = _signal_shares(signal)
-    return shares > 0 and shares <= volume_limits.get(signal.get('symbol'), 0)
+    if shares <= 0:
+        return True
+    return shares <= volume_limits.get(signal.get('symbol'), 0)
 
 
 def _consume_signal_volume(signal: dict, volume_limits: dict | None) -> None:
