@@ -112,6 +112,18 @@ def test_backtest_runner_rejects_order_above_volume_participation_limit():
     result = runner.run([bar])
 
     assert result['trade_count'] == 0
+    assert result['rejected_order_count'] == 1
+    assert result['rejection_reasons'] == {'volume_limit': 1}
+    assert result['rejected_orders'] == [{
+        'timestamp': '2026-01-02',
+        'action': 'buy',
+        'symbol': '510300',
+        'price': 3.9,
+        'shares': 1000,
+        'amount': 3900.0,
+        'reason': 'volume_limit',
+        'signal_reason': '网格买入，价格3.9',
+    }]
     assert result['max_volume_participation'] == 0.1
     assert runner.strategy.grid_ledger[3.9]['bought'] is False
 
@@ -128,6 +140,20 @@ def test_backtest_runner_executes_order_at_volume_participation_limit():
     assert result['trade_count'] == 1
     assert result['trades'][0]['shares'] == 1000
     assert result['max_volume_participation'] == 0.1
+
+
+def test_backtest_runner_records_executor_rejection():
+    runner = BacktestRunner(_grid_strategy(), {
+        'initial_capital': 1000,
+    })
+
+    result = runner.run([sample_grid_history()[1]])
+
+    assert result['trade_count'] == 0
+    assert result['rejected_order_count'] == 1
+    assert result['rejection_reasons'] == {'executor_rejected': 1}
+    assert result['rejected_orders'][0]['reason'] == 'executor_rejected'
+    assert result['rejected_orders'][0]['timestamp'] == '2026-01-02'
 
 
 @pytest.mark.parametrize('value', [0, -0.1, 1.1, math.nan, True])
@@ -247,9 +273,29 @@ def test_rotation_backtest_runner_retries_after_volume_rejection():
     result = runner.run(sample_rotation_history())
 
     assert result['trade_count'] == 0
+    assert result['rejected_order_count'] == 2
+    assert result['rejection_reasons'] == {'volume_limit': 2}
+    assert all(
+        order['reason'] == 'volume_limit'
+        for order in result['rejected_orders']
+    )
     assert result['max_volume_participation'] == 0.001
     assert runner.strategy.pending_rebalance_count == 0
     assert runner.strategy.last_rebalance is None
+
+
+def test_rotation_backtest_runner_classifies_zero_lot_as_executor_rejection():
+    runner = RotationBacktestRunner(_rotation_strategy(), {
+        'initial_capital': 1000,
+        'max_volume_participation': 0.1,
+    })
+
+    result = runner.run([sample_rotation_history()[0]])
+
+    assert result['trade_count'] == 0
+    assert result['rejected_order_count'] == 1
+    assert result['rejection_reasons'] == {'executor_rejected': 1}
+    assert result['rejected_orders'][0]['shares'] == 0
 
 
 def test_rotation_backtest_runner_rejects_missing_volume_when_limit_enabled():
@@ -427,6 +473,23 @@ def test_backtest_runner_resets_state_between_runs():
     assert len(second_result['equity_curve']) == 3
     assert second_result['start_date'] == '2026-01-01'
     assert second_result['final_value'] == first_result['final_value']
+
+
+def test_backtest_runner_resets_rejected_orders_between_runs():
+    runner = BacktestRunner(_grid_strategy(), {
+        'initial_capital': 100000,
+        'max_volume_participation': 0.1,
+    })
+    rejected_bar = dict(sample_grid_history()[1], volume=5000)
+    accepted_bar = dict(sample_grid_history()[1], volume=10000)
+
+    first_result = runner.run([rejected_bar])
+    second_result = runner.run([accepted_bar])
+
+    assert first_result['rejected_order_count'] == 1
+    assert second_result['rejected_order_count'] == 0
+    assert second_result['rejection_reasons'] == {}
+    assert second_result['rejected_orders'] == []
 
 
 def test_backtest_runner_resets_strategy_state_between_runs_with_open_position():
@@ -1133,6 +1196,8 @@ def test_cli_backtest_accepts_volume_participation_limit():
     )
 
     assert '- 成交量参与率上限: 0.10%' in completed.stdout
+    assert '- 拒单次数: 0' in completed.stdout
+    assert '- 拒单原因: 无' in completed.stdout
 
 
 def test_cli_backtest_date_range_limits_report_period():
