@@ -63,6 +63,18 @@ POSITION_CSV_FIELDS = (
     'market_value',
     'unrealized_pnl',
 )
+PORTFOLIO_CSV_FIELDS = (
+    'date',
+    'cash',
+    'position_count',
+    'positions_market_value',
+    'total_value',
+    'pnl',
+    'pnl_percent',
+    'realized_pnl',
+    'unrealized_pnl',
+    'total_value_delta',
+)
 
 
 class BacktestRunner:
@@ -86,6 +98,7 @@ class BacktestRunner:
         )
         self.executor = None
         self.equity_curve = []
+        self.portfolio_curve = []
         self.positions_curve = []
         self.rejected_orders = []
 
@@ -98,6 +111,7 @@ class BacktestRunner:
         self.strategy = copy.deepcopy(self._strategy_template)
         self.executor = Simulator(dict(self._account_config))
         self.equity_curve = []
+        self.portfolio_curve = []
         self.positions_curve = []
         self.rejected_orders = []
         last_quote = None
@@ -157,11 +171,15 @@ class BacktestRunner:
                 'pnl': portfolio['pnl'],
                 'pnl_percent': portfolio['pnl_percent'],
             })
+            self.portfolio_curve.append(
+                _serialize_portfolio_snapshot(quote['timestamp'], portfolio)
+            )
             self.positions_curve.extend(
                 _serialize_portfolio_positions(quote['timestamp'], portfolio)
             )
 
         final_portfolio = self.executor.get_portfolio({self.strategy.symbol: last_quote['price']})
+        _validate_portfolio_curve_consistency(self.portfolio_curve)
         self.equity_curve = _annotate_equity_curve(
             self.equity_curve,
             self.executor.initial_capital,
@@ -196,6 +214,10 @@ class BacktestRunner:
             'realized_pnl': final_portfolio['realized_pnl'],
             'portfolio': final_portfolio,
             'equity_curve': list(self.equity_curve),
+            'portfolio_curve': list(self.portfolio_curve),
+            'portfolio_consistency_max_delta': (
+                _portfolio_consistency_max_delta(self.portfolio_curve)
+            ),
             'positions_curve': list(self.positions_curve),
             'trades': _serialize_trades(self.executor.trades),
         }
@@ -294,6 +316,7 @@ class RotationBacktestRunner:
         )
         self.executor = None
         self.equity_curve = []
+        self.portfolio_curve = []
         self.positions_curve = []
         self.rejected_orders = []
 
@@ -307,6 +330,7 @@ class RotationBacktestRunner:
         self._validate_snapshot_symbols(history)
         self.executor = Simulator(dict(self._account_config))
         self.equity_curve = []
+        self.portfolio_curve = []
         self.positions_curve = []
         self.rejected_orders = []
         last_snapshot = None
@@ -361,21 +385,26 @@ class RotationBacktestRunner:
                         self.strategy.on_trade_failed(execution_signal)
 
             portfolio = self.executor.get_portfolio(current_prices)
+            snapshot_date = snapshot.get('date', snapshot.get('timestamp', ''))
             self.equity_curve.append({
-                'date': snapshot.get('date', snapshot.get('timestamp', '')),
+                'date': snapshot_date,
                 'total_value': portfolio['total_value'],
                 'pnl': portfolio['pnl'],
                 'pnl_percent': portfolio['pnl_percent'],
             })
+            self.portfolio_curve.append(
+                _serialize_portfolio_snapshot(snapshot_date, portfolio)
+            )
             self.positions_curve.extend(
                 _serialize_portfolio_positions(
-                    snapshot.get('date', snapshot.get('timestamp', '')),
+                    snapshot_date,
                     portfolio,
                 )
             )
 
         final_market_data = self._snapshot_to_market_data(last_snapshot)
         final_portfolio = self.executor.get_portfolio(self._current_prices(final_market_data))
+        _validate_portfolio_curve_consistency(self.portfolio_curve)
         self.equity_curve = _annotate_equity_curve(
             self.equity_curve,
             self.executor.initial_capital,
@@ -410,6 +439,10 @@ class RotationBacktestRunner:
             'realized_pnl': final_portfolio['realized_pnl'],
             'portfolio': final_portfolio,
             'equity_curve': list(self.equity_curve),
+            'portfolio_curve': list(self.portfolio_curve),
+            'portfolio_consistency_max_delta': (
+                _portfolio_consistency_max_delta(self.portfolio_curve)
+            ),
             'positions_curve': list(self.positions_curve),
             'trades': _serialize_trades(self.executor.trades),
         }
@@ -699,6 +732,20 @@ def write_positions_csv(path: str, positions_curve: list) -> Path:
     return output_path
 
 
+def write_portfolio_csv(path: str, portfolio_curve: list) -> Path:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open('w', newline='', encoding='utf-8') as file:
+        writer = csv.DictWriter(file, fieldnames=PORTFOLIO_CSV_FIELDS)
+        writer.writeheader()
+        for point in portfolio_curve:
+            writer.writerow({
+                field: _csv_value(point.get(field, ''))
+                for field in PORTFOLIO_CSV_FIELDS
+            })
+    return output_path
+
+
 def _trade_outcome_stats(trades: list) -> dict:
     closed_trades = [
         trade for trade in trades
@@ -757,6 +804,52 @@ def _serialize_rejected_order(
         'reason': reason,
         'signal_reason': signal.get('reason', ''),
     }
+
+
+def _serialize_portfolio_snapshot(date_value: str, portfolio: dict) -> dict:
+    positions = portfolio.get('positions', {})
+    positions_market_value = sum(
+        position.get('market_value', 0)
+        for position in positions.values()
+    )
+    unrealized_pnl = sum(
+        position.get('unrealized_pnl', 0)
+        for position in positions.values()
+    )
+    cash = portfolio.get('capital', 0)
+    total_value = portfolio.get('total_value', 0)
+    return {
+        'date': date_value,
+        'cash': cash,
+        'position_count': portfolio.get('position_count', len(positions)),
+        'positions_market_value': positions_market_value,
+        'total_value': total_value,
+        'pnl': portfolio.get('pnl', 0),
+        'pnl_percent': portfolio.get('pnl_percent', 0),
+        'realized_pnl': portfolio.get('realized_pnl', 0),
+        'unrealized_pnl': unrealized_pnl,
+        'total_value_delta': total_value - cash - positions_market_value,
+    }
+
+
+def _validate_portfolio_curve_consistency(
+    portfolio_curve: list,
+    tolerance: float = 1e-6,
+) -> None:
+    for index, point in enumerate(portfolio_curve, start=1):
+        if abs(point.get('total_value_delta', 0)) > tolerance:
+            raise ValueError(
+                f"portfolio curve 第 {index} 条现金和持仓市值不等于总值"
+            )
+
+
+def _portfolio_consistency_max_delta(portfolio_curve: list) -> float:
+    if not portfolio_curve:
+        return 0.0
+    return max(
+        abs(point.get('total_value_delta', 0))
+        for point in portfolio_curve
+    )
 
 
 def _serialize_portfolio_positions(date_value: str, portfolio: dict) -> list:

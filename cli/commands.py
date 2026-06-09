@@ -18,6 +18,7 @@ from backtest.runner import (
     sample_grid_history,
     sample_rotation_history,
     write_equity_curve_csv,
+    write_portfolio_csv,
     write_positions_csv,
     write_rejected_orders_csv,
     write_trades_csv,
@@ -331,6 +332,12 @@ def _write_backtest_outputs(args, result: dict) -> None:
             result['equity_curve'],
         )
         print(f"权益曲线 CSV: {equity_path}")
+    if args.portfolio_output:
+        portfolio_path = write_portfolio_csv(
+            str(_resolve_project_path(args.portfolio_output)),
+            result['portfolio_curve'],
+        )
+        print(f"组合快照 CSV: {portfolio_path}")
     if args.trades_output:
         trades_path = write_trades_csv(
             str(_resolve_project_path(args.trades_output)),
@@ -611,6 +618,7 @@ def main():
         help='显式交易日，格式 YYYY-MM-DD，可重复指定并覆盖周末或休市日',
     )
     backtest_parser.add_argument('--equity-output', type=str, help='导出权益曲线 CSV 路径')
+    backtest_parser.add_argument('--portfolio-output', type=str, help='导出逐期组合快照 CSV 路径')
     backtest_parser.add_argument('--trades-output', type=str, help='导出成交明细 CSV 路径')
     backtest_parser.add_argument('--positions-output', type=str, help='导出逐期持仓明细 CSV 路径')
     backtest_parser.add_argument('--rejections-output', type=str, help='导出拒单明细 CSV 路径')

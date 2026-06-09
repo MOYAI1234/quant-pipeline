@@ -18,6 +18,7 @@ from backtest.runner import (
     sample_grid_history,
     sample_rotation_history,
     write_equity_curve_csv,
+    write_portfolio_csv,
     write_positions_csv,
     write_rejected_orders_csv,
     write_trades_csv,
@@ -78,6 +79,14 @@ def test_backtest_runner_executes_grid_buy_sell_cycle():
     assert result['max_drawdown_start'] == '2026-01-01'
     assert result['max_drawdown_end'] == '2026-01-01'
     assert len(result['equity_curve']) == 3
+    assert len(result['portfolio_curve']) == 3
+    assert result['portfolio_consistency_max_delta'] == pytest.approx(0.0)
+    assert result['portfolio_curve'][1]['position_count'] == 1
+    assert result['portfolio_curve'][1]['cash'] > 0
+    assert (
+        result['portfolio_curve'][1]['cash']
+        + result['portfolio_curve'][1]['positions_market_value']
+    ) == pytest.approx(result['portfolio_curve'][1]['total_value'])
     assert result['equity_curve'][0]['period_return'] == pytest.approx(0.0)
     assert result['equity_curve'][0]['drawdown'] == pytest.approx(0.0)
     assert result['equity_curve'][1]['drawdown'] >= 0
@@ -290,6 +299,9 @@ def test_rotation_backtest_runner_buys_then_rotates_to_new_leader():
     assert result['total_commission'] > 0
     assert result['commission_ratio'] > 0
     assert len(result['equity_curve']) == 2
+    assert len(result['portfolio_curve']) == 2
+    assert result['portfolio_consistency_max_delta'] == pytest.approx(0.0)
+    assert result['portfolio_curve'][1]['position_count'] == 1
     assert '510300' not in result['portfolio']['positions']
     assert '510500' in result['portfolio']['positions']
     assert runner.strategy.selected_etfs == ['510500']
@@ -1320,6 +1332,41 @@ def test_write_positions_csv_writes_position_snapshots(tmp_path):
     }]
 
 
+def test_write_portfolio_csv_writes_portfolio_snapshots(tmp_path):
+    output_file = tmp_path / 'nested' / 'portfolio.csv'
+
+    written_path = write_portfolio_csv(str(output_file), [
+        {
+            'date': '2026-01-02',
+            'cash': 96098.83,
+            'position_count': 1,
+            'positions_market_value': 3950.0,
+            'total_value': 100048.83,
+            'pnl': 48.83,
+            'pnl_percent': 0.04883,
+            'realized_pnl': 0.0,
+            'unrealized_pnl': 50.0,
+            'total_value_delta': 0.0,
+        },
+    ])
+
+    assert written_path == output_file
+    with output_file.open(newline='', encoding='utf-8') as file:
+        rows = list(csv.DictReader(file))
+    assert rows == [{
+        'date': '2026-01-02',
+        'cash': '96098.83',
+        'position_count': '1',
+        'positions_market_value': '3950.0',
+        'total_value': '100048.83',
+        'pnl': '48.83',
+        'pnl_percent': '0.04883',
+        'realized_pnl': '0.0',
+        'unrealized_pnl': '50.0',
+        'total_value_delta': '0.0',
+    }]
+
+
 def test_write_rejected_orders_csv_writes_reason_fields(tmp_path):
     output_file = tmp_path / 'nested' / 'rejections.csv'
 
@@ -1420,6 +1467,50 @@ def test_cli_backtest_exports_equity_curve_csv(tmp_path):
     assert float(rows[0]['pnl_percent']) == pytest.approx(0.0)
     assert float(rows[0]['period_return']) == pytest.approx(0.0)
     assert float(rows[0]['drawdown']) == pytest.approx(0.0)
+
+
+def test_cli_backtest_exports_portfolio_csv(tmp_path):
+    output_file = tmp_path / 'grid-portfolio.csv'
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'grid',
+            '--portfolio-output',
+            str(output_file),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert f'组合快照 CSV: {output_file}' in completed.stdout
+    with output_file.open(newline='', encoding='utf-8') as file:
+        rows = list(csv.DictReader(file))
+    assert [row['date'] for row in rows] == [
+        '2026-01-01',
+        '2026-01-02',
+        '2026-01-03',
+    ]
+    assert set(rows[0]) == {
+        'date',
+        'cash',
+        'position_count',
+        'positions_market_value',
+        'total_value',
+        'pnl',
+        'pnl_percent',
+        'realized_pnl',
+        'unrealized_pnl',
+        'total_value_delta',
+    }
+    assert float(rows[1]['cash']) > 0
+    assert int(rows[1]['position_count']) == 1
+    assert float(rows[1]['positions_market_value']) > 0
+    assert float(rows[1]['total_value_delta']) == pytest.approx(0.0)
 
 
 def test_cli_backtest_exports_trades_csv(tmp_path):
@@ -1669,6 +1760,36 @@ def test_cli_rotation_backtest_exports_equity_curve_csv(tmp_path):
     assert float(rows[0]['pnl']) < 0
     assert float(rows[0]['period_return']) < 0
     assert float(rows[0]['drawdown']) > 0
+
+
+def test_cli_rotation_backtest_exports_portfolio_csv(tmp_path):
+    output_file = tmp_path / 'rotation-portfolio.csv'
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'rotation',
+            '--portfolio-output',
+            str(output_file),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert f'组合快照 CSV: {output_file}' in completed.stdout
+    with output_file.open(newline='', encoding='utf-8') as file:
+        rows = list(csv.DictReader(file))
+    assert [row['date'] for row in rows] == [
+        '2026-01-01',
+        '2026-01-02',
+    ]
+    assert all(float(row['total_value_delta']) == pytest.approx(0.0) for row in rows)
+    assert all(int(row['position_count']) == 1 for row in rows)
+    assert all(float(row['positions_market_value']) > 0 for row in rows)
 
 
 def test_cli_rotation_backtest_exports_trades_csv(tmp_path):
