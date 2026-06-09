@@ -834,13 +834,33 @@ def _serialize_portfolio_snapshot(date_value: str, portfolio: dict) -> dict:
 
 def _validate_portfolio_curve_consistency(
     portfolio_curve: list,
-    tolerance: float = 1e-6,
+    absolute_tolerance: float = 1e-6,
+    relative_tolerance: float = 1e-12,
 ) -> None:
     for index, point in enumerate(portfolio_curve, start=1):
+        tolerance = _portfolio_consistency_tolerance(
+            point,
+            absolute_tolerance,
+            relative_tolerance,
+        )
         if abs(point.get('total_value_delta', 0)) > tolerance:
             raise ValueError(
                 f"portfolio curve 第 {index} 条现金和持仓市值不等于总值"
             )
+
+
+def _portfolio_consistency_tolerance(
+    point: dict,
+    absolute_tolerance: float,
+    relative_tolerance: float,
+) -> float:
+    # absolute covers normal ETF-scale cents; relative covers very large float balances.
+    reference_value = max(
+        abs(point.get('total_value', 0)),
+        abs(point.get('cash', 0)) + abs(point.get('positions_market_value', 0)),
+        1.0,
+    )
+    return max(absolute_tolerance, reference_value * relative_tolerance)
 
 
 def _portfolio_consistency_max_delta(portfolio_curve: list) -> float:

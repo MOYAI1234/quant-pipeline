@@ -157,6 +157,20 @@ def test_backtest_runner_executes_order_at_volume_participation_limit():
     assert result['max_volume_participation'] == 0.1
 
 
+def test_backtest_runner_allows_large_float_portfolio_delta():
+    runner = BacktestRunner(_grid_strategy(), {
+        'initial_capital': 1e20,
+    })
+
+    result = runner.run([sample_grid_history()[1]])
+
+    assert result['trade_count'] == 1
+    assert result['portfolio_consistency_max_delta'] > 0
+    assert result['portfolio_consistency_max_delta'] < (
+        result['portfolio_curve'][0]['total_value'] * 1e-12
+    )
+
+
 def test_backtest_runner_records_executor_rejection():
     runner = BacktestRunner(_grid_strategy(), {
         'initial_capital': 1000,
