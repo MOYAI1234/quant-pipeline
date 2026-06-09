@@ -605,6 +605,7 @@ def load_rotation_history_csv(path: str) -> list:
     if not snapshots:
         raise ValueError('轮动历史 CSV 没有数据行')
 
+    # snapshots keeps first-seen CSV date order; _validate_history_order catches disorder.
     rows = [
         _normalize_rotation_snapshot(
             {
