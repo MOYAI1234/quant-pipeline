@@ -6,6 +6,16 @@ from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
 
+from backtest.execution_model import (
+    BacktestExecutionModel,
+    _apply_slippage,
+    _build_volume_limits,
+    _consume_signal_volume,
+    _signal_shares,
+    _signal_within_volume_limit,
+    _validate_slippage_rate,
+    _validate_volume_participation,
+)
 from backtest.trading_calendar import TradingCalendar
 from execution.simulator import Simulator
 
@@ -67,11 +77,12 @@ class BacktestRunner:
         self.strategy = copy.deepcopy(self._strategy_template)
         self._account_config = dict(account_config or {})
         self.trading_calendar = trading_calendar
-        self.slippage_rate = _validate_slippage_rate(
-            self._account_config.get('slippage_rate', 0.0)
+        self.execution_model = BacktestExecutionModel.from_account_config(
+            self._account_config
         )
-        self.max_volume_participation = _validate_volume_participation(
-            self._account_config.get('max_volume_participation')
+        self.slippage_rate = self.execution_model.slippage_rate
+        self.max_volume_participation = (
+            self.execution_model.max_volume_participation
         )
         self.executor = None
         self.equity_curve = []
@@ -97,31 +108,34 @@ class BacktestRunner:
             current_prices = {self.strategy.symbol: quote['price']}
             portfolio = self.executor.get_portfolio(current_prices)
             signals = self._generate_signals(quote, portfolio)
-            volume_limits = _build_volume_limits(
+            volume_limits = self.execution_model.build_volume_limits(
                 {self.strategy.symbol: quote['volume']},
-                self.max_volume_participation,
             )
 
             for signal in signals:
                 if not self._signal_executable(signal, quote):
                     continue
-                execution_signal = _apply_slippage(signal, self.slippage_rate)
-                if not _signal_within_volume_limit(
-                    execution_signal,
+                decision = self.execution_model.prepare_order(
+                    signal,
                     volume_limits,
-                ):
+                )
+                execution_signal = decision.signal
+                if not decision.accepted:
                     _record_rejection(
                         self.rejected_orders,
                         execution_signal,
                         quote['timestamp'],
-                        'volume_limit',
+                        decision.rejection_reason,
                     )
                     if hasattr(self.strategy, 'on_trade_failed'):
                         self.strategy.on_trade_failed(signal)
                     continue
                 previous_trade_count = len(self.executor.trades)
                 if self.executor.execute_order(execution_signal):
-                    _consume_signal_volume(execution_signal, volume_limits)
+                    self.execution_model.consume_fill(
+                        execution_signal,
+                        volume_limits,
+                    )
                     self._stamp_new_trades(previous_trade_count, quote['timestamp'])
                     self.strategy.record_trade(execution_signal)
                     if hasattr(self.strategy, 'on_trade_confirmed'):
@@ -271,11 +285,12 @@ class RotationBacktestRunner:
         self.strategy = copy.deepcopy(self._strategy_template)
         self._account_config = dict(account_config or {})
         self.trading_calendar = trading_calendar
-        self.slippage_rate = _validate_slippage_rate(
-            self._account_config.get('slippage_rate', 0.0)
+        self.execution_model = BacktestExecutionModel.from_account_config(
+            self._account_config
         )
-        self.max_volume_participation = _validate_volume_participation(
-            self._account_config.get('max_volume_participation')
+        self.slippage_rate = self.execution_model.slippage_rate
+        self.max_volume_participation = (
+            self.execution_model.max_volume_participation
         )
         self.executor = None
         self.equity_curve = []
@@ -301,33 +316,36 @@ class RotationBacktestRunner:
             current_prices = self._current_prices(market_data)
             portfolio = self.executor.get_portfolio(current_prices)
             signals = self.strategy.generate_signal(market_data, portfolio)
-            volume_limits = _build_volume_limits(
+            volume_limits = self.execution_model.build_volume_limits(
                 {
                     symbol: data.get('volume', 0)
                     for symbol, data in market_data.items()
                     if isinstance(data, dict)
                 },
-                self.max_volume_participation,
             )
 
             for signal in signals:
-                execution_signal = _apply_slippage(signal, self.slippage_rate)
-                if not _signal_within_volume_limit(
-                    execution_signal,
+                decision = self.execution_model.prepare_order(
+                    signal,
                     volume_limits,
-                ):
+                )
+                execution_signal = decision.signal
+                if not decision.accepted:
                     _record_rejection(
                         self.rejected_orders,
                         execution_signal,
                         market_data['_date'],
-                        'volume_limit',
+                        decision.rejection_reason,
                     )
                     if hasattr(self.strategy, 'on_trade_failed'):
                         self.strategy.on_trade_failed(execution_signal)
                     continue
                 previous_trade_count = len(self.executor.trades)
                 if self.executor.execute_order(execution_signal):
-                    _consume_signal_volume(execution_signal, volume_limits)
+                    self.execution_model.consume_fill(
+                        execution_signal,
+                        volume_limits,
+                    )
                     self._stamp_new_trades(previous_trade_count, market_data['_date'])
                     self.strategy.record_trade(execution_signal)
                     if hasattr(self.strategy, 'on_trade_confirmed'):
@@ -948,99 +966,6 @@ def _drawdown_stats(equity_curve: list, initial_capital: float) -> dict:
         'max_drawdown_start': max_drawdown_start,
         'max_drawdown_end': max_drawdown_end,
     }
-
-
-def _apply_slippage(signal: dict, slippage_rate: float) -> dict:
-    if slippage_rate == 0:
-        return signal
-    execution_signal = dict(signal)
-    price = execution_signal.get('price', 0)
-    if price <= 0:
-        return execution_signal
-
-    if execution_signal.get('action') == 'buy':
-        execution_price = price * (1 + slippage_rate)
-    elif execution_signal.get('action') == 'sell':
-        execution_price = price * (1 - slippage_rate)
-    else:
-        execution_price = price
-
-    execution_signal['price'] = execution_price
-    if execution_signal.get('shares', 0) > 0:
-        execution_signal['amount'] = execution_signal['shares'] * execution_price
-    return execution_signal
-
-
-def _validate_slippage_rate(value: float) -> float:
-    if (
-        isinstance(value, bool)
-        or not isinstance(value, (int, float))
-        or not math.isfinite(float(value))
-        or value < 0
-        or value >= 1
-    ):
-        raise ValueError('slippage_rate 必须在 0 到 1 之间，且小于 1')
-    return float(value)
-
-
-def _validate_volume_participation(value: float | None) -> float | None:
-    if value is None:
-        return None
-    if (
-        isinstance(value, bool)
-        or not isinstance(value, (int, float))
-        or not math.isfinite(float(value))
-        or value <= 0
-        or value > 1
-    ):
-        raise ValueError('max_volume_participation 必须大于 0 且不大于 1')
-    return float(value)
-
-
-def _build_volume_limits(
-    volumes: dict,
-    max_volume_participation: float | None,
-) -> dict | None:
-    if max_volume_participation is None:
-        return None
-    return {
-        symbol: volume * max_volume_participation
-        for symbol, volume in volumes.items()
-    }
-
-
-def _signal_within_volume_limit(
-    signal: dict,
-    volume_limits: dict | None,
-) -> bool:
-    if volume_limits is None:
-        return True
-    shares = _signal_shares(signal)
-    if shares <= 0:
-        return True
-    return shares <= volume_limits.get(signal.get('symbol'), 0)
-
-
-def _consume_signal_volume(signal: dict, volume_limits: dict | None) -> None:
-    if volume_limits is None:
-        return
-    symbol = signal.get('symbol')
-    volume_limits[symbol] = max(
-        volume_limits.get(symbol, 0) - _signal_shares(signal),
-        0,
-    )
-
-
-def _signal_shares(signal: dict) -> int:
-    """按 Simulator 的 100 股整手规则计算参与率占用；不足整手返回 0。"""
-    shares = signal.get('shares', 0)
-    if shares > 0:
-        return int(shares / 100) * 100
-    price = signal.get('price', 0)
-    amount = signal.get('amount', 0)
-    if price <= 0 or amount <= 0:
-        return 0
-    return int(amount / price / 100) * 100
 
 
 def _render_volume_participation(value: float | None) -> str:

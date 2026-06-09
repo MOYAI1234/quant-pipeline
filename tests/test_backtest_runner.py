@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from backtest.runner import (
+    BacktestExecutionModel,
     BacktestRunner,
     RotationBacktestRunner,
     filter_history_by_date,
@@ -191,6 +192,52 @@ def test_volume_participation_limit_is_shared_within_bar():
     assert _signal_within_volume_limit(first_order, limits)
     _consume_signal_volume(first_order, limits)
     assert not _signal_within_volume_limit(second_order, limits)
+
+
+def test_backtest_execution_model_prepares_slipped_volume_rejection():
+    model = BacktestExecutionModel(
+        slippage_rate=0.01,
+        max_volume_participation=0.1,
+    )
+    limits = model.build_volume_limits({'510300': 5000})
+    signal = {
+        'action': 'buy',
+        'symbol': '510300',
+        'price': 4.0,
+        'shares': 1000,
+    }
+
+    decision = model.prepare_order(signal, limits)
+
+    assert not decision.accepted
+    assert decision.rejection_reason == 'volume_limit'
+    assert decision.signal['price'] == pytest.approx(4.04)
+    assert decision.signal['amount'] == pytest.approx(4040.0)
+
+
+def test_backtest_execution_model_consumes_fill_volume():
+    model = BacktestExecutionModel(max_volume_participation=0.1)
+    limits = model.build_volume_limits({'510300': 10000})
+    first_order = {
+        'action': 'buy',
+        'symbol': '510300',
+        'price': 4.0,
+        'shares': 600,
+    }
+    second_order = {
+        'action': 'buy',
+        'symbol': '510300',
+        'price': 4.0,
+        'shares': 500,
+    }
+
+    first_decision = model.prepare_order(first_order, limits)
+    assert first_decision.accepted
+    model.consume_fill(first_decision.signal, limits)
+
+    second_decision = model.prepare_order(second_order, limits)
+    assert not second_decision.accepted
+    assert second_decision.rejection_reason == 'volume_limit'
 
 
 def test_trade_outcome_stats_uses_net_profit_for_win_classification():
