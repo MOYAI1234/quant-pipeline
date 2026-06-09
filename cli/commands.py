@@ -23,10 +23,18 @@ from backtest.runner import (
     write_rejected_orders_csv,
     write_trades_csv,
 )
+from backtest.history_adapter import (
+    build_rotation_history,
+    fetch_grid_history,
+    fetch_rotation_history,
+    write_grid_history_csv,
+    write_rotation_history_csv,
+)
 from backtest.trading_calendar import TradingCalendar
 from main import QuantPipeline
 from config.settings import SYSTEM_CONFIG
 from config.validation import validate_config
+from data.data_manager import DataManager
 from strategy.grid_strategy import GridStrategy
 from strategy.rotation_strategy import RotationStrategy
 
@@ -126,6 +134,39 @@ def cmd_config_validate(args):
         print(_render_config_validation(result))
     if not result['valid']:
         raise SystemExit(1)
+
+
+def cmd_history_export_grid(args):
+    history = (
+        _load_history_json_list(args.input_json)
+        if args.input_json
+        else _fetch_grid_history_from_data_manager(args)
+    )
+    output_path = write_grid_history_csv(
+        str(_resolve_project_path(args.output)),
+        history,
+    )
+    print(f"grid 历史 CSV: {output_path}")
+
+
+def cmd_history_export_rotation(args):
+    lookback = _positive_int(
+        _value_or_default(args.lookback, DEFAULT_BACKTEST_ROTATION_LOOKBACK),
+        '--lookback',
+    )
+    history = (
+        build_rotation_history(
+            _load_history_json_object(args.input_json),
+            lookback=lookback,
+        )
+        if args.input_json
+        else _fetch_rotation_history_from_data_manager(args, lookback)
+    )
+    output_path = write_rotation_history_csv(
+        str(_resolve_project_path(args.output)),
+        history,
+    )
+    print(f"rotation 历史 CSV: {output_path}")
 
 
 def cmd_backtest(args):
@@ -308,6 +349,67 @@ def _resolve_backtest_history(history: list, args) -> list:
         start_date=args.start_date,
         end_date=args.end_date,
     )
+
+
+def _fetch_grid_history_from_data_manager(args) -> list:
+    _require_date_range(args)
+    data_manager = DataManager(SYSTEM_CONFIG.get('data', {}))
+    try:
+        data_manager.connect()
+        return fetch_grid_history(
+            data_manager,
+            _resolve_symbol(args.symbol),
+            args.start_date,
+            args.end_date,
+        )
+    finally:
+        data_manager.disconnect()
+
+
+def _fetch_rotation_history_from_data_manager(args, lookback: int) -> list:
+    _require_date_range(args)
+    symbols = _resolve_etf_pool(args.etf_pool)
+    data_manager = DataManager(SYSTEM_CONFIG.get('data', {}))
+    try:
+        data_manager.connect()
+        return fetch_rotation_history(
+            data_manager,
+            symbols,
+            args.start_date,
+            args.end_date,
+            lookback=lookback,
+        )
+    finally:
+        data_manager.disconnect()
+
+
+def _require_date_range(args) -> None:
+    if not args.start_date or not args.end_date:
+        raise ValueError('未提供 --input-json 时必须指定 --start-date 和 --end-date')
+
+
+def _load_history_json_list(path: str) -> list:
+    payload = _load_json_file(path)
+    if not isinstance(payload, list):
+        raise ValueError('grid 历史 JSON 顶层必须是数组')
+    return payload
+
+
+def _load_history_json_object(path: str) -> dict:
+    payload = _load_json_file(path)
+    if not isinstance(payload, dict):
+        raise ValueError('rotation 历史 JSON 顶层必须是 symbol->history 对象')
+    return payload
+
+
+def _load_json_file(path: str):
+    resolved = _resolve_project_path(path)
+    try:
+        return json.loads(resolved.read_text(encoding='utf-8'))
+    except FileNotFoundError as exc:
+        raise ValueError(f"JSON 文件不存在: {resolved}") from exc
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"JSON 文件不是合法 JSON: {exc.msg}") from exc
 
 
 def _build_trading_calendar(args) -> TradingCalendar | None:
@@ -579,6 +681,29 @@ def main():
     validate_parser.add_argument('--config', type=str, help='JSON 配置文件路径，默认校验内置配置')
     validate_parser.add_argument('--json', action='store_true', help='输出 JSON 格式')
 
+    history_parser = subparsers.add_parser('history', help='历史数据转换工具')
+    history_subparsers = history_parser.add_subparsers(dest='history_command')
+    history_grid_parser = history_subparsers.add_parser(
+        'export-grid',
+        help='导出 grid 回测历史 CSV',
+    )
+    history_grid_parser.add_argument('--symbol', type=str, default=DEFAULT_BACKTEST_SYMBOL)
+    history_grid_parser.add_argument('--start-date', type=str, help='历史起始日期，格式 YYYY-MM-DD')
+    history_grid_parser.add_argument('--end-date', type=str, help='历史结束日期，格式 YYYY-MM-DD')
+    history_grid_parser.add_argument('--input-json', type=str, help='本地历史 JSON 数组路径')
+    history_grid_parser.add_argument('--output', type=str, required=True, help='输出 CSV 路径')
+
+    history_rotation_parser = history_subparsers.add_parser(
+        'export-rotation',
+        help='导出 rotation 回测历史 CSV 长表',
+    )
+    history_rotation_parser.add_argument('--etf-pool', type=str, help='ETF池，逗号分隔')
+    history_rotation_parser.add_argument('--start-date', type=str, help='历史起始日期，格式 YYYY-MM-DD')
+    history_rotation_parser.add_argument('--end-date', type=str, help='历史结束日期，格式 YYYY-MM-DD')
+    history_rotation_parser.add_argument('--lookback', type=int, help='prices 滚动窗口长度')
+    history_rotation_parser.add_argument('--input-json', type=str, help='本地 symbol->history JSON 路径')
+    history_rotation_parser.add_argument('--output', type=str, required=True, help='输出 CSV 路径')
+
     backtest_parser = subparsers.add_parser('backtest', help='运行回测')
     backtest_parser.add_argument('--strategy', default='grid', choices=['grid', 'rotation'])
     backtest_parser.add_argument('--symbol', type=str, default=DEFAULT_BACKTEST_SYMBOL)
@@ -650,6 +775,16 @@ def main():
                 parser.error(str(exc))
         else:
             config_parser.print_help()
+    elif args.command == 'history':
+        try:
+            if args.history_command == 'export-grid':
+                cmd_history_export_grid(args)
+            elif args.history_command == 'export-rotation':
+                cmd_history_export_rotation(args)
+            else:
+                history_parser.print_help()
+        except ValueError as exc:
+            parser.error(str(exc))
     elif args.command == 'backtest':
         try:
             cmd_backtest(args)

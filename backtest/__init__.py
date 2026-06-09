@@ -13,6 +13,14 @@ from .runner import (
     write_rejected_orders_csv,
     write_trades_csv,
 )
+from .history_adapter import (
+    build_rotation_history,
+    fetch_grid_history,
+    fetch_rotation_history,
+    normalize_grid_history,
+    write_grid_history_csv,
+    write_rotation_history_csv,
+)
 from .execution_model import BacktestExecutionModel, ExecutionDecision
 from .trading_calendar import TradingCalendar
 
@@ -22,15 +30,21 @@ __all__ = [
     'ExecutionDecision',
     'RotationBacktestRunner',
     'filter_history_by_date',
+    'build_rotation_history',
+    'fetch_grid_history',
+    'fetch_rotation_history',
     'load_history_csv',
     'load_rotation_history_csv',
     'load_rotation_history_json',
+    'normalize_grid_history',
     'sample_grid_history',
     'sample_rotation_history',
     'write_equity_curve_csv',
+    'write_grid_history_csv',
     'write_portfolio_csv',
     'write_positions_csv',
     'write_rejected_orders_csv',
+    'write_rotation_history_csv',
     'write_trades_csv',
     'TradingCalendar',
 ]

@@ -143,6 +143,17 @@ date,symbol,close,prices,volume
 python cli\commands.py backtest --strategy grid --history path\to\history.csv
 ```
 
+导出回测历史 CSV：
+
+```powershell
+python cli\commands.py history export-grid --input-json path\to\grid-history.json --output data\grid-history.csv
+python cli\commands.py history export-rotation --input-json path\to\rotation-histories.json --lookback 3 --output data\rotation-history.csv
+python cli\commands.py history export-grid --symbol 510300 --start-date 2026-01-01 --end-date 2026-01-31 --output data\grid-history.csv
+python cli\commands.py history export-rotation --etf-pool 510300,510500,159915 --start-date 2026-01-01 --end-date 2026-01-31 --lookback 3 --output data\rotation-history.csv
+```
+
+`--input-json` 适合当前 mock/simulator 阶段导入本地历史数据；未提供 `--input-json` 时会通过 `DataManager.get_etf_history()` 拉取历史行情，当前 mock adapter 会返回空历史，等 real adapter 接入后可直接用于生成回测 CSV。
+
 严格交易日历默认按周一至周五判断；`--holiday YYYY-MM-DD` 可重复指定额外休市日，`--trading-day YYYY-MM-DD` 可显式覆盖周末或休市日。未启用 `--strict-trading-calendar` 时保持原有行为，不额外拒绝历史日期。
 
 `--max-volume-participation` 可选范围为 `(0, 1]`，限制同一根 bar 内单标的全部买入和卖出成交合计最多占该 bar 成交量的比例。超限订单（含卖出订单）当前整笔按不成交处理，不进行部分成交；少于 100 股的非整手信号由模拟执行器拒绝，不归因于成交量上限。未配置时保持原有无限流动性假设。
@@ -198,6 +209,7 @@ python -m compileall -q .
 - `Simulator` 买入、卖出、均价、部分卖出和市值估算
 - `BacktestExecutionModel` 的滑点、成交量参与率限制和同一 bar 内成交量占用
 - `BacktestRunner` 的 grid 买卖周期、日期区间过滤、历史日期/盘中时间顺序与 OHLC 合法性校验、最大回撤区间、胜率/手续费统计、滑点执行价、权益曲线/组合快照/成交明细 CSV 导出、轮动样例回测、空历史保护、CSV 读取/错误处理和 CLI smoke
+- `history export-grid/export-rotation` 对 DataManager 历史数据和本地 JSON 到回测 CSV 的转换
 - `GridStrategy` 多格买入、同格防重复、卖出、止损后 ledger 重置
 - `RotationStrategy` 首次调仓、卖旧买新、失败 pending 清理和重试
 - `JsonStateStore` 对账户、网格 ledger、轮动调仓状态、成交快照、订单状态、运行 metadata 和旧版状态迁移的保存/恢复
