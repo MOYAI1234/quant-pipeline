@@ -92,6 +92,7 @@ python cli\commands.py backtest --strategy grid --max-volume-participation 0.05
 python cli\commands.py backtest --strategy grid --history path\to\history.csv --strict-trading-calendar
 python cli\commands.py backtest --strategy grid --history path\to\history.csv --strict-trading-calendar --holiday 2026-01-02
 python cli\commands.py backtest --strategy grid --equity-output data\grid-equity.csv
+python cli\commands.py backtest --strategy grid --portfolio-output data\grid-portfolio.csv
 python cli\commands.py backtest --strategy grid --trades-output data\grid-trades.csv
 python cli\commands.py backtest --strategy grid --positions-output data\grid-positions.csv
 python cli\commands.py backtest --strategy grid --rejections-output data\grid-rejections.csv
@@ -104,6 +105,7 @@ python cli\commands.py backtest --strategy rotation
 python cli\commands.py backtest --strategy rotation --history path\to\rotation-history.json
 python cli\commands.py backtest --strategy rotation --history path\to\rotation-history.csv
 python cli\commands.py backtest --strategy rotation --equity-output data\rotation-equity.csv
+python cli\commands.py backtest --strategy rotation --portfolio-output data\rotation-portfolio.csv
 python cli\commands.py backtest --strategy rotation --trades-output data\rotation-trades.csv
 python cli\commands.py backtest --strategy rotation --positions-output data\rotation-positions.csv
 python cli\commands.py backtest --strategy rotation --rejections-output data\rotation-rejections.csv
@@ -130,6 +132,7 @@ date,symbol,close,prices,volume
 ```
 
 权益曲线 CSV 字段：`date,total_value,pnl,pnl_percent,period_return,drawdown`。
+组合快照 CSV 字段：`date,cash,position_count,positions_market_value,total_value,pnl,pnl_percent,realized_pnl,unrealized_pnl,total_value_delta`。其中 `total_value_delta` 用于校验 `cash + positions_market_value` 与 `total_value` 的差异。
 成交明细 CSV 字段：`timestamp,action,symbol,price,shares,amount,commission,entry_commission,profit,net_profit`。
 持仓明细 CSV 字段：`date,symbol,shares,avg_price,cost,commission,current_price,market_value,unrealized_pnl`。
 拒单明细 CSV 字段：`timestamp,action,symbol,price,shares,amount,reason,signal_reason`。
@@ -194,7 +197,7 @@ python -m compileall -q .
 - `RiskManager` 买入仓位上限、已有标的加仓、单笔权重、无持仓卖出、固定止损、单笔止损、跟踪止损和组合亏损告警
 - `Simulator` 买入、卖出、均价、部分卖出和市值估算
 - `BacktestExecutionModel` 的滑点、成交量参与率限制和同一 bar 内成交量占用
-- `BacktestRunner` 的 grid 买卖周期、日期区间过滤、历史日期/盘中时间顺序与 OHLC 合法性校验、最大回撤区间、胜率/手续费统计、滑点执行价、权益曲线/成交明细 CSV 导出、轮动样例回测、空历史保护、CSV 读取/错误处理和 CLI smoke
+- `BacktestRunner` 的 grid 买卖周期、日期区间过滤、历史日期/盘中时间顺序与 OHLC 合法性校验、最大回撤区间、胜率/手续费统计、滑点执行价、权益曲线/组合快照/成交明细 CSV 导出、轮动样例回测、空历史保护、CSV 读取/错误处理和 CLI smoke
 - `GridStrategy` 多格买入、同格防重复、卖出、止损后 ledger 重置
 - `RotationStrategy` 首次调仓、卖旧买新、失败 pending 清理和重试
 - `JsonStateStore` 对账户、网格 ledger、轮动调仓状态、成交快照、订单状态、运行 metadata 和旧版状态迁移的保存/恢复
