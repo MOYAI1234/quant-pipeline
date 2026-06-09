@@ -288,6 +288,7 @@ class RotationBacktestRunner:
         _validate_history_trading_days(history, self.trading_calendar)
 
         self.strategy = copy.deepcopy(self._strategy_template)
+        self._validate_snapshot_symbols(history)
         self.executor = Simulator(dict(self._account_config))
         self.equity_curve = []
         self.positions_curve = []
@@ -431,6 +432,29 @@ class RotationBacktestRunner:
                 'volume': self._snapshot_volume(symbol, bar),
             }
         return market_data
+
+    def _validate_snapshot_symbols(self, history: list) -> None:
+        expected_symbols = list(getattr(self.strategy, 'etf_pool', []) or [])
+        for index, snapshot in enumerate(history, start=1):
+            symbols = snapshot.get('symbols', {})
+            if not isinstance(symbols, dict):
+                raise ValueError(
+                    f'rotation history 第 {index} 条 symbols 必须是对象'
+                )
+            missing_symbols = [
+                symbol for symbol in expected_symbols
+                if symbol not in symbols
+            ]
+            if missing_symbols:
+                snapshot_time = snapshot.get(
+                    'date',
+                    snapshot.get('timestamp', ''),
+                )
+                time_suffix = f' {snapshot_time}' if snapshot_time else ''
+                raise ValueError(
+                    f"rotation history 第 {index} 条{time_suffix} 缺少 ETF: "
+                    f"{', '.join(missing_symbols)}"
+                )
 
     def _current_prices(self, market_data: dict) -> dict:
         return {
@@ -723,6 +747,7 @@ def _normalize_rotation_symbol_bar(symbol: str, bar: dict, index: int) -> dict:
         )
         normalized_prices.append(price)
 
+    # 兼容 close、price 以及仅给 prices 序列的最小 snapshot。
     close = bar.get('close', bar.get('price', normalized_prices[-1]))
     _validate_finite_number(
         close,

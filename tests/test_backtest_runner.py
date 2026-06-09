@@ -317,6 +317,20 @@ def test_rotation_backtest_runner_rejects_missing_volume_when_limit_enabled():
         runner.run(history)
 
 
+def test_rotation_backtest_runner_rejects_later_snapshot_missing_pool_symbol():
+    runner = RotationBacktestRunner(_rotation_strategy(), {
+        'initial_capital': 100000,
+    })
+    history = sample_rotation_history()
+    history[1]['symbols'].pop('510300')
+
+    with pytest.raises(
+        ValueError,
+        match='rotation history 第 2 条 2026-01-02 缺少 ETF: 510300',
+    ):
+        runner.run(history)
+
+
 def test_rotation_backtest_runner_uses_snapshot_dates_for_rebalance_windows():
     strategy = RotationStrategy({
         'name': '测试轮动日期',
@@ -387,6 +401,7 @@ def test_rotation_backtest_runner_rejects_missing_symbol_price():
             'symbols': {
                 '510300': {'prices': [10.0, 11.0, 12.0]},
                 '510500': {'close': 9.0, 'prices': [10.0, 9.5, 9.0]},
+                '159915': {'close': 10.5, 'prices': [10.0, 10.0, 10.5]},
             },
         }])
 
