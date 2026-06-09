@@ -747,7 +747,7 @@ def _normalize_rotation_symbol_bar(symbol: str, bar: dict, index: int) -> dict:
         )
         normalized_prices.append(price)
 
-    # 兼容 close、price 以及仅给 prices 序列的最小 snapshot。
+    # 三层价格回退：优先 close，其次 price，最后取 prices 末项。
     close = bar.get('close', bar.get('price', normalized_prices[-1]))
     _validate_finite_number(
         close,
