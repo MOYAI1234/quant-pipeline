@@ -14,7 +14,8 @@ ETF 量化助手 Pipeline，目标是把数据适配、策略生成、风控检�
 - `execution/Simulator` 是简化成交模型，支持整手、手续费、均价、持仓和市值估算；`OrderManager` 会记录 pipeline 内部订单的 pending/filled/failed/rejected 状态，但不包含真实券商撮合、滑点和报单回报同步。
 - `monitor/AlertManager` 已支持结构化告警事件和可选 JSONL 文件输出，日报/周报会展示最近告警摘要；当前还未接飞书、邮件等外部通知通道。
 - 回测输入：`backtest/BacktestRunner` 已支持最小 grid 历史样例、历史 bar list/CSV 和 OHLC 数据质量校验；`RotationBacktestRunner` 已支持内置多 ETF 轮动样例、外部 JSON snapshot 和 CSV 长表历史回测。
-- 回测输出：两类 runner 均复用 `Simulator` 输出收益、最大回撤、最大回撤区间、交易次数、拒单次数与原因、胜率、总手续费及其占初始资金占比，并支持权益曲线/成交明细/持仓明细/拒单明细 CSV 导出。
+- 回测执行：两类 runner 均通过 `BacktestExecutionModel` 统一处理滑点、成交量参与率限制和拒单归因，再复用 `Simulator` 完成简化成交。
+- 回测输出：两类 runner 均输出收益、最大回撤、最大回撤区间、交易次数、拒单次数与原因、胜率、总手续费及其占初始资金占比，并支持权益曲线/成交明细/持仓明细/拒单明细 CSV 导出。
 - 回测配置：CLI 已支持可配置滑点、可选成交量参与率限制和可选严格交易日历。
 - 回测限制：当前还不是完整回测系统，不含交易所官方日历、部分成交、复杂组合和真实历史数据源。
 - `persistence/JsonStateStore` 已支持保存和恢复 `Simulator`、`GridStrategy`、`RotationStrategy`、`OrderManager` 的 JSON 快照和运行 metadata，并提供旧版无顶层 `version` 状态到 v1 的最小迁移入口；`QuantPipeline` 默认会在启动时恢复、停止时保存到 `data/state.json`，但完整多版本迁移和 SQLite 存储仍未实现。
@@ -192,6 +193,7 @@ python -m compileall -q .
 - `DataManager` 缓存过期重取和 adapter 异常包装
 - `RiskManager` 买入仓位上限、已有标的加仓、单笔权重、无持仓卖出、固定止损、单笔止损、跟踪止损和组合亏损告警
 - `Simulator` 买入、卖出、均价、部分卖出和市值估算
+- `BacktestExecutionModel` 的滑点、成交量参与率限制和同一 bar 内成交量占用
 - `BacktestRunner` 的 grid 买卖周期、日期区间过滤、历史日期/盘中时间顺序与 OHLC 合法性校验、最大回撤区间、胜率/手续费统计、滑点执行价、权益曲线/成交明细 CSV 导出、轮动样例回测、空历史保护、CSV 读取/错误处理和 CLI smoke
 - `GridStrategy` 多格买入、同格防重复、卖出、止损后 ledger 重置
 - `RotationStrategy` 首次调仓、卖旧买新、失败 pending 清理和重试
