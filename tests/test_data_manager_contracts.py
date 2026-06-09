@@ -285,7 +285,7 @@ def test_get_etf_realtime_revalidates_cached_timestamp_when_configured():
 
 
 def test_get_etf_realtime_limits_cache_ttl_to_remaining_freshness():
-    timestamp = (datetime.now(timezone.utc) - timedelta(seconds=59)).isoformat(
+    timestamp = (datetime.now(timezone.utc) - timedelta(seconds=55)).isoformat(
         timespec='seconds'
     )
     manager = _manager_with_adapter(
@@ -310,7 +310,7 @@ def test_get_etf_realtime_limits_cache_ttl_to_remaining_freshness():
     remaining_cache_ttl = (
         manager.cache._cache['realtime_510300']['expire_at'] - time.time()
     )
-    assert remaining_cache_ttl <= 2
+    assert 0 < remaining_cache_ttl <= 6
 
 
 def test_get_etf_realtime_accepts_fresh_timestamp_when_configured():

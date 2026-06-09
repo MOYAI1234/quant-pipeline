@@ -1,5 +1,6 @@
 import copy
 import csv
+import json
 import math
 from collections import Counter
 from datetime import date, datetime
@@ -287,6 +288,7 @@ class RotationBacktestRunner:
         _validate_history_trading_days(history, self.trading_calendar)
 
         self.strategy = copy.deepcopy(self._strategy_template)
+        self._validate_snapshot_symbols(history)
         self.executor = Simulator(dict(self._account_config))
         self.equity_curve = []
         self.positions_curve = []
@@ -431,6 +433,29 @@ class RotationBacktestRunner:
             }
         return market_data
 
+    def _validate_snapshot_symbols(self, history: list) -> None:
+        expected_symbols = list(getattr(self.strategy, 'etf_pool', []) or [])
+        for index, snapshot in enumerate(history, start=1):
+            symbols = snapshot.get('symbols', {})
+            if not isinstance(symbols, dict):
+                raise ValueError(
+                    f'rotation history 第 {index} 条 symbols 必须是对象'
+                )
+            missing_symbols = [
+                symbol for symbol in expected_symbols
+                if symbol not in symbols
+            ]
+            if missing_symbols:
+                snapshot_time = snapshot.get(
+                    'date',
+                    snapshot.get('timestamp', ''),
+                )
+                time_suffix = f' {snapshot_time}' if snapshot_time else ''
+                raise ValueError(
+                    f"rotation history 第 {index} 条{time_suffix} 缺少 ETF: "
+                    f"{', '.join(missing_symbols)}"
+                )
+
     def _current_prices(self, market_data: dict) -> dict:
         return {
             symbol: data['price']
@@ -494,6 +519,30 @@ def load_history_csv(path: str) -> list:
             })
     if not rows:
         raise ValueError('历史行情 CSV 没有数据行')
+    return rows
+
+
+def load_rotation_history_json(path: str) -> list:
+    json_path = Path(path)
+    if not json_path.exists():
+        raise FileNotFoundError(f"轮动历史 JSON 不存在: {json_path}")
+    if not json_path.is_file():
+        raise ValueError(f"轮动历史路径不是文件: {json_path}")
+
+    with json_path.open(encoding='utf-8') as file:
+        try:
+            payload = json.load(file)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"轮动历史 JSON 格式错误: {exc.msg}") from exc
+
+    if not isinstance(payload, list):
+        raise ValueError('轮动历史 JSON 顶层必须是数组')
+    if not payload:
+        raise ValueError('轮动历史 JSON 不能为空')
+
+    rows = []
+    for index, snapshot in enumerate(payload, start=1):
+        rows.append(_normalize_rotation_snapshot(snapshot, index))
     return rows
 
 
@@ -633,6 +682,91 @@ def _serialize_portfolio_positions(date_value: str, portfolio: dict) -> list:
         }
         for symbol, position in sorted(positions.items())
     ]
+
+
+def _normalize_rotation_snapshot(snapshot: dict, index: int) -> dict:
+    if not isinstance(snapshot, dict):
+        raise ValueError(f'轮动历史 JSON 第 {index} 条必须是对象')
+
+    time_key = 'date' if 'date' in snapshot else 'timestamp'
+    time_value = snapshot.get(time_key)
+    if not isinstance(time_value, str) or not time_value:
+        raise ValueError(
+            f'轮动历史 JSON 第 {index} 条缺少 date/timestamp'
+        )
+
+    symbols = snapshot.get('symbols')
+    if not isinstance(symbols, dict) or not symbols:
+        raise ValueError(
+            f'轮动历史 JSON 第 {index} 条 symbols 必须是非空对象'
+        )
+
+    normalized = {
+        time_key: time_value,
+        'symbols': {},
+    }
+    for symbol, bar in symbols.items():
+        normalized_symbol = _normalize_rotation_symbol(symbol, index)
+        normalized['symbols'][normalized_symbol] = _normalize_rotation_symbol_bar(
+            normalized_symbol,
+            bar,
+            index,
+        )
+    return normalized
+
+
+def _normalize_rotation_symbol(symbol: str, index: int) -> str:
+    if not isinstance(symbol, str) or not symbol.strip():
+        raise ValueError(
+            f'轮动历史 JSON 第 {index} 条 symbols 包含空标的'
+        )
+    return symbol.strip()
+
+
+def _normalize_rotation_symbol_bar(symbol: str, bar: dict, index: int) -> dict:
+    if not isinstance(bar, dict):
+        raise ValueError(
+            f'轮动历史 JSON 第 {index} 条 {symbol} 必须是对象'
+        )
+
+    prices = bar.get('prices')
+    if not isinstance(prices, list) or not prices:
+        raise ValueError(
+            f'轮动历史 JSON 第 {index} 条 {symbol} prices 必须是非空数组'
+        )
+
+    normalized_prices = []
+    for price_index, price in enumerate(prices, start=1):
+        _validate_finite_number(
+            price,
+            (
+                f'轮动历史 JSON 第 {index} 条 {symbol} '
+                f'prices 第 {price_index} 项'
+            ),
+            positive=True,
+        )
+        normalized_prices.append(price)
+
+    # 三层价格回退：优先 close，其次 price，最后取 prices 末项。
+    close = bar.get('close', bar.get('price', normalized_prices[-1]))
+    _validate_finite_number(
+        close,
+        f'轮动历史 JSON 第 {index} 条 {symbol} close/price',
+        positive=True,
+    )
+
+    normalized = {
+        'close': close,
+        'prices': normalized_prices,
+    }
+    if 'volume' in bar:
+        _validate_finite_number(
+            bar['volume'],
+            f'轮动历史 JSON 第 {index} 条 {symbol} volume',
+            non_negative=True,
+        )
+        normalized['volume'] = bar['volume']
+    return normalized
 
 
 def _render_rejection_reasons(reasons: dict) -> str:

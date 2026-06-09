@@ -13,6 +13,7 @@ from backtest.runner import (
     RotationBacktestRunner,
     filter_history_by_date,
     load_history_csv,
+    load_rotation_history_json,
     sample_grid_history,
     sample_rotation_history,
     write_equity_curve_csv,
@@ -229,16 +230,20 @@ def _run_rotation_backtest(
     max_volume_participation: float | None,
     trading_calendar: TradingCalendar | None,
 ):
-    if args.history:
-        raise ValueError('rotation 回测当前仅支持内置多 ETF 样例，CSV 历史行情将在后续版本支持')
-
     etf_pool = _resolve_etf_pool(args.etf_pool)
-    history = _resolve_backtest_history(sample_rotation_history(), args)
+    history = _resolve_backtest_history(
+        (
+            load_rotation_history_json(args.history)
+            if args.history else sample_rotation_history()
+        ),
+        args,
+    )
     available_symbols = set(history[0].get('symbols', {}))
     missing_symbols = [symbol for symbol in etf_pool if symbol not in available_symbols]
     if missing_symbols:
+        source_label = '历史 JSON' if args.history else '内置样例'
         raise ValueError(
-            f"rotation 内置样例不包含 ETF: {', '.join(missing_symbols)}"
+            f"rotation {source_label}不包含 ETF: {', '.join(missing_symbols)}"
         )
     lookback = _positive_int(
         _value_or_default(args.lookback, DEFAULT_BACKTEST_ROTATION_LOOKBACK),
@@ -564,7 +569,11 @@ def main():
     backtest_parser = subparsers.add_parser('backtest', help='运行回测')
     backtest_parser.add_argument('--strategy', default='grid', choices=['grid', 'rotation'])
     backtest_parser.add_argument('--symbol', type=str, default=DEFAULT_BACKTEST_SYMBOL)
-    backtest_parser.add_argument('--history', type=str, help='历史行情 CSV，字段: date,open,high,low,close,volume,amount')
+    backtest_parser.add_argument(
+        '--history',
+        type=str,
+        help='历史行情文件；grid 使用 CSV，rotation 使用 JSON snapshot 数组',
+    )
     backtest_parser.add_argument('--start-date', type=str, help='回测起始日期，格式 YYYY-MM-DD')
     backtest_parser.add_argument('--end-date', type=str, help='回测结束日期，格式 YYYY-MM-DD')
     backtest_parser.add_argument('--center-price', type=float)
