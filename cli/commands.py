@@ -13,6 +13,7 @@ from backtest.runner import (
     RotationBacktestRunner,
     filter_history_by_date,
     load_history_csv,
+    load_rotation_history_csv,
     load_rotation_history_json,
     sample_grid_history,
     sample_rotation_history,
@@ -232,10 +233,7 @@ def _run_rotation_backtest(
 ):
     etf_pool = _resolve_etf_pool(args.etf_pool)
     history = _resolve_backtest_history(
-        (
-            load_rotation_history_json(args.history)
-            if args.history else sample_rotation_history()
-        ),
+        _load_rotation_history(args.history),
         args,
     )
     available_symbols = set(history[0].get('symbols', {}))
@@ -284,6 +282,14 @@ def _resolve_symbol(symbol: str) -> str:
     if not resolved:
         raise ValueError('--symbol 不能为空')
     return resolved
+
+
+def _load_rotation_history(history_path: str | None) -> list:
+    if not history_path:
+        return sample_rotation_history()
+    if Path(history_path).suffix.lower() == '.json':
+        return load_rotation_history_json(history_path)
+    return load_rotation_history_csv(history_path)
 
 
 def _resolve_etf_pool(etf_pool: str) -> list:
@@ -572,7 +578,7 @@ def main():
     backtest_parser.add_argument(
         '--history',
         type=str,
-        help='历史行情文件；grid 使用 CSV，rotation 使用 JSON snapshot 数组',
+        help='历史行情文件；grid 使用 CSV，rotation 支持 CSV 长表或 JSON snapshot 数组',
     )
     backtest_parser.add_argument('--start-date', type=str, help='回测起始日期，格式 YYYY-MM-DD')
     backtest_parser.add_argument('--end-date', type=str, help='回测结束日期，格式 YYYY-MM-DD')

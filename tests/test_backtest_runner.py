@@ -12,6 +12,7 @@ from backtest.runner import (
     RotationBacktestRunner,
     filter_history_by_date,
     load_history_csv,
+    load_rotation_history_csv,
     load_rotation_history_json,
     sample_grid_history,
     sample_rotation_history,
@@ -1063,6 +1064,100 @@ def test_load_rotation_history_json_rejects_missing_prices(tmp_path):
         load_rotation_history_json(str(history_file))
 
 
+def test_load_rotation_history_csv_reads_long_table(tmp_path):
+    history_file = tmp_path / 'rotation-history.csv'
+    history_file.write_text(
+        'date,symbol,close,prices,volume\n'
+        '2026-01-01,510300,12.0,10|11|12,1000000\n'
+        '2026-01-01,510500,9.0,10|9.5|9,900000\n'
+        '2026-01-02,510300,11.0,11|12|11,1100000\n'
+        '2026-01-02,510500,12.0,9|10|12,1200000\n',
+        encoding='utf-8',
+    )
+
+    rows = load_rotation_history_csv(str(history_file))
+
+    assert rows == [
+        {
+            'date': '2026-01-01',
+            'symbols': {
+                '510300': {
+                    'close': 12.0,
+                    'prices': [10.0, 11.0, 12.0],
+                    'volume': 1000000.0,
+                },
+                '510500': {
+                    'close': 9.0,
+                    'prices': [10.0, 9.5, 9.0],
+                    'volume': 900000.0,
+                },
+            },
+        },
+        {
+            'date': '2026-01-02',
+            'symbols': {
+                '510300': {
+                    'close': 11.0,
+                    'prices': [11.0, 12.0, 11.0],
+                    'volume': 1100000.0,
+                },
+                '510500': {
+                    'close': 12.0,
+                    'prices': [9.0, 10.0, 12.0],
+                    'volume': 1200000.0,
+                },
+            },
+        },
+    ]
+
+
+def test_load_rotation_history_csv_rejects_duplicate_symbol_per_date(tmp_path):
+    history_file = tmp_path / 'rotation-history.csv'
+    history_file.write_text(
+        'date,symbol,close,prices\n'
+        '2026-01-01,510300,12.0,10|11|12\n'
+        '2026-01-01,510300,11.0,10|11|11\n',
+        encoding='utf-8',
+    )
+
+    with pytest.raises(
+        ValueError,
+        match='轮动历史 CSV 第 3 行重复标的: 2026-01-01 510300',
+    ):
+        load_rotation_history_csv(str(history_file))
+
+
+def test_load_rotation_history_csv_rejects_duplicate_symbol_after_trim(tmp_path):
+    history_file = tmp_path / 'rotation-history.csv'
+    history_file.write_text(
+        'date,symbol,close,prices\n'
+        '2026-01-01,510300,12.0,10|11|12\n'
+        '2026-01-01, 510300 ,11.0,10|11|11\n',
+        encoding='utf-8',
+    )
+
+    with pytest.raises(
+        ValueError,
+        match='轮动历史 CSV 第 3 行重复标的: 2026-01-01 510300',
+    ):
+        load_rotation_history_csv(str(history_file))
+
+
+def test_load_rotation_history_csv_rejects_prices_with_empty_segment(tmp_path):
+    history_file = tmp_path / 'rotation-history.csv'
+    history_file.write_text(
+        'date,symbol,close,prices\n'
+        '2026-01-01,510300,12.0,10||12\n',
+        encoding='utf-8',
+    )
+
+    with pytest.raises(
+        ValueError,
+        match='轮动历史 CSV 第 2 行字段 prices 第 2 项不能为空',
+    ):
+        load_rotation_history_csv(str(history_file))
+
+
 def test_write_equity_curve_csv_writes_header_and_rows(tmp_path):
     output_file = tmp_path / 'nested' / 'equity.csv'
 
@@ -1633,6 +1728,38 @@ def test_cli_rotation_backtest_rejects_unknown_sample_symbol():
 def test_cli_rotation_backtest_accepts_history_json(tmp_path):
     history_file = tmp_path / 'rotation-history.json'
     history_file.write_text(json.dumps(sample_rotation_history()), encoding='utf-8')
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'rotation',
+            '--history',
+            str(history_file),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert '# 回测报告 - 轮动回测' in completed.stdout
+    assert '- 标的池: 510300,510500,159915' in completed.stdout
+
+
+def test_cli_rotation_backtest_accepts_history_csv(tmp_path):
+    history_file = tmp_path / 'rotation-history.csv'
+    history_file.write_text(
+        'date,symbol,close,prices,volume\n'
+        '2026-01-01,510300,12.0,10|11|12,1000000\n'
+        '2026-01-01,510500,9.0,10|9.5|9,1000000\n'
+        '2026-01-01,159915,10.5,10|10|10.5,1000000\n'
+        '2026-01-02,510300,11.0,11|12|11,1000000\n'
+        '2026-01-02,510500,12.0,9|10|12,1000000\n'
+        '2026-01-02,159915,10.2,10|10.5|10.2,1000000\n',
+        encoding='utf-8',
+    )
 
     completed = subprocess.run(
         [

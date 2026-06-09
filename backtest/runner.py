@@ -11,6 +11,7 @@ from execution.simulator import Simulator
 
 
 REQUIRED_CSV_FIELDS = ('date', 'open', 'high', 'low', 'close', 'volume', 'amount')
+ROTATION_CSV_FIELDS = ('date', 'symbol', 'close', 'prices')
 EQUITY_CURVE_CSV_FIELDS = (
     'date',
     'total_value',
@@ -543,6 +544,80 @@ def load_rotation_history_json(path: str) -> list:
     rows = []
     for index, snapshot in enumerate(payload, start=1):
         rows.append(_normalize_rotation_snapshot(snapshot, index))
+    return rows
+
+
+def load_rotation_history_csv(path: str) -> list:
+    csv_path = Path(path)
+    if not csv_path.exists():
+        raise FileNotFoundError(f"轮动历史 CSV 不存在: {csv_path}")
+    if not csv_path.is_file():
+        raise ValueError(f"轮动历史路径不是文件: {csv_path}")
+
+    snapshots = {}
+    with csv_path.open(newline='', encoding='utf-8') as file:
+        reader = csv.DictReader(file)
+        if not reader.fieldnames:
+            raise ValueError('轮动历史 CSV 不能为空')
+
+        missing = [
+            field for field in ROTATION_CSV_FIELDS
+            if field not in reader.fieldnames
+        ]
+        if missing:
+            raise ValueError(f"轮动历史 CSV 缺少字段: {', '.join(missing)}")
+
+        for line_number, row in enumerate(reader, start=2):
+            if _is_blank_row(row):
+                continue
+            snapshot_date = _required_text(row.get('date'), 'date', line_number)
+            symbol = _required_text(row.get('symbol'), 'symbol', line_number).strip()
+            if not symbol:
+                raise ValueError(
+                    f"轮动历史 CSV 第 {line_number} 行字段 symbol 不能为空"
+                )
+            close = _to_float(row.get('close'), 'close', line_number)
+            _validate_finite_number(
+                close,
+                f'轮动历史 CSV 第 {line_number} 行字段 close',
+                positive=True,
+            )
+            bar = {
+                'close': close,
+                'prices': _to_price_series(row.get('prices'), line_number),
+            }
+            if 'volume' in reader.fieldnames and row.get('volume') not in (None, ''):
+                volume = _to_float(row.get('volume'), 'volume', line_number)
+                _validate_finite_number(
+                    volume,
+                    f'轮动历史 CSV 第 {line_number} 行字段 volume',
+                    non_negative=True,
+                )
+                bar['volume'] = volume
+            symbols = snapshots.setdefault(snapshot_date, {})
+            if symbol in symbols:
+                raise ValueError(
+                    f'轮动历史 CSV 第 {line_number} 行重复标的: '
+                    f'{snapshot_date} {symbol}'
+                )
+            symbols[symbol] = bar
+
+    if not snapshots:
+        raise ValueError('轮动历史 CSV 没有数据行')
+
+    # snapshots keeps first-seen CSV date order; _validate_history_order catches disorder.
+    rows = [
+        _normalize_rotation_snapshot(
+            {
+                'date': snapshot_date,
+                'symbols': symbols,
+            },
+            index,
+        )
+        for index, (snapshot_date, symbols)
+        in enumerate(snapshots.items(), start=1)
+    ]
+    _validate_history_order(rows)
     return rows
 
 
@@ -1203,6 +1278,39 @@ def _to_float(value, field: str, line_number: int) -> float:
         raise ValueError(
             f"历史行情 CSV 第 {line_number} 行字段 {field} 不是有效数字: {value}"
         ) from exc
+
+
+def _to_price_series(value, line_number: int) -> list:
+    if value in (None, ''):
+        raise ValueError(
+            f"轮动历史 CSV 第 {line_number} 行字段 prices 不能为空"
+        )
+    parts = [part.strip() for part in str(value).split('|')]
+    if not parts:
+        raise ValueError(
+            f"轮动历史 CSV 第 {line_number} 行字段 prices 不能为空"
+        )
+    prices = []
+    for index, part in enumerate(parts, start=1):
+        if not part:
+            raise ValueError(
+                f"轮动历史 CSV 第 {line_number} 行字段 prices "
+                f"第 {index} 项不能为空"
+            )
+        try:
+            price = float(part)
+        except ValueError as exc:
+            raise ValueError(
+                f"轮动历史 CSV 第 {line_number} 行字段 prices "
+                f"第 {index} 项不是有效数字: {part}"
+            ) from exc
+        _validate_finite_number(
+            price,
+            f'轮动历史 CSV 第 {line_number} 行字段 prices 第 {index} 项',
+            positive=True,
+        )
+        prices.append(price)
+    return prices
 
 
 def _to_int(value, field: str, line_number: int) -> int:
