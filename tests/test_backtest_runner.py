@@ -1127,6 +1127,37 @@ def test_load_rotation_history_csv_rejects_duplicate_symbol_per_date(tmp_path):
         load_rotation_history_csv(str(history_file))
 
 
+def test_load_rotation_history_csv_rejects_duplicate_symbol_after_trim(tmp_path):
+    history_file = tmp_path / 'rotation-history.csv'
+    history_file.write_text(
+        'date,symbol,close,prices\n'
+        '2026-01-01,510300,12.0,10|11|12\n'
+        '2026-01-01, 510300 ,11.0,10|11|11\n',
+        encoding='utf-8',
+    )
+
+    with pytest.raises(
+        ValueError,
+        match='轮动历史 CSV 第 3 行重复标的: 2026-01-01 510300',
+    ):
+        load_rotation_history_csv(str(history_file))
+
+
+def test_load_rotation_history_csv_rejects_prices_with_empty_segment(tmp_path):
+    history_file = tmp_path / 'rotation-history.csv'
+    history_file.write_text(
+        'date,symbol,close,prices\n'
+        '2026-01-01,510300,12.0,10||12\n',
+        encoding='utf-8',
+    )
+
+    with pytest.raises(
+        ValueError,
+        match='轮动历史 CSV 第 2 行字段 prices 第 2 项不能为空',
+    ):
+        load_rotation_history_csv(str(history_file))
+
+
 def test_write_equity_curve_csv_writes_header_and_rows(tmp_path):
     output_file = tmp_path / 'nested' / 'equity.csv'
 

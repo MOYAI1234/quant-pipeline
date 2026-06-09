@@ -571,7 +571,11 @@ def load_rotation_history_csv(path: str) -> list:
             if _is_blank_row(row):
                 continue
             snapshot_date = _required_text(row.get('date'), 'date', line_number)
-            symbol = _required_text(row.get('symbol'), 'symbol', line_number)
+            symbol = _required_text(row.get('symbol'), 'symbol', line_number).strip()
+            if not symbol:
+                raise ValueError(
+                    f"轮动历史 CSV 第 {line_number} 行字段 symbol 不能为空"
+                )
             close = _to_float(row.get('close'), 'close', line_number)
             _validate_finite_number(
                 close,
@@ -1280,13 +1284,18 @@ def _to_price_series(value, line_number: int) -> list:
         raise ValueError(
             f"轮动历史 CSV 第 {line_number} 行字段 prices 不能为空"
         )
-    parts = [part.strip() for part in str(value).split('|') if part.strip()]
+    parts = [part.strip() for part in str(value).split('|')]
     if not parts:
         raise ValueError(
             f"轮动历史 CSV 第 {line_number} 行字段 prices 不能为空"
         )
     prices = []
     for index, part in enumerate(parts, start=1):
+        if not part:
+            raise ValueError(
+                f"轮动历史 CSV 第 {line_number} 行字段 prices "
+                f"第 {index} 项不能为空"
+            )
         try:
             price = float(part)
         except ValueError as exc:
