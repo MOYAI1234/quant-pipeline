@@ -36,6 +36,7 @@ from config.settings import SYSTEM_CONFIG
 from config.validation import validate_config
 from data.contracts import AdapterError
 from data.data_manager import DataManager
+from persistence import JsonStateStore
 from strategy.grid_strategy import GridStrategy
 from strategy.rotation_strategy import RotationStrategy
 
@@ -134,6 +135,19 @@ def cmd_config_validate(args):
     else:
         print(_render_config_validation(result))
     if not result['valid']:
+        raise SystemExit(1)
+
+
+def cmd_diagnose(args):
+    config = _build_diagnostic_config(args)
+    report = _build_diagnostic_report(config)
+
+    if args.json:
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+    else:
+        print(_render_diagnostic_report(report))
+
+    if args.strict and not report['ready']:
         raise SystemExit(1)
 
 
@@ -526,6 +540,128 @@ def _build_runtime_config(args) -> dict:
     return config
 
 
+def _build_diagnostic_config(args) -> dict:
+    config = (
+        _load_config_file(args.config)
+        if getattr(args, 'config', None)
+        else deepcopy(SYSTEM_CONFIG)
+    )
+    state_config = config.get('state')
+    if isinstance(state_config, dict):
+        if getattr(args, 'no_state', False):
+            state_config['enabled'] = False
+        if getattr(args, 'state_path', None):
+            state_config['path'] = args.state_path
+    return config
+
+
+def _build_diagnostic_report(config: dict) -> dict:
+    config_result = validate_config(config)
+    data_summary = _diagnose_data_sources(config)
+    state_summary = _diagnose_state(config)
+    return {
+        'ready': (
+            config_result['valid']
+            and data_summary['available']
+            and state_summary['ok']
+        ),
+        'config': config_result,
+        'data': data_summary,
+        'state': state_summary,
+    }
+
+
+def _diagnose_data_sources(config: dict) -> dict:
+    data_config = config.get('data')
+    if not isinstance(data_config, dict):
+        return {
+            'available': False,
+            'mock': False,
+            'adapters': {},
+            'error': 'data 必须是 dict',
+        }
+    try:
+        manager = DataManager(data_config)
+    except (AttributeError, TypeError, ValueError) as exc:
+        return {
+            'available': False,
+            'mock': False,
+            'adapters': {},
+            'error': str(exc),
+        }
+    try:
+        manager.connect()
+        return _build_health_summary(manager.health_check())
+    finally:
+        manager.disconnect()
+
+
+def _diagnose_state(config: dict) -> dict:
+    state_config = config.get('state')
+    if not isinstance(state_config, dict):
+        return {
+            'enabled': False,
+            'path': None,
+            'exists': False,
+            'has_data': False,
+            'ok': False,
+            'version': None,
+            'error': 'state 必须是 dict',
+        }
+    if not state_config.get('enabled', False):
+        return {
+            'enabled': False,
+            'path': None,
+            'exists': False,
+            'has_data': False,
+            'ok': True,
+            'version': None,
+            'error': '',
+        }
+
+    configured_path = state_config.get('path', 'data/state.json')
+    if not isinstance(configured_path, str) or not configured_path:
+        return {
+            'enabled': True,
+            'path': None,
+            'exists': False,
+            'has_data': False,
+            'ok': False,
+            'version': None,
+            'error': 'state.path 必须是非空字符串',
+        }
+    store = JsonStateStore(configured_path)
+    try:
+        state = store.load_state()
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        return {
+            'enabled': True,
+            'path': str(store.path),
+            'exists': store.path.exists(),
+            'has_data': False,
+            'ok': False,
+            'version': None,
+            'error': str(exc),
+        }
+    return {
+        'enabled': True,
+        'path': str(store.path),
+        'exists': store.path.exists(),
+        'has_data': _state_has_data(state),
+        'ok': True,
+        'version': state.get('version') if state else None,
+        'error': '',
+    }
+
+
+def _state_has_data(state: dict) -> bool:
+    return any(
+        value not in (None, '', [], {})
+        for key, value in state.items()
+        if key != 'version'
+    )
+
+
 def _build_health_summary(adapter_statuses: dict) -> dict:
     return {
         'available': bool(adapter_statuses) and all(
@@ -544,6 +680,8 @@ def _render_health_summary(summary: dict) -> str:
     overall = 'OK' if summary['available'] else 'FAIL'
     mode = 'mock' if summary['mock'] else 'mixed/real'
     lines = [f"数据源状态: {overall} ({mode})"]
+    if summary.get('error'):
+        lines.append(f"- error: {summary['error']}")
     for name, status in summary['adapters'].items():
         availability = '可用' if status.get('available') else '不可用'
         error = status.get('error') or '-'
@@ -639,6 +777,29 @@ def _render_config_validation(result: dict) -> str:
     return "\n".join(lines)
 
 
+def _render_diagnostic_report(report: dict) -> str:
+    overall = 'OK' if report['ready'] else 'FAIL'
+    lines = [f"运行诊断: {overall}"]
+    lines.append(_render_config_validation(report['config']))
+    lines.append(_render_health_summary(report['data']))
+    lines.append(_render_state_summary(report['state']))
+    return "\n".join(lines)
+
+
+def _render_state_summary(summary: dict) -> str:
+    if not summary['enabled']:
+        return '状态文件: OK (disabled)'
+    if not summary['ok']:
+        return f"状态文件: FAIL, path={summary['path']}, error={summary['error']}"
+    if not summary['exists']:
+        return f"状态文件: OK (missing), path={summary['path']}"
+    if not summary['has_data']:
+        return f"状态文件: OK (empty), path={summary['path']}"
+    return (
+        f"状态文件: OK, path={summary['path']}, version={summary.get('version')}"
+    )
+
+
 def _add_state_options(parser):
     parser.add_argument('--state-path', type=str, help='状态文件路径，默认 data/state.json')
     parser.add_argument('--no-state', action='store_true', help='禁用状态恢复和保存')
@@ -676,6 +837,16 @@ def main():
         help='任一数据源不可用时返回非零退出码',
     )
     _add_state_options(health_parser)
+
+    diagnose_parser = subparsers.add_parser('diagnose', help='运行启动前诊断')
+    diagnose_parser.add_argument('--config', type=str, help='JSON 配置文件路径，默认使用内置配置')
+    diagnose_parser.add_argument('--json', action='store_true', help='输出 JSON 格式')
+    diagnose_parser.add_argument(
+        '--strict',
+        action='store_true',
+        help='任一诊断项失败时返回非零退出码',
+    )
+    _add_state_options(diagnose_parser)
 
     alerts_parser = subparsers.add_parser('alerts', help='查看本地告警事件')
     alerts_parser.add_argument(
@@ -775,6 +946,11 @@ def main():
         cmd_report(args)
     elif args.command == 'health':
         cmd_health(args)
+    elif args.command == 'diagnose':
+        try:
+            cmd_diagnose(args)
+        except (TypeError, ValueError) as exc:
+            parser.error(str(exc))
     elif args.command == 'alerts':
         try:
             cmd_alerts(args)
