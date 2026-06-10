@@ -197,7 +197,24 @@ def _validate_adapter_config(
     if mode not in ('mock', 'real'):
         errors.append(f"{name}.mode 必须是 mock 或 real")
     elif mode == 'real':
-        warnings.append(f"{name}.mode=real 当前仍是未实现适配器")
+        if name == 'data.mx_data' and adapter_config.get('history_command'):
+            warnings.append(
+                'data.mx_data.mode=real 当前仅支持 history_command 历史行情 provider'
+            )
+        else:
+            warnings.append(f"{name}.mode=real 当前仍是未实现适配器")
+
+    if name == 'data.mx_data' and 'history_command' in adapter_config:
+        history_command = adapter_config.get('history_command')
+        if history_command is not None and (
+            not isinstance(history_command, list)
+            or not history_command
+            or any(
+                not isinstance(part, str) or not part
+                for part in history_command
+            )
+        ):
+            errors.append('data.mx_data.history_command 必须是非空字符串数组')
 
     _validate_optional_positive_number(
         adapter_config,

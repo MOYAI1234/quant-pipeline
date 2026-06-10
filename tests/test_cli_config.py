@@ -163,6 +163,36 @@ def test_validate_config_warns_for_real_adapter_mode():
     ]
 
 
+def test_validate_config_warns_for_real_mx_data_history_provider_only():
+    config = deepcopy(SYSTEM_CONFIG)
+    config['data']['mx_data']['mode'] = 'real'
+    config['data']['mx_data']['history_command'] = [
+        'python',
+        'fetch_history.py',
+        '{symbol}',
+        '{start_date}',
+        '{end_date}',
+    ]
+
+    result = validate_config(config)
+
+    assert result['valid'] is True
+    assert result['errors'] == []
+    assert result['warnings'] == [
+        'data.mx_data.mode=real 当前仅支持 history_command 历史行情 provider',
+    ]
+
+
+def test_validate_config_rejects_invalid_mx_data_history_command():
+    config = deepcopy(SYSTEM_CONFIG)
+    config['data']['mx_data']['history_command'] = 'python fetch_history.py'
+
+    result = validate_config(config)
+
+    assert result['valid'] is False
+    assert 'data.mx_data.history_command 必须是非空字符串数组' in result['errors']
+
+
 def test_validate_config_rejects_invalid_adapter_mode():
     config = deepcopy(SYSTEM_CONFIG)
     config['data']['mx_data']['mode'] = 'paper'

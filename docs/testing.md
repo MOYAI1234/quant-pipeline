@@ -29,7 +29,7 @@ python cli\commands.py history export-grid --help
 python cli\commands.py history export-rotation --help
 ```
 
-当前基线：`pytest` 应通过 277 个测试。
+当前基线：`pytest` 应通过 288 个测试。
 
 ## 分层测试
 
@@ -45,7 +45,8 @@ python -m pytest tests\test_adapters.py tests\test_data_manager_contracts.py tes
 
 - adapter 必须明确 `mode=mock|real`。
 - `mock` 模式可用于链路验证，但不能伪装成真实行情。
-- `real` 模式未实现时必须明确不可用，并抛出服务不可用错误。
+- `mx_data.history` 的 `real` 模式必须显式配置 `history_command`，未配置时必须明确不可用。
+- 非历史行情的 `real` 操作未实现时必须明确不可用，并抛出服务不可用错误。
 - `DataManager` 必须校验实时行情、净值和历史行情的字段、数值类型、非负单位和可选时效。
 
 ### 策略、风控与模拟执行
@@ -151,11 +152,11 @@ python cli\commands.py backtest --strategy rotation --history data\rotation-hist
 未提供 `--input-json` 时，`history export-*` 会调用 `DataManager.get_etf_history()`，并且必须同时指定 `--start-date` 和 `--end-date`：
 
 ```powershell
-python cli\commands.py history export-grid --symbol 510300 --start-date 2026-01-01 --end-date 2026-01-31 --output data\grid-history.csv
-python cli\commands.py history export-rotation --symbols 510300,159915 --start-date 2026-01-01 --end-date 2026-01-31 --lookback 3 --output data\rotation-history.csv
+python cli\commands.py history export-grid --config path\to\config.json --symbol 510300 --start-date 2026-01-01 --end-date 2026-01-31 --output data\grid-history.csv
+python cli\commands.py history export-rotation --config path\to\config.json --etf-pool 510300,159915 --start-date 2026-01-01 --end-date 2026-01-31 --lookback 3 --output data\rotation-history.csv
 ```
 
-当前默认 adapter 是 mock/空历史，真实数据接入前该路径只用于验证调用边界，不代表真实可用数据。
+当前默认 adapter 是 mock/空历史；真实历史数据必须通过配置文件显式设置 `data.mx_data.mode=real` 和 `data.mx_data.history_command`，不代表仓库内置真实行情服务或凭据。
 
 ## 交付边界
 

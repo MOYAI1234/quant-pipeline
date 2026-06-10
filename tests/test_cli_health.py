@@ -64,6 +64,24 @@ def test_cli_health_summary_treats_empty_adapters_as_unavailable():
     }
 
 
+def test_cli_health_summary_keeps_partial_real_adapter_unavailable():
+    summary = cli_commands._build_health_summary({
+        'mx_data': {
+            'service': 'MXDataAdapter',
+            'mode': 'real',
+            'connected': True,
+            'available': False,
+            'history_available': True,
+            'mock': False,
+            'error': '',
+        },
+    })
+
+    assert summary['available'] is False
+    assert summary['mock'] is False
+    assert summary['adapters']['mx_data']['history_available'] is True
+
+
 def test_cli_health_strict_exits_when_adapter_is_unavailable(monkeypatch):
     class FakeDataManager:
 

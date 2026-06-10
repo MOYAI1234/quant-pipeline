@@ -8,8 +8,8 @@ ETF 量化助手 Pipeline，目标是把数据适配、策略生成、风控检�
 
 重要边界：
 
-- `adapters/` 中的 `mx-data`、`mx-xuangu`、`mx-search`、`jason-kb` 适配器目前仍是占位实现，未接真实外部服务。
-- adapter 支持 `mode=mock|real`。默认 `mock` 会返回占位数据；`real` 当前会明确标记为不可用并抛出 `ServiceUnavailableError`，避免把 0 或空列表误认为真实行情。
+- `adapters/` 中的 `mx-data`、`mx-xuangu`、`mx-search`、`jason-kb` 适配器多数仍是占位实现；`mx-data` 仅先支持通过 `history_command` 接入外部命令式历史行情 provider。
+- adapter 支持 `mode=mock|real`。默认 `mock` 会返回占位数据；未配置 provider 的 `real` 会明确标记为不可用并抛出 `ServiceUnavailableError`，避免把 0 或空列表误认为真实行情。
 - `DataManager` 会校验实时行情、净值和历史行情的基础字段、数值类型和可选时效契约；字段缺失、返回 shape 错误或启用时效校验后的过期数据会抛出 `DataFetchError`，避免脏数据继续进入策略链路。
 - `execution/Simulator` 是简化成交模型，支持整手、手续费、均价、持仓和市值估算；`OrderManager` 会记录 pipeline 内部订单的 pending/filled/failed/rejected 状态，但不包含真实券商撮合、滑点和报单回报同步。
 - `monitor/AlertManager` 已支持结构化告警事件和可选 JSONL 文件输出，日报/周报会展示最近告警摘要；当前还未接飞书、邮件等外部通知通道。
@@ -17,7 +17,7 @@ ETF 量化助手 Pipeline，目标是把数据适配、策略生成、风控检�
 - 回测执行：两类 runner 均通过 `BacktestExecutionModel` 统一处理滑点、成交量参与率限制和拒单归因，再复用 `Simulator` 完成简化成交。
 - 回测输出：两类 runner 均输出收益、最大回撤、最大回撤区间、交易次数、拒单次数与原因、胜率、总手续费及其占初始资金占比，并支持权益曲线/成交明细/持仓明细/拒单明细 CSV 导出。
 - 回测配置：CLI 已支持可配置滑点、可选成交量参与率限制和可选严格交易日历。
-- 回测限制：当前还不是完整回测系统，不含交易所官方日历、部分成交、复杂组合和真实历史数据源。
+- 回测限制：当前还不是完整回测系统，不含交易所官方日历、部分成交和复杂组合；真实历史数据源目前只提供外部命令 provider 接入位，仓库不内置 API key 或真实服务凭据。
 - `persistence/JsonStateStore` 已支持保存和恢复 `Simulator`、`GridStrategy`、`RotationStrategy`、`OrderManager` 的 JSON 快照和运行 metadata，并提供旧版无顶层 `version` 状态到 v1 的最小迁移入口；`QuantPipeline` 默认会在启动时恢复、停止时保存到 `data/state.json`，但完整多版本迁移和 SQLite 存储仍未实现。
 - QMT/实盘执行、API、Web、完整回测引擎仍未实现。
 
@@ -152,11 +152,37 @@ python cli\commands.py backtest --strategy grid --history path\to\history.csv
 ```powershell
 python cli\commands.py history export-grid --input-json path\to\grid-history.json --output data\grid-history.csv
 python cli\commands.py history export-rotation --input-json path\to\rotation-histories.json --lookback 3 --output data\rotation-history.csv
-python cli\commands.py history export-grid --symbol 510300 --start-date 2026-01-01 --end-date 2026-01-31 --output data\grid-history.csv
-python cli\commands.py history export-rotation --etf-pool 510300,510500,159915 --start-date 2026-01-01 --end-date 2026-01-31 --lookback 3 --output data\rotation-history.csv
+python cli\commands.py history export-grid --config path\to\config.json --symbol 510300 --start-date 2026-01-01 --end-date 2026-01-31 --output data\grid-history.csv
+python cli\commands.py history export-rotation --config path\to\config.json --etf-pool 510300,510500,159915 --start-date 2026-01-01 --end-date 2026-01-31 --lookback 3 --output data\rotation-history.csv
 ```
 
-`--input-json` 适合当前 mock/simulator 阶段导入本地历史数据；未提供 `--input-json` 时会通过 `DataManager.get_etf_history()` 拉取历史行情，当前 mock adapter 会返回空历史，等 real adapter 接入后可直接用于生成回测 CSV。
+`--input-json` 适合当前 mock/simulator 阶段导入本地历史数据；未提供 `--input-json` 时会通过 `DataManager.get_etf_history()` 拉取历史行情，当前 mock adapter 会返回空历史。真实历史行情 provider 需要通过 JSON 配置文件显式启用，例如：
+
+```json
+{
+  "data": {
+    "mx_data": {
+      "mode": "real",
+      "timeout": 10,
+      "history_command": [
+        "python",
+        "scripts/fetch_history.py",
+        "--symbol", "{symbol}",
+        "--start-date", "{start_date}",
+        "--end-date", "{end_date}"
+      ]
+    },
+    "mx_xuangu": {"mode": "mock", "timeout": 10},
+    "mx_search": {"mode": "mock", "timeout": 10}
+  },
+  "account": {"initial_capital": 100000, "commission_rate": 0.0003},
+  "risk": {"max_position": 5, "stop_loss": 0.15, "max_single_loss": 0.02, "min_volume": 10000000, "min_size": 1000000000, "max_tracking_error": 0.005, "max_premium": 0.05},
+  "monitor": {"check_interval": 60, "alert_threshold": -10, "alert_file_path": null},
+  "state": {"enabled": true, "path": "data/state.json", "restore_on_start": true, "save_on_stop": true}
+}
+```
+
+`history_command` 必须输出 JSON 数组，或输出包含 `history` / `data` 数组字段的 JSON object；数组元素仍需满足 `date,open,high,low,close,volume,amount` 历史行情契约。
 
 严格交易日历默认按周一至周五判断；`--holiday YYYY-MM-DD` 可重复指定额外休市日，`--trading-day YYYY-MM-DD` 可显式覆盖周末或休市日。未启用 `--strict-trading-calendar` 时保持原有行为，不额外拒绝历史日期。
 
@@ -203,7 +229,7 @@ python -m compileall -q .
 
 当前测试重点覆盖：
 
-- adapter 的 mock/real 模式、结构化健康检查和未实现 real 模式错误
+- adapter 的 mock/real 模式、结构化健康检查、未实现 real 操作错误和 `mx_data.history_command` provider
 - CLI `health` 对数据源健康状态的文本/JSON 输出
 - CLI `alerts` 对本地 JSONL 告警事件的文本/JSON 输出、limit 和错误处理
 - CLI `config validate` 对内置配置和 JSON 配置文件的校验
@@ -213,7 +239,7 @@ python -m compileall -q .
 - `Simulator` 买入、卖出、均价、部分卖出和市值估算
 - `BacktestExecutionModel` 的滑点、成交量参与率限制和同一 bar 内成交量占用
 - `BacktestRunner` 的 grid 买卖周期、日期区间过滤、历史日期/盘中时间顺序与 OHLC 合法性校验、最大回撤区间、胜率/手续费统计、滑点执行价、权益曲线/组合快照/成交明细 CSV 导出、轮动样例回测、空历史保护、CSV 读取/错误处理和 CLI smoke
-- `history export-grid/export-rotation` 对 DataManager 历史数据和本地 JSON 到回测 CSV 的转换
+- `history export-grid/export-rotation` 对 DataManager 历史数据、外部历史 provider 配置和本地 JSON 到回测 CSV 的转换
 - `GridStrategy` 多格买入、同格防重复、卖出、止损后 ledger 重置
 - `RotationStrategy` 首次调仓、卖旧买新、失败 pending 清理和重试
 - `JsonStateStore` 对账户、网格 ledger、轮动调仓状态、成交快照、订单状态、运行 metadata 和旧版状态迁移的保存/恢复
