@@ -38,7 +38,7 @@ python cli\commands.py history export-rotation --help
 相关测试：
 
 ```powershell
-python -m pytest tests\test_adapters.py tests\test_data_manager.py tests\test_cli_health.py -q
+python -m pytest tests\test_adapters.py tests\test_data_manager_contracts.py tests\test_data_cache.py tests\test_cli_health.py -q
 ```
 
 验收重点：
@@ -85,7 +85,7 @@ python -m pytest tests\test_backtest_runner.py tests\test_backtest_history_adapt
 相关测试：
 
 ```powershell
-python -m pytest tests\test_state_persistence.py tests\test_pipeline_run_once.py -q
+python -m pytest tests\test_state_persistence.py tests\test_pipeline_run_once.py tests\test_cli_state.py -q
 ```
 
 验收重点：
@@ -99,7 +99,7 @@ python -m pytest tests\test_state_persistence.py tests\test_pipeline_run_once.py
 相关测试：
 
 ```powershell
-python -m pytest tests\test_report_health.py tests\test_alerts.py -q
+python -m pytest tests\test_report_health.py tests\test_alerts.py tests\test_cli_alerts.py tests\test_cli_config.py -q
 ```
 
 验收重点：
@@ -148,7 +148,14 @@ python cli\commands.py history export-rotation --input-json path\to\rotation-his
 python cli\commands.py backtest --strategy rotation --history data\rotation-history.csv
 ```
 
-未提供 `--input-json` 时，`history export-*` 会调用 `DataManager.get_etf_history()`。当前默认 adapter 是 mock/空历史，真实数据接入前该路径只用于验证调用边界，不代表真实可用数据。
+未提供 `--input-json` 时，`history export-*` 会调用 `DataManager.get_etf_history()`，并且必须同时指定 `--start-date` 和 `--end-date`：
+
+```powershell
+python cli\commands.py history export-grid --symbol 510300 --start-date 2026-01-01 --end-date 2026-01-31 --output data\grid-history.csv
+python cli\commands.py history export-rotation --symbols 510300,159915 --start-date 2026-01-01 --end-date 2026-01-31 --lookback 3 --output data\rotation-history.csv
+```
+
+当前默认 adapter 是 mock/空历史，真实数据接入前该路径只用于验证调用边界，不代表真实可用数据。
 
 ## 交付边界
 

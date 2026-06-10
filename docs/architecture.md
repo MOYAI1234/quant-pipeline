@@ -18,12 +18,14 @@
 |---|---|---|
 | `adapters/` | 外部行情、选股、搜索和知识服务适配 | 已有 mock/real 模式；real 未接真实服务 |
 | `data/` | 数据管理、缓存、字段契约和 adapter 错误包装 | 已覆盖基础字段、数值类型、非负单位和可选时效 |
+| `analysis/` | 宏观分析、市场情绪和投资建议生成 | `MacroAnalyzer` 已接入主循环，当前仍基于 mock/规则输出 |
 | `strategy/` | 网格策略、行业轮动策略和策略管理 | grid/rotation 基础路径可用 |
 | `risk/` | ETF 质量、仓位、止损和组合风险检查 | 基础规则可用，真实 ETF 指标仍依赖后续数据接入 |
 | `execution/` | 模拟执行器和内部订单管理 | `Simulator` 支持整手、手续费、均价、持仓和估值 |
 | `backtest/` | 历史回测、成交模型、交易日历和历史数据转换 | grid/rotation 回测、CSV/JSON 输入、导出和审计能力已启动 |
 | `persistence/` | JSON 状态保存、恢复和迁移 | v1 快照和旧版状态最小迁移已具备 |
 | `monitor/` | 状态指标、报告和告警事件 | 本地报告和 JSONL 告警可用 |
+| `config/` | 运行配置、策略配置和配置校验 | `config validate` 已覆盖关键字段、类型和范围 |
 | `cli/` | 命令行入口 | 已支持启动、状态、报告、健康检查、告警、配置校验、回测和历史转换 |
 
 ## 运行主链路
@@ -36,10 +38,12 @@ flowchart TD
     B --> C["DataManager"]
     C --> D["adapters mock/real"]
     B --> E["StrategyManager"]
+    B --> L["MacroAnalyzer"]
     E --> F["GridStrategy / RotationStrategy"]
     F --> G["RiskManager"]
     G --> H["OrderManager"]
     H --> I["Simulator"]
+    L --> J["SystemMonitor / ReportGenerator"]
     I --> J["SystemMonitor / ReportGenerator"]
     B --> K["JsonStateStore"]
 ```
@@ -47,6 +51,7 @@ flowchart TD
 关键边界：
 
 - `DataManager` 负责清洗和校验 adapter 返回值，策略不直接信任外部数据。
+- `MacroAnalyzer` 参与主循环，输出市场情绪和投资建议。
 - 策略只产生信号，不直接修改账户。
 - 风控决定订单是否允许继续执行。
 - `OrderManager` 记录 pipeline 内部订单状态。
@@ -116,15 +121,17 @@ date,open,high,low,close,volume,amount
 
 ### rotation 历史输入
 
-rotation 支持 JSON snapshot：
+rotation 支持 JSON snapshot 数组：
 
 ```json
-{
-  "date": "2026-01-01",
-  "symbols": {
-    "510300": {"close": 12.0, "prices": [10.0, 11.0, 12.0], "volume": 1000000}
+[
+  {
+    "date": "2026-01-01",
+    "symbols": {
+      "510300": {"close": 12.0, "prices": [10.0, 11.0, 12.0], "volume": 1000000}
+    }
   }
-}
+]
 ```
 
 rotation CSV 长表字段：
