@@ -57,7 +57,7 @@ python cli\commands.py backtest --strategy rotation
 | CLI | 基础可用 | `start/status/report/health/alerts/config validate/backtest/history export-grid/history export-rotation` 已有；仍缺更完整的配置解释、初始化和运行诊断命令 |
 | API/Web | 未完成 | PRD 中规划了 API 和 Web 界面，当前仓库没有对应模块 |
 | 测试体系 | 不足 | 现有 277 个测试覆盖 simulator、grid e2e、rotation、risk manager 边界、backtest runner、回测成交模型、回测历史转换、回测日期区间、历史日期/盘中时间顺序、OHLC 合法性、成交量参与率、组合快照一致性、拒单审计和可选交易日历校验、回测最大回撤区间、回测手续费统计、权益曲线/组合快照/成交明细 CSV 导出、回测滑点、CLI smoke、状态持久化、报告健康状态、告警事件、配置校验、DataManager 缓存与数据契约等；adapter、report 仍有缺口 |
-| 文档入口 | 不足 | `README.md` 已补充基础运行、测试和阶段边界；仍缺 `docs/testing.md`、`docs/architecture.md` 等专题文档 |
+| 文档入口 | 基础可用 | `README.md` 已补充基础运行、测试和阶段边界；`docs/testing.md` 已说明测试分层和验收口径；`docs/architecture.md` 已说明模块职责、运行链路和当前 mock/simulator 边界 |
 
 回测能力细节：
 
@@ -273,7 +273,7 @@ PRD 将“可回测策略系统”列为阶段二交付物，但当前只有实�
 
 建议下一轮继续做 M2，不碰实盘接口，先把回测输入和结果审计能力打牢：
 
-1. 继续补充 `README.md` 和专题文档，明确当前是 mock/simulator 阶段，不是实盘系统。
-2. 接入真实 `mx_data.history` 后，用 `history export-grid/export-rotation` 增加端到端回测样例。
+1. 接入真实 `mx_data.history` 后，用 `history export-grid/export-rotation` 增加端到端回测样例。
+2. 增加真实 adapter health 最小查询和 guarded e2e。
 
 这组任务风险小、收益高，也最适合作为后续真实数据接入和 QMT 预研前的地基。

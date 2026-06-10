@@ -21,7 +21,11 @@ ETF 量化助手 Pipeline，目标是把数据适配、策略生成、风控检�
 - `persistence/JsonStateStore` 已支持保存和恢复 `Simulator`、`GridStrategy`、`RotationStrategy`、`OrderManager` 的 JSON 快照和运行 metadata，并提供旧版无顶层 `version` 状态到 v1 的最小迁移入口；`QuantPipeline` 默认会在启动时恢复、停止时保存到 `data/state.json`，但完整多版本迁移和 SQLite 存储仍未实现。
 - QMT/实盘执行、API、Web、完整回测引擎仍未实现。
 
-更多差距和路线图见 [docs/prd-gap-audit-v3.md](docs/prd-gap-audit-v3.md)。
+更多文档：
+
+- [架构说明](docs/architecture.md)
+- [测试与验收指南](docs/testing.md)
+- [PRD v3 差距审计与路线图](docs/prd-gap-audit-v3.md)
 
 ## 目录结构
 
@@ -216,6 +220,8 @@ python -m compileall -q .
 - `QuantPipeline.run_once()` 单轮策略执行、订单状态流转、监控更新，以及启动/停止状态恢复保存
 - 日报/周报中输出数据源健康状态和告警事件摘要
 - `AlertManager` 结构化事件、JSONL 输出、亏损/持仓告警触发和历史记录裁剪
+
+更多测试分层和验收口径见 [docs/testing.md](docs/testing.md)。
 
 ## 下一步路线
 
