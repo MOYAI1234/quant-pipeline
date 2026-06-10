@@ -1,9 +1,12 @@
+import json
+import sys
+
 import pytest
 
 from adapters.mx_data_adapter import MXDataAdapter
 from adapters.mx_search_adapter import MX_SearchAdapter
 from adapters.mx_xuangu_adapter import MX_XuanguAdapter
-from data.contracts import ServiceUnavailableError
+from data.contracts import DataFetchError, ServiceUnavailableError
 from data.data_manager import DataManager
 
 
@@ -21,7 +24,7 @@ def test_mock_adapter_health_reports_mock_mode_after_connect():
     assert status['error'] == ''
 
 
-def test_real_adapter_is_explicitly_unavailable_until_implemented():
+def test_real_adapter_requires_history_provider_configuration():
     adapter = MXDataAdapter({'mode': 'real'})
 
     adapter.connect()
@@ -31,10 +34,85 @@ def test_real_adapter_is_explicitly_unavailable_until_implemented():
     assert status['connected'] is False
     assert status['available'] is False
     assert status['mock'] is False
-    assert status['error'] == 'real mode not implemented'
+    assert status['error'] == 'real history provider not configured'
+    assert status['history_provider'] is None
+    assert status['history_available'] is False
+    with pytest.raises(ServiceUnavailableError) as exc:
+        adapter.get_etf_history('510300', '2026-01-01', '2026-01-02')
+    assert exc.value.error_code == 'REAL_HISTORY_PROVIDER_NOT_CONFIGURED'
+
+
+def test_real_history_provider_command_returns_history_rows(tmp_path):
+    provider = tmp_path / 'history_provider.py'
+    provider.write_text(
+        """
+import json
+import sys
+
+assert sys.argv[1:] == ['510300', '2026-01-01', '2026-01-02']
+print(json.dumps({'history': [
+    {
+        'date': '2026-01-01',
+        'open': 4.0,
+        'high': 4.2,
+        'low': 3.9,
+        'close': 4.1,
+        'volume': 1000,
+        'amount': 4100.0,
+    }
+]}))
+""".strip(),
+        encoding='utf-8',
+    )
+    adapter = MXDataAdapter({
+        'mode': 'real',
+        'history_command': [
+            sys.executable,
+            str(provider),
+            '{symbol}',
+            '{start_date}',
+            '{end_date}',
+        ],
+    })
+
+    adapter.connect()
+    status = adapter.health_check()
+    rows = adapter.get_etf_history('510300', '2026-01-01', '2026-01-02')
+
+    assert status['available'] is True
+    assert status['history_provider'] == 'command'
+    assert status['history_available'] is True
+    assert rows[0]['close'] == 4.1
+
+
+def test_real_history_provider_rejects_invalid_json(tmp_path):
+    provider = tmp_path / 'bad_provider.py'
+    provider.write_text("print('not json')", encoding='utf-8')
+    adapter = MXDataAdapter({
+        'mode': 'real',
+        'history_command': [sys.executable, str(provider)],
+    })
+
+    adapter.connect()
+    with pytest.raises(DataFetchError) as exc:
+        adapter.get_etf_history('510300', '2026-01-01', '2026-01-02')
+
+    assert exc.value.error_code == 'INVALID_PROVIDER_RESPONSE'
+
+
+def test_real_mode_non_history_operations_remain_unavailable(tmp_path):
+    provider = tmp_path / 'history_provider.py'
+    provider.write_text('import json; print(json.dumps([]))', encoding='utf-8')
+    adapter = MXDataAdapter({
+        'mode': 'real',
+        'history_command': [sys.executable, str(provider)],
+    })
+
+    adapter.connect()
     with pytest.raises(ServiceUnavailableError) as exc:
         adapter.get_etf_realtime('510300')
-    assert exc.value.error_code == 'REAL_MODE_NOT_IMPLEMENTED'
+
+    assert exc.value.error_code == 'REAL_OPERATION_NOT_IMPLEMENTED'
 
 
 def test_adapter_rejects_unknown_mode():
@@ -70,7 +148,7 @@ def test_data_manager_surfaces_real_mode_as_unavailable():
     status = manager.health_check()
 
     assert status['mx_data']['available'] is False
-    assert status['mx_data']['error'] == 'real mode not implemented'
+    assert status['mx_data']['error'] == 'real history provider not configured'
     assert manager.is_mock_mode() is False
     with pytest.raises(ServiceUnavailableError):
         manager.get_etf_realtime('510300')

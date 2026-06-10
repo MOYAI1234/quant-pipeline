@@ -353,7 +353,7 @@ def _resolve_backtest_history(history: list, args) -> list:
 
 def _fetch_grid_history_from_data_manager(args) -> list:
     _require_date_range(args)
-    data_manager = DataManager(SYSTEM_CONFIG.get('data', {}))
+    data_manager = DataManager(_load_history_data_config(args))
     try:
         data_manager.connect()
         return fetch_grid_history(
@@ -369,7 +369,7 @@ def _fetch_grid_history_from_data_manager(args) -> list:
 def _fetch_rotation_history_from_data_manager(args, lookback: int) -> list:
     _require_date_range(args)
     symbols = _resolve_etf_pool(args.etf_pool)
-    data_manager = DataManager(SYSTEM_CONFIG.get('data', {}))
+    data_manager = DataManager(_load_history_data_config(args))
     try:
         data_manager.connect()
         return fetch_rotation_history(
@@ -386,6 +386,16 @@ def _fetch_rotation_history_from_data_manager(args, lookback: int) -> list:
 def _require_date_range(args) -> None:
     if not args.start_date or not args.end_date:
         raise ValueError('未提供 --input-json 时必须指定 --start-date 和 --end-date')
+
+
+def _load_history_data_config(args) -> dict:
+    if not getattr(args, 'config', None):
+        return deepcopy(SYSTEM_CONFIG.get('data', {}))
+    config = _load_config_file(args.config)
+    data_config = config.get('data')
+    if not isinstance(data_config, dict):
+        raise ValueError('配置文件缺少 data 对象')
+    return data_config
 
 
 def _load_history_json_list(path: str) -> list:
@@ -691,6 +701,7 @@ def main():
     history_grid_parser.add_argument('--start-date', type=str, help='历史起始日期，格式 YYYY-MM-DD')
     history_grid_parser.add_argument('--end-date', type=str, help='历史结束日期，格式 YYYY-MM-DD')
     history_grid_parser.add_argument('--input-json', type=str, help='本地历史 JSON 数组路径')
+    history_grid_parser.add_argument('--config', type=str, help='数据 provider JSON 配置文件路径')
     history_grid_parser.add_argument('--output', type=str, required=True, help='输出 CSV 路径')
 
     history_rotation_parser = history_subparsers.add_parser(
@@ -702,6 +713,7 @@ def main():
     history_rotation_parser.add_argument('--end-date', type=str, help='历史结束日期，格式 YYYY-MM-DD')
     history_rotation_parser.add_argument('--lookback', type=int, help='prices 滚动窗口长度')
     history_rotation_parser.add_argument('--input-json', type=str, help='本地 symbol->history JSON 路径')
+    history_rotation_parser.add_argument('--config', type=str, help='数据 provider JSON 配置文件路径')
     history_rotation_parser.add_argument('--output', type=str, required=True, help='输出 CSV 路径')
 
     backtest_parser = subparsers.add_parser('backtest', help='运行回测')

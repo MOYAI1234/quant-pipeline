@@ -7,6 +7,8 @@ SYSTEM_CONFIG = {
         'mx_data': {
             'mode': 'mock',
             'timeout': 10,
+            # real 模式可配置命令数组，支持 {symbol}/{start_date}/{end_date} 占位符。
+            'history_command': None,
         },
         'mx_xuangu': {
             'mode': 'mock',
