@@ -34,6 +34,7 @@ from backtest.trading_calendar import TradingCalendar
 from main import QuantPipeline
 from config.settings import SYSTEM_CONFIG
 from config.validation import validate_config
+from data.contracts import AdapterError
 from data.data_manager import DataManager
 from strategy.grid_strategy import GridStrategy
 from strategy.rotation_strategy import RotationStrategy
@@ -795,7 +796,7 @@ def main():
                 cmd_history_export_rotation(args)
             else:
                 history_parser.print_help()
-        except (TypeError, ValueError) as exc:
+        except (AdapterError, TypeError, ValueError) as exc:
             parser.error(str(exc))
     elif args.command == 'backtest':
         try:

@@ -29,7 +29,7 @@ python cli\commands.py history export-grid --help
 python cli\commands.py history export-rotation --help
 ```
 
-当前基线：`pytest` 应通过 286 个测试。
+当前基线：`pytest` 应通过 287 个测试。
 
 ## 分层测试
 
