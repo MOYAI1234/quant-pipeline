@@ -184,6 +184,41 @@ def cmd_history_export_rotation(args):
     print(f"rotation 历史 CSV: {output_path}")
 
 
+def cmd_history_probe(args):
+    _require_date_range(args)
+    symbol = _resolve_symbol(args.symbol)
+    data_manager = DataManager(_load_history_data_config(args))
+    try:
+        data_manager.connect()
+        history = fetch_grid_history(
+            data_manager,
+            symbol,
+            args.start_date,
+            args.end_date,
+        )
+    finally:
+        data_manager.disconnect()
+    validated_history = _validate_history_probe_range(
+        history,
+        args.start_date,
+        args.end_date,
+    )
+
+    result = {
+        'available': True,
+        'symbol': symbol,
+        'start_date': args.start_date,
+        'end_date': args.end_date,
+        'row_count': len(validated_history),
+        'first_date': validated_history[0]['date'],
+        'last_date': validated_history[-1]['date'],
+    }
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(_render_history_probe(result))
+
+
 def cmd_backtest(args):
     initial_capital = _positive_number(
         _value_or_default(args.initial_capital, DEFAULT_BACKTEST_INITIAL_CAPITAL),
@@ -401,6 +436,27 @@ def _fetch_rotation_history_from_data_manager(args, lookback: int) -> list:
 def _require_date_range(args) -> None:
     if not args.start_date or not args.end_date:
         raise ValueError('未提供 --input-json 时必须指定 --start-date 和 --end-date')
+
+
+def _validate_history_probe_range(
+    history: list,
+    start_date: str,
+    end_date: str,
+) -> list:
+    ordered_history = filter_history_by_date(history)
+    try:
+        filtered_history = filter_history_by_date(
+            ordered_history,
+            start_date=start_date,
+            end_date=end_date,
+        )
+    except ValueError as exc:
+        if str(exc) == '指定日期区间内没有历史行情':
+            raise ValueError('历史 provider 返回了请求区间外的数据') from exc
+        raise
+    if len(filtered_history) != len(ordered_history):
+        raise ValueError('历史 provider 返回了请求区间外的数据')
+    return filtered_history
 
 
 def _load_history_data_config(args) -> dict:
@@ -800,6 +856,15 @@ def _render_state_summary(summary: dict) -> str:
     )
 
 
+def _render_history_probe(result: dict) -> str:
+    return (
+        f"历史 provider: OK, symbol={result['symbol']}, "
+        f"request={result['start_date']}..{result['end_date']}, "
+        f"rows={result['row_count']}, "
+        f"data={result['first_date']}..{result['last_date']}"
+    )
+
+
 def _add_state_options(parser):
     parser.add_argument('--state-path', type=str, help='状态文件路径，默认 data/state.json')
     parser.add_argument('--no-state', action='store_true', help='禁用状态恢复和保存')
@@ -865,6 +930,35 @@ def main():
 
     history_parser = subparsers.add_parser('history', help='历史数据转换工具')
     history_subparsers = history_parser.add_subparsers(dest='history_command')
+    history_probe_parser = history_subparsers.add_parser(
+        'probe',
+        help='探测历史数据 provider',
+    )
+    history_probe_parser.add_argument(
+        '--symbol',
+        type=str,
+        default=DEFAULT_BACKTEST_SYMBOL,
+    )
+    history_probe_parser.add_argument(
+        '--start-date',
+        type=str,
+        required=True,
+        help='历史起始日期，格式 YYYY-MM-DD',
+    )
+    history_probe_parser.add_argument(
+        '--end-date',
+        type=str,
+        required=True,
+        help='历史结束日期，格式 YYYY-MM-DD',
+    )
+    history_probe_parser.add_argument(
+        '--config',
+        type=str,
+        required=True,
+        help='数据 provider JSON 配置文件路径',
+    )
+    history_probe_parser.add_argument('--json', action='store_true', help='输出 JSON 格式')
+
     history_grid_parser = history_subparsers.add_parser(
         'export-grid',
         help='导出 grid 回测历史 CSV',
@@ -966,7 +1060,9 @@ def main():
             config_parser.print_help()
     elif args.command == 'history':
         try:
-            if args.history_command == 'export-grid':
+            if args.history_command == 'probe':
+                cmd_history_probe(args)
+            elif args.history_command == 'export-grid':
                 cmd_history_export_grid(args)
             elif args.history_command == 'export-rotation':
                 cmd_history_export_rotation(args)

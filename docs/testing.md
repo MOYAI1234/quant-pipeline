@@ -26,11 +26,12 @@ python cli\commands.py config validate
 python cli\commands.py report --type daily
 python cli\commands.py backtest --strategy grid
 python cli\commands.py backtest --strategy rotation
+python cli\commands.py history probe --help
 python cli\commands.py history export-grid --help
 python cli\commands.py history export-rotation --help
 ```
 
-当前基线：`pytest` 应通过 295 个测试。
+当前基线：`pytest` 应通过 297 个测试。
 
 ## 分层测试
 
@@ -70,7 +71,7 @@ python -m pytest tests\test_simulator.py tests\test_e2e_grid.py tests\test_rotat
 相关测试：
 
 ```powershell
-python -m pytest tests\test_backtest_runner.py tests\test_backtest_history_adapter.py tests\test_trading_calendar.py -q
+python -m pytest tests\test_backtest_runner.py tests\test_backtest_history_adapter.py tests\test_cli_history_probe.py tests\test_trading_calendar.py -q
 ```
 
 验收重点：
@@ -81,6 +82,7 @@ python -m pytest tests\test_backtest_runner.py tests\test_backtest_history_adapt
 - `BacktestExecutionModel` 统一处理滑点、成交量参与率限制、同一 bar 成交量占用和成交前拒单归因。
 - 导出文件包括权益曲线、组合快照、成交明细、持仓明细和拒单明细。
 - `history export-grid/export-rotation` 能把本地 JSON 或 `DataManager.get_etf_history()` 返回值转换为回测 CSV。
+- `history probe` 能对真实命令 provider 执行不落盘的最小查询，并拒绝无数据、乱序或越界历史。
 
 ### 状态持久化与主循环
 
