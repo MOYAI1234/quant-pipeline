@@ -37,6 +37,7 @@ coverage.xml
 cover/
 *.log
 data/state.json
+config.local.json
 .env
 .venv
 env/

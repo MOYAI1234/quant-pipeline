@@ -52,6 +52,137 @@ def test_cli_config_validate_json_outputs_structured_result():
     }
 
 
+def test_cli_config_show_outputs_default_config():
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / 'cli' / 'commands.py'),
+            'config',
+            'show',
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=PROJECT_ROOT,
+    )
+
+    assert json.loads(completed.stdout) == SYSTEM_CONFIG
+
+
+def test_cli_config_show_outputs_supplied_config(tmp_path):
+    config = deepcopy(SYSTEM_CONFIG)
+    config['account']['initial_capital'] = 250000
+    config_path = tmp_path / 'config.json'
+    config_path.write_text(json.dumps(config), encoding='utf-8')
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / 'cli' / 'commands.py'),
+            'config',
+            'show',
+            '--config',
+            str(config_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=PROJECT_ROOT,
+    )
+
+    assert json.loads(completed.stdout) == config
+
+
+def test_cli_config_init_creates_valid_default_template(tmp_path):
+    output_path = tmp_path / 'nested' / 'config.json'
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / 'cli' / 'commands.py'),
+            'config',
+            'init',
+            '--output',
+            str(output_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=PROJECT_ROOT,
+    )
+
+    assert completed.stdout.strip() == f'配置模板: {output_path}'
+    created_config = json.loads(output_path.read_text(encoding='utf-8'))
+    assert created_config == SYSTEM_CONFIG
+    assert validate_config(created_config)['valid'] is True
+
+
+def test_cli_config_init_refuses_overwrite_unless_forced(tmp_path):
+    output_path = tmp_path / 'config.json'
+    output_path.write_text('{"custom": true}', encoding='utf-8')
+
+    refused = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / 'cli' / 'commands.py'),
+            'config',
+            'init',
+            '--output',
+            str(output_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=PROJECT_ROOT,
+    )
+
+    assert refused.returncode == 2
+    assert '配置文件已存在，使用 --force 覆盖' in refused.stderr
+    assert json.loads(output_path.read_text(encoding='utf-8')) == {'custom': True}
+    assert 'Traceback' not in refused.stderr
+
+    overwritten = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / 'cli' / 'commands.py'),
+            'config',
+            'init',
+            '--output',
+            str(output_path),
+            '--force',
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=PROJECT_ROOT,
+    )
+
+    assert overwritten.stdout.strip() == f'配置模板: {output_path}'
+    assert json.loads(output_path.read_text(encoding='utf-8')) == SYSTEM_CONFIG
+
+
+def test_cli_config_init_rejects_directory_output(tmp_path):
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / 'cli' / 'commands.py'),
+            'config',
+            'init',
+            '--output',
+            str(tmp_path),
+            '--force',
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=PROJECT_ROOT,
+    )
+
+    assert completed.returncode == 2
+    assert '配置输出路径不是文件' in completed.stderr
+    assert 'Traceback' not in completed.stderr
+
+
 def test_cli_config_validate_file_reports_errors(tmp_path):
     config = deepcopy(SYSTEM_CONFIG)
     config['account']['initial_capital'] = 0

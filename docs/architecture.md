@@ -176,6 +176,8 @@ python cli\commands.py report --type daily
 python cli\commands.py health --json --strict
 python cli\commands.py diagnose --json --strict
 python cli\commands.py alerts --json
+python cli\commands.py config init
+python cli\commands.py config show --config config.local.json
 python cli\commands.py config validate --json
 python cli\commands.py backtest --strategy grid
 python cli\commands.py backtest --strategy rotation
