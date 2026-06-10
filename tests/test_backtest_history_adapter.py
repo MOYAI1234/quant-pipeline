@@ -264,6 +264,36 @@ print(json.dumps([
     assert rows[1]['volume'] == 1100
 
 
+def test_cli_history_export_rejects_non_object_data_config(tmp_path):
+    config_path = tmp_path / 'config.json'
+    config_path.write_text(json.dumps({'data': []}), encoding='utf-8')
+    output_file = tmp_path / 'grid-history.csv'
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'history',
+            'export-grid',
+            '--config',
+            str(config_path),
+            '--start-date',
+            '2026-01-01',
+            '--end-date',
+            '2026-01-02',
+            '--output',
+            str(output_file),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 2
+    assert '配置文件缺少 data 对象' in completed.stderr
+    assert 'Traceback' not in completed.stderr
+
+
 def test_cli_history_export_rotation_from_json(tmp_path):
     input_file = tmp_path / 'rotation-history.json'
     output_file = tmp_path / 'rotation-history.csv'

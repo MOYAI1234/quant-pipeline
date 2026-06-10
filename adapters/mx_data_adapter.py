@@ -1,10 +1,18 @@
 import json
+from pathlib import Path
+import shutil
 import subprocess
+from string import Formatter
 
 from .base_adapter import BaseAdapter
 
 
 class MXDataAdapter(BaseAdapter):
+    ALLOWED_HISTORY_PLACEHOLDERS = frozenset({
+        'symbol',
+        'start_date',
+        'end_date',
+    })
 
     def __init__(self, config):
         super().__init__(config)
@@ -14,9 +22,10 @@ class MXDataAdapter(BaseAdapter):
             super().connect()
             return
 
-        if not self._history_command_configured():
+        command_error = self._history_command_error()
+        if command_error:
             self.connected = False
-            self.last_error = 'real history provider not configured'
+            self.last_error = command_error
             return
 
         self.connected = True
@@ -24,12 +33,18 @@ class MXDataAdapter(BaseAdapter):
 
     def health_check(self) -> dict:
         status = super().health_check()
+        command_error = self._history_command_error()
+        if self.mode == 'real':
+            status['available'] = False
+            if command_error:
+                status['connected'] = False
+                status['error'] = command_error
         status.update({
-            'history_provider': (
-                'command' if self._history_command_configured() else None
-            ),
+            'history_provider': None if command_error else 'command',
             'history_available': (
-                self.connected and self._history_command_configured()
+                self.mode == 'real'
+                and self.connected
+                and not command_error
             ),
         })
         return status
@@ -49,6 +64,11 @@ class MXDataAdapter(BaseAdapter):
         }
 
     def get_etf_history(self, symbol: str, start_date: str, end_date: str) -> list:
+        """Return historical bars.
+
+        Real providers must emit bounded JSON to stdout; stdout/stderr are
+        captured in memory rather than streamed.
+        """
         from data.contracts import DataFetchError, ServiceUnavailableError
 
         if self.mode == 'mock':
@@ -116,12 +136,45 @@ class MXDataAdapter(BaseAdapter):
         return []
 
     def _history_command_configured(self) -> bool:
+        return self._history_command_error() == ''
+
+    def _history_command_error(self) -> str:
         command = self.config.get('history_command')
-        return (
-            isinstance(command, list)
-            and bool(command)
-            and all(isinstance(part, str) and part for part in command)
-        )
+        if (
+            not isinstance(command, list)
+            or not command
+            or any(not isinstance(part, str) or not part for part in command)
+        ):
+            return 'real history provider not configured'
+
+        for part in command:
+            try:
+                for _, field_name, format_spec, conversion in Formatter().parse(part):
+                    if field_name is None:
+                        continue
+                    if field_name not in self.ALLOWED_HISTORY_PLACEHOLDERS:
+                        return f'history_command contains unknown placeholder: {field_name}'
+                    if format_spec or conversion:
+                        return 'history_command placeholders do not support format specifiers'
+            except ValueError as exc:
+                return f'history_command template invalid: {exc}'
+
+        try:
+            sample_command = self._format_history_command({
+                'symbol': '510300',
+                'start_date': '2026-01-01',
+                'end_date': '2026-01-02',
+            })
+        except (KeyError, ValueError) as exc:
+            return f'history_command template invalid: {exc}'
+
+        executable = sample_command[0]
+        if self._is_path_like_command(executable):
+            if not Path(executable).exists():
+                return f'history_command executable not found: {executable}'
+        elif shutil.which(executable) is None:
+            return f'history_command executable not found: {executable}'
+        return ''
 
     def _ensure_mock_operation(self, operation: str) -> None:
         from data.contracts import ServiceUnavailableError
@@ -137,9 +190,10 @@ class MXDataAdapter(BaseAdapter):
     def _ensure_real_history_available(self) -> None:
         from data.contracts import ServiceUnavailableError
 
-        if not self._history_command_configured():
+        command_error = self._history_command_error()
+        if command_error:
             raise ServiceUnavailableError(
-                'MXDataAdapter real history provider is not configured',
+                f'MXDataAdapter real history provider is unavailable: {command_error}',
                 error_code='REAL_HISTORY_PROVIDER_NOT_CONFIGURED',
                 source='MXDataAdapter',
             )
@@ -156,17 +210,30 @@ class MXDataAdapter(BaseAdapter):
         start_date: str,
         end_date: str,
     ) -> list[str]:
-        values = {
-            'symbol': symbol,
-            'start_date': start_date,
-            'end_date': end_date,
-        }
+        from data.contracts import ServiceUnavailableError
+
         try:
-            return [
-                part.format(**values)
-                for part in self.config['history_command']
-            ]
-        except KeyError as exc:
-            raise ValueError(
-                f"history_command contains unknown placeholder: {exc.args[0]}"
+            return self._format_history_command({
+                'symbol': symbol,
+                'start_date': start_date,
+                'end_date': end_date,
+            })
+        except (KeyError, ValueError) as exc:
+            raise ServiceUnavailableError(
+                f'MXDataAdapter history command is invalid: {exc}',
+                error_code='REAL_HISTORY_PROVIDER_NOT_CONFIGURED',
+                source='MXDataAdapter',
             ) from exc
+
+    def _format_history_command(self, values: dict) -> list[str]:
+        return [
+            part.format(**values)
+            for part in self.config['history_command']
+        ]
+
+    def _is_path_like_command(self, executable: str) -> bool:
+        return (
+            Path(executable).is_absolute()
+            or '/' in executable
+            or '\\' in executable
+        )

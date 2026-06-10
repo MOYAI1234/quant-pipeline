@@ -394,7 +394,7 @@ def _load_history_data_config(args) -> dict:
     config = _load_config_file(args.config)
     data_config = config.get('data')
     if not isinstance(data_config, dict):
-        raise ValueError('配置文件缺少 data 对象')
+        raise TypeError('配置文件缺少 data 对象')
     return data_config
 
 
@@ -795,7 +795,7 @@ def main():
                 cmd_history_export_rotation(args)
             else:
                 history_parser.print_help()
-        except ValueError as exc:
+        except (TypeError, ValueError) as exc:
             parser.error(str(exc))
     elif args.command == 'backtest':
         try:

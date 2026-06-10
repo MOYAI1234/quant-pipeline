@@ -1,4 +1,3 @@
-import json
 import sys
 
 import pytest
@@ -79,10 +78,37 @@ print(json.dumps({'history': [
     status = adapter.health_check()
     rows = adapter.get_etf_history('510300', '2026-01-01', '2026-01-02')
 
-    assert status['available'] is True
+    assert status['available'] is False
     assert status['history_provider'] == 'command'
     assert status['history_available'] is True
     assert rows[0]['close'] == 4.1
+
+
+def test_real_history_provider_rejects_invalid_command_configuration(tmp_path):
+    provider = tmp_path / 'history_provider.py'
+    provider.write_text('print("[]")', encoding='utf-8')
+    invalid_commands = [
+        [sys.executable, str(provider), '{unknown}'],
+        [sys.executable, str(provider), '{symbol'],
+        ['definitely-missing-quant-provider'],
+    ]
+
+    for history_command in invalid_commands:
+        adapter = MXDataAdapter({
+            'mode': 'real',
+            'history_command': history_command,
+        })
+
+        adapter.connect()
+        status = adapter.health_check()
+
+        assert status['connected'] is False
+        assert status['available'] is False
+        assert status['history_available'] is False
+        assert status['error']
+        with pytest.raises(ServiceUnavailableError) as exc:
+            adapter.get_etf_history('510300', '2026-01-01', '2026-01-02')
+        assert exc.value.error_code == 'REAL_HISTORY_PROVIDER_NOT_CONFIGURED'
 
 
 def test_real_history_provider_rejects_invalid_json(tmp_path):
