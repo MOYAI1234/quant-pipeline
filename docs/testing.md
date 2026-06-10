@@ -20,6 +20,7 @@ CLI smoke：
 
 ```powershell
 python cli\commands.py --help
+python cli\commands.py diagnose
 python cli\commands.py health
 python cli\commands.py config validate
 python cli\commands.py report --type daily
@@ -29,7 +30,7 @@ python cli\commands.py history export-grid --help
 python cli\commands.py history export-rotation --help
 ```
 
-当前基线：`pytest` 应通过 288 个测试。
+当前基线：`pytest` 应通过 293 个测试。
 
 ## 分层测试
 
@@ -100,7 +101,7 @@ python -m pytest tests\test_state_persistence.py tests\test_pipeline_run_once.py
 相关测试：
 
 ```powershell
-python -m pytest tests\test_report_health.py tests\test_alerts.py tests\test_cli_alerts.py tests\test_cli_config.py -q
+python -m pytest tests\test_report_health.py tests\test_alerts.py tests\test_cli_alerts.py tests\test_cli_config.py tests\test_cli_diagnose.py -q
 ```
 
 验收重点：
@@ -108,6 +109,7 @@ python -m pytest tests\test_report_health.py tests\test_alerts.py tests\test_cli
 - 日报/周报包含组合、交易、风险、数据源健康状态和告警事件摘要。
 - `AlertManager` 支持结构化事件、内存历史和可选 JSONL 文件输出。
 - CLI `alerts` 能读取 JSONL 并输出文本或 JSON。
+- CLI `diagnose` 能汇总配置校验、数据源健康状态和状态文件可恢复性。
 
 ## CLI 回测验收样例
 
