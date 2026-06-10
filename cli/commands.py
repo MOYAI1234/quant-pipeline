@@ -546,11 +546,12 @@ def _build_diagnostic_config(args) -> dict:
         if getattr(args, 'config', None)
         else deepcopy(SYSTEM_CONFIG)
     )
-    state_config = config.setdefault('state', {})
-    if getattr(args, 'no_state', False):
-        state_config['enabled'] = False
-    if getattr(args, 'state_path', None):
-        state_config['path'] = args.state_path
+    state_config = config.get('state')
+    if isinstance(state_config, dict):
+        if getattr(args, 'no_state', False):
+            state_config['enabled'] = False
+        if getattr(args, 'state_path', None):
+            state_config['path'] = args.state_path
     return config
 
 
@@ -571,9 +572,17 @@ def _build_diagnostic_report(config: dict) -> dict:
 
 
 def _diagnose_data_sources(config: dict) -> dict:
+    data_config = config.get('data')
+    if not isinstance(data_config, dict):
+        return {
+            'available': False,
+            'mock': False,
+            'adapters': {},
+            'error': 'data 必须是 dict',
+        }
     try:
-        manager = DataManager(config.get('data', {}))
-    except (TypeError, ValueError) as exc:
+        manager = DataManager(data_config)
+    except (AttributeError, TypeError, ValueError) as exc:
         return {
             'available': False,
             'mock': False,
@@ -588,18 +597,40 @@ def _diagnose_data_sources(config: dict) -> dict:
 
 
 def _diagnose_state(config: dict) -> dict:
-    state_config = config.get('state', {})
+    state_config = config.get('state')
+    if not isinstance(state_config, dict):
+        return {
+            'enabled': False,
+            'path': None,
+            'exists': False,
+            'has_data': False,
+            'ok': False,
+            'version': None,
+            'error': 'state 必须是 dict',
+        }
     if not state_config.get('enabled', False):
         return {
             'enabled': False,
             'path': None,
             'exists': False,
+            'has_data': False,
             'ok': True,
             'version': None,
             'error': '',
         }
 
-    store = JsonStateStore(state_config.get('path', 'data/state.json'))
+    configured_path = state_config.get('path', 'data/state.json')
+    if not isinstance(configured_path, str) or not configured_path:
+        return {
+            'enabled': True,
+            'path': None,
+            'exists': False,
+            'has_data': False,
+            'ok': False,
+            'version': None,
+            'error': 'state.path 必须是非空字符串',
+        }
+    store = JsonStateStore(configured_path)
     try:
         state = store.load_state()
     except (OSError, json.JSONDecodeError, ValueError) as exc:
@@ -607,6 +638,7 @@ def _diagnose_state(config: dict) -> dict:
             'enabled': True,
             'path': str(store.path),
             'exists': store.path.exists(),
+            'has_data': False,
             'ok': False,
             'version': None,
             'error': str(exc),
@@ -614,11 +646,20 @@ def _diagnose_state(config: dict) -> dict:
     return {
         'enabled': True,
         'path': str(store.path),
-        'exists': bool(state),
+        'exists': store.path.exists(),
+        'has_data': _state_has_data(state),
         'ok': True,
         'version': state.get('version') if state else None,
         'error': '',
     }
+
+
+def _state_has_data(state: dict) -> bool:
+    return any(
+        value not in (None, '', [], {})
+        for key, value in state.items()
+        if key != 'version'
+    )
 
 
 def _build_health_summary(adapter_statuses: dict) -> dict:
@@ -752,6 +793,8 @@ def _render_state_summary(summary: dict) -> str:
         return f"状态文件: FAIL, path={summary['path']}, error={summary['error']}"
     if not summary['exists']:
         return f"状态文件: OK (missing), path={summary['path']}"
+    if not summary['has_data']:
+        return f"状态文件: OK (empty), path={summary['path']}"
     return (
         f"状态文件: OK, path={summary['path']}, version={summary.get('version')}"
     )
