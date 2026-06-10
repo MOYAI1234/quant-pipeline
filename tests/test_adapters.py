@@ -1,7 +1,10 @@
+import os
+from pathlib import Path
 import sys
 
 import pytest
 
+from adapters import mx_data_adapter
 from adapters.mx_data_adapter import MXDataAdapter
 from adapters.mx_search_adapter import MX_SearchAdapter
 from adapters.mx_xuangu_adapter import MX_XuanguAdapter
@@ -106,6 +109,38 @@ def test_real_history_provider_rejects_invalid_command_configuration(tmp_path):
         assert status['available'] is False
         assert status['history_available'] is False
         assert status['error']
+        with pytest.raises(ServiceUnavailableError) as exc:
+            adapter.get_etf_history('510300', '2026-01-01', '2026-01-02')
+        assert exc.value.error_code == 'REAL_HISTORY_PROVIDER_NOT_CONFIGURED'
+
+
+def test_real_history_provider_rejects_non_executable_path_commands(tmp_path, monkeypatch):
+    provider_dir = tmp_path / 'provider_dir'
+    provider_dir.mkdir()
+    provider_file = tmp_path / 'provider.py'
+    provider_file.write_text('print("[]")', encoding='utf-8')
+    original_access = os.access
+
+    def fake_access(path, mode):
+        if Path(path) == provider_file and mode == os.X_OK:
+            return False
+        return original_access(path, mode)
+
+    monkeypatch.setattr(mx_data_adapter.os, 'access', fake_access)
+
+    for history_command in ([str(provider_dir)], [str(provider_file)]):
+        adapter = MXDataAdapter({
+            'mode': 'real',
+            'history_command': history_command,
+        })
+
+        adapter.connect()
+        status = adapter.health_check()
+
+        assert status['connected'] is False
+        assert status['available'] is False
+        assert status['history_available'] is False
+        assert status['error'].endswith(f': {history_command[0]}')
         with pytest.raises(ServiceUnavailableError) as exc:
             adapter.get_etf_history('510300', '2026-01-01', '2026-01-02')
         assert exc.value.error_code == 'REAL_HISTORY_PROVIDER_NOT_CONFIGURED'

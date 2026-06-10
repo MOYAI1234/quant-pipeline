@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -170,8 +171,11 @@ class MXDataAdapter(BaseAdapter):
 
         executable = sample_command[0]
         if self._is_path_like_command(executable):
-            if not Path(executable).exists():
+            executable_path = Path(executable)
+            if not executable_path.exists():
                 return f'history_command executable not found: {executable}'
+            if not executable_path.is_file() or not os.access(executable_path, os.X_OK):
+                return f'history_command executable is not executable: {executable}'
         elif shutil.which(executable) is None:
             return f'history_command executable not found: {executable}'
         return ''
