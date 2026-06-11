@@ -26,6 +26,7 @@ ETF 量化助手 Pipeline，目标是把数据适配、策略生成、风控检�
 - [架构说明](docs/architecture.md)
 - [测试与验收指南](docs/testing.md)
 - [PRD v3 差距审计与路线图](docs/prd-gap-audit-v3.md)
+- [数据源 provider 选型矩阵](docs/data-source-provider-evaluation.md)
 
 ## 目录结构
 
@@ -288,7 +289,7 @@ python -m compileall -q .
 1. 补强测试和主循环可测性。
 2. 明确 adapter 的 mock/real 模式和数据契约。
 3. 扩展历史行情驱动的回测引擎。
-4. 调研 GitHub 上维护活跃、star 较高的整合行情数据包，形成 mx-data 之外的 provider 选型矩阵，再以 adapter 方式接入。
+4. 基于 provider 选型矩阵，优先做 AKShare 命令式历史 provider POC，再评估 a-stock-data / TuShare 等备选。
 5. 持久化账户、成交和策略状态。
 6. 完善监控报告和告警闭环。
 7. 在模拟和回测稳定后，再预研 QMT/实盘执行。
