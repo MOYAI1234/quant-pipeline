@@ -299,42 +299,33 @@ def cmd_backtest(args):
         '--max-volume-participation',
     )
     trading_calendar = _build_trading_calendar(args)
+    account_config = {
+        'initial_capital': initial_capital,
+        'commission_rate': commission_rate,
+        'buy_commission_rate': buy_commission_rate,
+        'sell_commission_rate': sell_commission_rate,
+        'min_commission': min_commission,
+        'slippage_rate': slippage_rate,
+        'max_volume_participation': max_volume_participation,
+    }
 
     if args.strategy == 'grid':
         _run_grid_backtest(
             args,
-            initial_capital,
-            commission_rate,
-            buy_commission_rate,
-            sell_commission_rate,
-            min_commission,
-            slippage_rate,
-            max_volume_participation,
+            account_config,
             trading_calendar,
         )
     elif args.strategy == 'rotation':
         _run_rotation_backtest(
             args,
-            initial_capital,
-            commission_rate,
-            buy_commission_rate,
-            sell_commission_rate,
-            min_commission,
-            slippage_rate,
-            max_volume_participation,
+            account_config,
             trading_calendar,
         )
 
 
 def _run_grid_backtest(
     args,
-    initial_capital: float,
-    commission_rate: float,
-    buy_commission_rate: float,
-    sell_commission_rate: float,
-    min_commission: float,
-    slippage_rate: float,
-    max_volume_participation: float | None,
+    account_config: dict,
     trading_calendar: TradingCalendar | None,
 ):
     symbol = _resolve_symbol(args.symbol)
@@ -372,15 +363,11 @@ def _run_grid_backtest(
         load_history_csv(args.history) if args.history else sample_grid_history(),
         args,
     )
-    runner = BacktestRunner(strategy, {
-        'initial_capital': initial_capital,
-        'commission_rate': commission_rate,
-        'buy_commission_rate': buy_commission_rate,
-        'sell_commission_rate': sell_commission_rate,
-        'min_commission': min_commission,
-        'slippage_rate': slippage_rate,
-        'max_volume_participation': max_volume_participation,
-    }, trading_calendar=trading_calendar)
+    runner = BacktestRunner(
+        strategy,
+        account_config,
+        trading_calendar=trading_calendar,
+    )
     result = runner.run(history)
     report = runner.render_markdown(result)
     print(report)
@@ -389,13 +376,7 @@ def _run_grid_backtest(
 
 def _run_rotation_backtest(
     args,
-    initial_capital: float,
-    commission_rate: float,
-    buy_commission_rate: float,
-    sell_commission_rate: float,
-    min_commission: float,
-    slippage_rate: float,
-    max_volume_participation: float | None,
+    account_config: dict,
     trading_calendar: TradingCalendar | None,
 ):
     etf_pool = _resolve_etf_pool(args.etf_pool)
@@ -433,15 +414,11 @@ def _run_rotation_backtest(
         'top_n': top_n,
         'rebalance_days': rebalance_days,
     })
-    runner = RotationBacktestRunner(strategy, {
-        'initial_capital': initial_capital,
-        'commission_rate': commission_rate,
-        'buy_commission_rate': buy_commission_rate,
-        'sell_commission_rate': sell_commission_rate,
-        'min_commission': min_commission,
-        'slippage_rate': slippage_rate,
-        'max_volume_participation': max_volume_participation,
-    }, trading_calendar=trading_calendar)
+    runner = RotationBacktestRunner(
+        strategy,
+        account_config,
+        trading_calendar=trading_calendar,
+    )
     result = runner.run(history)
     report = runner.render_markdown(result)
     print(report)

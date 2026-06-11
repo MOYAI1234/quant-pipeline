@@ -77,6 +77,38 @@ class TestRotationStrategy:
         assert signals[1]['amount'] == 5000
         assert self.strategy.pending_rebalance_count == 2
 
+    def test_rebalance_sizes_buy_from_net_sell_proceeds(self):
+        self.strategy.top_n = 1
+        data = {
+            '510300': {'price': 100.0, 'prices': _history(12.0)},
+            '510500': {'price': 100.0, 'prices': _history(9.0)},
+            '159915': {'price': 100.0, 'prices': _history(8.0)},
+        }
+        portfolio = {
+            'capital': 0,
+            'positions': {
+                '510500': {
+                    'shares': 200,
+                    'avg_price': 100.0,
+                    'current_price': 100.0,
+                    'market_value': 20000,
+                }
+            },
+            'total_value': 20000,
+            'trading_costs': {
+                'buy_commission_rate': 0.0003,
+                'sell_commission_rate': 0.0003,
+                'min_commission': 5,
+            },
+        }
+
+        signals = self.strategy.generate_signal(data, portfolio)
+
+        assert [sig['action'] for sig in signals] == ['sell', 'buy']
+        assert signals[0]['shares'] == 200
+        assert signals[1]['shares'] == 100
+        assert signals[1]['amount'] == 10000
+
     def test_failed_rebalance_signal_clears_pending_and_allows_retry(self):
         data = {
             '510300': {'price': 5.0, 'prices': _history(12.0)},

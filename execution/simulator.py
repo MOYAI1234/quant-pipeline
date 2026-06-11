@@ -234,7 +234,12 @@ class Simulator(BaseExecutor):
             'initial_capital': self.initial_capital,
             'pnl': total_market_value - self.initial_capital,
             'pnl_percent': (total_market_value - self.initial_capital) / self.initial_capital * 100,
-            'realized_pnl': realized_pnl
+            'realized_pnl': realized_pnl,
+            'trading_costs': {
+                'buy_commission_rate': self.buy_commission_rate,
+                'sell_commission_rate': self.sell_commission_rate,
+                'min_commission': self.min_commission,
+            },
         }
 
     def snapshot(self) -> dict:

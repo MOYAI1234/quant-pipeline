@@ -342,6 +342,66 @@ def test_rotation_backtest_runner_applies_slippage_to_rebalance_orders():
     assert runner.strategy.selected_etfs == ['510500']
 
 
+def test_rotation_backtest_runner_rebalances_with_minimum_commission():
+    strategy = RotationStrategy({
+        'name': '最低佣金轮动',
+        'symbol': '510300',
+        'etf_pool': ['510300', '510500'],
+        'lookback': 2,
+        'top_n': 1,
+        'rebalance_days': 0,
+    })
+    runner = RotationBacktestRunner(strategy, {
+        'initial_capital': 20010,
+        'commission_rate': 0.0003,
+        'min_commission': 5,
+    })
+    history = [
+        {
+            'date': '2026-01-01',
+            'symbols': {
+                '510300': {
+                    'close': 100,
+                    'prices': [90, 100],
+                    'volume': 1000000,
+                },
+                '510500': {
+                    'close': 100,
+                    'prices': [100, 90],
+                    'volume': 1000000,
+                },
+            },
+        },
+        {
+            'date': '2026-01-02',
+            'symbols': {
+                '510300': {
+                    'close': 100,
+                    'prices': [100, 90],
+                    'volume': 1000000,
+                },
+                '510500': {
+                    'close': 100,
+                    'prices': [90, 100],
+                    'volume': 1000000,
+                },
+            },
+        },
+    ]
+
+    result = runner.run(history)
+
+    assert [trade['action'] for trade in result['trades']] == [
+        'buy',
+        'sell',
+        'buy',
+    ]
+    assert [trade['shares'] for trade in result['trades']] == [200, 200, 100]
+    assert '510300' not in result['portfolio']['positions']
+    assert result['portfolio']['positions']['510500']['shares'] == 100
+    assert result['rejected_order_count'] == 0
+
+
 def test_rotation_backtest_runner_retries_after_volume_rejection():
     runner = RotationBacktestRunner(_rotation_strategy(), {
         'initial_capital': 100000,
