@@ -35,7 +35,7 @@ python cli\commands.py history probe --help
 结果：
 
 - `compileall` 通过
-- `pytest` 通过，`323 passed`
+- `pytest` 通过，`326 passed`
 - CLI help 可用
 - CLI daily report 可生成包含数据源健康状态的空组合报告
 - CLI health 可输出数据源健康状态
@@ -49,7 +49,7 @@ python cli\commands.py history probe --help
 
 | PRD 模块 | 当前状态 | 评价 |
 |---|---|---|
-| 数据适配层 | 部分完成 | 适配器类已存在；`mx_data.history` 已支持外部命令 provider 接入位，但 `mx-xuangu` / `mx-search` / `jason-kb` 以及 `mx-data` 的实时/净值/列表仍是 stub，未接真实服务 |
+| 数据适配层 | 部分完成 | 适配器类已存在；`mx_data.history` 已支持外部命令 provider 接入位，并提供 AKShare 可选示例脚本和命令 provider 契约文档；但 `mx-xuangu` / `mx-search` / `jason-kb` 以及 `mx-data` 的实时/净值/列表仍是 stub，未接真实服务 |
 | 数据管理器 | 部分完成 | `DataManager` 和 TTL 缓存已存在，已覆盖基础字段、数值类型、非负单位、可选行情时效、无时区 timestamp 的显式源时区解释、缓存过期和 adapter 异常传播；仍缺更完整单位归一 |
 | 网格策略 | 基础可用 | 已支持多格买入、成交确认后更新 ledger、卖出后允许再买；仍缺持久化和更丰富行情路径测试 |
 | 行业轮动策略 | 基础可用 | 已支持动量选择、卖旧买新、失败回调；仍缺独立测试和风控冲突场景覆盖 |
@@ -61,7 +61,7 @@ python cli\commands.py history probe --help
 | 监控告警 | 部分完成 | 状态指标、报告和结构化告警事件已存在，报告可展示最近告警摘要，并支持本地 JSONL 输出；外部通知通道尚未实现 |
 | CLI | 基础可用 | `start/status/report/health/diagnose/alerts/config show/config init/config validate/backtest/history probe/history export-grid/history export-rotation` 已有；配置初始化、查看、校验和运行诊断链路已具备 |
 | API/Web | 未完成 | PRD 中规划了 API 和 Web 界面，当前仓库没有对应模块 |
-| 测试体系 | 不足 | 现有 323 个测试覆盖 simulator、买卖双边费率和最低佣金、轮动按卖出净所得调仓、grid e2e、rotation、risk manager 边界、backtest runner、回测成交模型、回测历史转换、真实历史 provider 探测、回测日期区间、历史日期/盘中时间顺序、OHLC 合法性、成交量参与率、组合快照一致性、拒单审计和可选交易日历校验、回测最大回撤区间、已平仓手续费侵蚀统计、整手网格生产可行性审计、权益曲线/组合快照/成交明细 CSV 导出、回测滑点、CLI smoke、配置模板生成、状态持久化、报告健康状态、启动前诊断、告警事件、配置校验、DataManager 缓存、数据契约和外部历史 provider 配置等；adapter、report 仍有缺口 |
+| 测试体系 | 不足 | 现有 326 个测试覆盖 simulator、买卖双边费率和最低佣金、轮动按卖出净所得调仓、grid e2e、rotation、risk manager 边界、backtest runner、回测成交模型、回测历史转换、真实历史 provider 探测、AKShare 示例 provider 字段转换、回测日期区间、历史日期/盘中时间顺序、OHLC 合法性、成交量参与率、组合快照一致性、拒单审计和可选交易日历校验、回测最大回撤区间、已平仓手续费侵蚀统计、整手网格生产可行性审计、权益曲线/组合快照/成交明细 CSV 导出、回测滑点、CLI smoke、配置模板生成、状态持久化、报告健康状态、启动前诊断、告警事件、配置校验、DataManager 缓存、数据契约和外部历史 provider 配置等；adapter、report 仍有缺口 |
 | 文档入口 | 基础可用 | `README.md` 已补充基础运行、测试和阶段边界；`docs/testing.md` 已说明测试分层和验收口径；`docs/architecture.md` 已说明模块职责、运行链路和当前 mock/simulator 边界 |
 
 回测能力细节：
@@ -278,8 +278,8 @@ PRD 将“可回测策略系统”列为阶段二交付物，但当前只有实�
 
 建议下一轮继续做 M2，不碰实盘接口，先把回测输入和结果审计能力打牢：
 
-1. 基于 [数据源 provider 选型矩阵](data-source-provider-evaluation.md)，优先实现 AKShare 命令式历史 provider POC，并继续保留 a-stock-data / TuShare 作为备选。
+1. 使用 AKShare 示例脚本配置本地真实 provider，并通过 `history probe` 完成环境侧 guarded e2e。
 2. 用实际 provider 配置生成一份真实回测输入样例；仓库已提供 `history probe` 作为不落盘最小查询入口，并记录不可提交凭据的运行说明。
-3. 使用本地真实 provider 配置执行 `history probe`，完成环境侧 guarded e2e。
+3. 继续评估 a-stock-data / TuShare 是否需要补充 provider POC。
 
 这组任务风险小、收益高，也最适合作为后续真实数据接入和 QMT 预研前的地基。

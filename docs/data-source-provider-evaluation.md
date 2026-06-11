@@ -83,6 +83,6 @@ ETF 投资助手的默认方向应是低频、可解释、成本可承受的组�
 
 ## 后续 PR 建议
 
-1. 增加 examples/providers/akshare_history_provider.py，保持为可选示例脚本。
-2. 增加 docs/history-provider-contract.md，固化命令 provider 的 stdin/stdout、错误码和 schema。
+1. 使用 examples/providers/akshare_history_provider.py 配置本地 AKShare POC，并通过 history probe 验证真实返回。
+2. 继续完善 docs/history-provider-contract.md，必要时加入 provider 错误样例和常见排障。
 3. 使用本地真实 provider 配置执行 guarded e2e，只提交文档和测试，不提交凭据。
