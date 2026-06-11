@@ -50,6 +50,7 @@ DEFAULT_BACKTEST_GRID_COUNT = 5
 DEFAULT_BACKTEST_SHARES_PER_GRID = 1000
 DEFAULT_BACKTEST_INITIAL_CAPITAL = 100000
 DEFAULT_BACKTEST_COMMISSION_RATE = 0.0003
+DEFAULT_BACKTEST_MIN_COMMISSION = 0.0
 DEFAULT_BACKTEST_SLIPPAGE_RATE = 0.0
 DEFAULT_BACKTEST_MAX_VOLUME_PARTICIPATION = None
 DEFAULT_BACKTEST_ETF_POOL = ['510300', '510500', '159915']
@@ -270,9 +271,21 @@ def cmd_backtest(args):
         _value_or_default(args.initial_capital, DEFAULT_BACKTEST_INITIAL_CAPITAL),
         '--initial-capital',
     )
-    commission_rate = _non_negative_number(
+    commission_rate = _commission_rate(
         _value_or_default(args.commission_rate, DEFAULT_BACKTEST_COMMISSION_RATE),
         '--commission-rate',
+    )
+    buy_commission_rate = _commission_rate(
+        _value_or_default(args.buy_commission_rate, commission_rate),
+        '--buy-commission-rate',
+    )
+    sell_commission_rate = _commission_rate(
+        _value_or_default(args.sell_commission_rate, commission_rate),
+        '--sell-commission-rate',
+    )
+    min_commission = _non_negative_number(
+        _value_or_default(args.min_commission, DEFAULT_BACKTEST_MIN_COMMISSION),
+        '--min-commission',
     )
     slippage_rate = _slippage_rate(
         _value_or_default(args.slippage_rate, DEFAULT_BACKTEST_SLIPPAGE_RATE),
@@ -292,6 +305,9 @@ def cmd_backtest(args):
             args,
             initial_capital,
             commission_rate,
+            buy_commission_rate,
+            sell_commission_rate,
+            min_commission,
             slippage_rate,
             max_volume_participation,
             trading_calendar,
@@ -301,6 +317,9 @@ def cmd_backtest(args):
             args,
             initial_capital,
             commission_rate,
+            buy_commission_rate,
+            sell_commission_rate,
+            min_commission,
             slippage_rate,
             max_volume_participation,
             trading_calendar,
@@ -311,6 +330,9 @@ def _run_grid_backtest(
     args,
     initial_capital: float,
     commission_rate: float,
+    buy_commission_rate: float,
+    sell_commission_rate: float,
+    min_commission: float,
     slippage_rate: float,
     max_volume_participation: float | None,
     trading_calendar: TradingCalendar | None,
@@ -353,6 +375,9 @@ def _run_grid_backtest(
     runner = BacktestRunner(strategy, {
         'initial_capital': initial_capital,
         'commission_rate': commission_rate,
+        'buy_commission_rate': buy_commission_rate,
+        'sell_commission_rate': sell_commission_rate,
+        'min_commission': min_commission,
         'slippage_rate': slippage_rate,
         'max_volume_participation': max_volume_participation,
     }, trading_calendar=trading_calendar)
@@ -366,6 +391,9 @@ def _run_rotation_backtest(
     args,
     initial_capital: float,
     commission_rate: float,
+    buy_commission_rate: float,
+    sell_commission_rate: float,
+    min_commission: float,
     slippage_rate: float,
     max_volume_participation: float | None,
     trading_calendar: TradingCalendar | None,
@@ -408,6 +436,9 @@ def _run_rotation_backtest(
     runner = RotationBacktestRunner(strategy, {
         'initial_capital': initial_capital,
         'commission_rate': commission_rate,
+        'buy_commission_rate': buy_commission_rate,
+        'sell_commission_rate': sell_commission_rate,
+        'min_commission': min_commission,
         'slippage_rate': slippage_rate,
         'max_volume_participation': max_volume_participation,
     }, trading_calendar=trading_calendar)
@@ -618,8 +649,14 @@ def _non_negative_int(value: int, option_name: str) -> int:
 
 
 def _non_negative_number(value: float, option_name: str) -> float:
-    if value < 0:
+    if not math.isfinite(value) or value < 0:
         raise ValueError(f"{option_name} 不能小于 0")
+    return value
+
+
+def _commission_rate(value: float, option_name: str) -> float:
+    if not math.isfinite(value) or value < 0 or value > 1:
+        raise ValueError(f"{option_name} 必须在 0 到 1 之间")
     return value
 
 
@@ -1075,6 +1112,9 @@ def main():
     backtest_parser.add_argument('--max-grids', type=int)
     backtest_parser.add_argument('--initial-capital', type=float)
     backtest_parser.add_argument('--commission-rate', type=float)
+    backtest_parser.add_argument('--buy-commission-rate', type=float)
+    backtest_parser.add_argument('--sell-commission-rate', type=float)
+    backtest_parser.add_argument('--min-commission', type=float)
     backtest_parser.add_argument('--slippage-rate', type=float)
     backtest_parser.add_argument(
         '--max-volume-participation',

@@ -34,7 +34,13 @@ def _rotation_strategy():
 
 
 def test_simulator_snapshot_round_trips_positions_and_trades():
-    simulator = Simulator({'initial_capital': 100000, 'commission_rate': 0.0003})
+    simulator = Simulator({
+        'initial_capital': 100000,
+        'commission_rate': 0.0003,
+        'buy_commission_rate': 0.0002,
+        'sell_commission_rate': 0.0004,
+        'min_commission': 5,
+    })
     assert simulator.execute_order({
         'action': 'buy',
         'symbol': '510300',
@@ -50,6 +56,23 @@ def test_simulator_snapshot_round_trips_positions_and_trades():
     assert restored.positions == simulator.positions
     assert restored.trades[0]['symbol'] == '510300'
     assert isinstance(restored.trades[0]['timestamp'], datetime)
+    assert restored.buy_commission_rate == pytest.approx(0.0002)
+    assert restored.sell_commission_rate == pytest.approx(0.0004)
+    assert restored.min_commission == pytest.approx(5)
+
+
+def test_simulator_restores_legacy_commission_snapshot():
+    simulator = Simulator({'initial_capital': 100000})
+
+    simulator.restore({
+        'version': 1,
+        'initial_capital': 100000,
+        'commission_rate': 0.0008,
+    })
+
+    assert simulator.buy_commission_rate == pytest.approx(0.0008)
+    assert simulator.sell_commission_rate == pytest.approx(0.0008)
+    assert simulator.min_commission == 0
 
 
 def test_simulator_snapshot_positions_are_independent_copy():

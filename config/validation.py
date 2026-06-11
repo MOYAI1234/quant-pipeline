@@ -81,6 +81,19 @@ def _validate_account_config(account_config: dict | None, errors: list) -> None:
         'account.commission_rate',
         errors,
     )
+    for key in ('buy_commission_rate', 'sell_commission_rate'):
+        if key in account_config and account_config.get(key) is not None:
+            _validate_ratio(
+                account_config.get(key),
+                f'account.{key}',
+                errors,
+            )
+    if 'min_commission' in account_config:
+        _validate_non_negative_number(
+            account_config.get('min_commission'),
+            'account.min_commission',
+            errors,
+        )
 
 
 def _validate_risk_config(

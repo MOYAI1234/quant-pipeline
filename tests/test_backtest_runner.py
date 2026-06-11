@@ -1438,8 +1438,37 @@ def test_cli_backtest_smoke_outputs_markdown_report():
     assert '- 胜率: 100.00%' in completed.stdout
     assert '- 总手续费:' in completed.stdout
     assert '- 手续费占初始资金:' in completed.stdout
+    assert '- 买入佣金率: 0.0300%' in completed.stdout
+    assert '- 卖出佣金率: 0.0300%' in completed.stdout
+    assert '- 单笔最低佣金: 0.00' in completed.stdout
     assert '- 滑点: 0.00%' in completed.stdout
     assert '- 最大回撤区间:' in completed.stdout
+
+
+def test_cli_backtest_accepts_production_commission_options():
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'grid',
+            '--buy-commission-rate',
+            '0.0002',
+            '--sell-commission-rate',
+            '0.0004',
+            '--min-commission',
+            '5',
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert '- 总手续费: 10.00' in completed.stdout
+    assert '- 买入佣金率: 0.0200%' in completed.stdout
+    assert '- 卖出佣金率: 0.0400%' in completed.stdout
+    assert '- 单笔最低佣金: 5.00' in completed.stdout
 
 
 def test_cli_backtest_exports_markdown_report(tmp_path):

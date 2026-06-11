@@ -106,6 +106,7 @@ python cli\commands.py backtest --strategy grid
 python cli\commands.py backtest --strategy grid --start-date 2026-01-02 --end-date 2026-01-03
 python cli\commands.py backtest --strategy grid --slippage-rate 0.001
 python cli\commands.py backtest --strategy grid --max-volume-participation 0.05
+python cli\commands.py backtest --strategy grid --buy-commission-rate 0.0002 --sell-commission-rate 0.0004 --min-commission 5
 python cli\commands.py backtest --strategy grid --history path\to\history.csv --strict-trading-calendar
 python cli\commands.py backtest --strategy grid --history path\to\history.csv --strict-trading-calendar --holiday 2026-01-02
 python cli\commands.py backtest --strategy grid --report-output data\grid-report.md
@@ -151,6 +152,7 @@ date,symbol,close,prices,volume
 ```
 
 `--report-output` 会把 CLI 中展示的回测摘要写成 UTF-8 Markdown 文件，便于归档和评审。
+`--commission-rate` 保留为买卖双边费率的兼容默认值；`buy_commission_rate` / `sell_commission_rate` 在配置中为 `null` 时继承该值，也可通过 `--buy-commission-rate`、`--sell-commission-rate` 分别覆盖。`--min-commission` 表示每笔成交的最低佣金。默认最低佣金为 0，以保持旧回测结果兼容；生产验收应按实际券商费率显式配置。
 权益曲线 CSV 字段：`date,total_value,pnl,pnl_percent,period_return,drawdown`。
 组合快照 CSV 字段：`date,cash,position_count,positions_market_value,total_value,pnl,pnl_percent,realized_pnl,unrealized_pnl,total_value_delta`。其中 `total_value_delta` 用于校验 `cash + positions_market_value` 与 `total_value` 的差异。
 成交明细 CSV 字段：`timestamp,action,symbol,price,shares,amount,commission,entry_commission,profit,net_profit`。
@@ -192,7 +194,13 @@ python cli\commands.py history export-rotation --config path\to\config.json --et
     "mx_xuangu": {"mode": "mock", "timeout": 10},
     "mx_search": {"mode": "mock", "timeout": 10}
   },
-  "account": {"initial_capital": 100000, "commission_rate": 0.0003},
+  "account": {
+    "initial_capital": 100000,
+    "commission_rate": 0.0003,
+    "buy_commission_rate": 0.0003,
+    "sell_commission_rate": 0.0003,
+    "min_commission": 0
+  },
   "risk": {"max_position": 5, "stop_loss": 0.15, "max_single_loss": 0.02, "min_volume": 10000000, "min_size": 1000000000, "max_tracking_error": 0.005, "max_premium": 0.05},
   "monitor": {"check_interval": 60, "alert_threshold": -10, "alert_file_path": null},
   "state": {"enabled": true, "path": "data/state.json", "restore_on_start": true, "save_on_stop": true}
