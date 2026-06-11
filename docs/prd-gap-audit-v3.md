@@ -35,7 +35,7 @@ python cli\commands.py history probe --help
 结果：
 
 - `compileall` 通过
-- `pytest` 通过，`303 passed`
+- `pytest` 通过，`305 passed`
 - CLI help 可用
 - CLI daily report 可生成包含数据源健康状态的空组合报告
 - CLI health 可输出数据源健康状态
@@ -70,7 +70,7 @@ python cli\commands.py history probe --help
 - 转换入口：`history export-grid/export-rotation` 可把本地 JSON 或 `DataManager.get_etf_history()` 返回的真实历史行情转换为 grid CSV 或 rotation CSV 长表。
 - 校验规则：grid 回测已覆盖历史日期/盘中时间顺序、OHLC 合法性、价格、成交量和成交额校验；rotation 回测已覆盖 JSON 基础结构和 CSV 长表聚合校验。
 - 执行模型：`BacktestExecutionModel` 统一处理比例滑点、成交量参与率限制、同一 bar 内成交量占用和成交前拒单归因，再交给 `Simulator` 执行。
-- 输出产物：两类 runner 均复用 `Simulator` 输出收益、最大回撤、最大回撤区间、交易次数、拒单次数与原因、胜率、总手续费及其初始资金占比，并支持权益曲线、组合快照、成交明细、持仓明细和拒单明细 CSV 导出；组合快照会保留现金、持仓市值、总值、已实现/未实现盈亏和 `total_value_delta` 一致性校验列。
+- 输出产物：两类 runner 均复用 `Simulator` 输出收益、最大回撤、最大回撤区间、交易次数、拒单次数与原因、胜率、总手续费及其初始资金占比，并支持 Markdown 回测报告以及权益曲线、组合快照、成交明细、持仓明细和拒单明细 CSV 导出；组合快照会保留现金、持仓市值、总值、已实现/未实现盈亏和 `total_value_delta` 一致性校验列。
 - 配置选项：CLI 已支持 `backtest --strategy grid|rotation`、回测日期区间过滤、比例滑点、可选成交量参与率限制和可选严格交易日历。
 - 缺失能力：交易所官方日历、部分成交、复杂组合回测、多策略编排和真实历史数据源仍未实现。
 

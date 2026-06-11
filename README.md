@@ -108,6 +108,7 @@ python cli\commands.py backtest --strategy grid --slippage-rate 0.001
 python cli\commands.py backtest --strategy grid --max-volume-participation 0.05
 python cli\commands.py backtest --strategy grid --history path\to\history.csv --strict-trading-calendar
 python cli\commands.py backtest --strategy grid --history path\to\history.csv --strict-trading-calendar --holiday 2026-01-02
+python cli\commands.py backtest --strategy grid --report-output data\grid-report.md
 python cli\commands.py backtest --strategy grid --equity-output data\grid-equity.csv
 python cli\commands.py backtest --strategy grid --portfolio-output data\grid-portfolio.csv
 python cli\commands.py backtest --strategy grid --trades-output data\grid-trades.csv
@@ -121,6 +122,7 @@ python cli\commands.py backtest --strategy grid --rejections-output data\grid-re
 python cli\commands.py backtest --strategy rotation
 python cli\commands.py backtest --strategy rotation --history path\to\rotation-history.json
 python cli\commands.py backtest --strategy rotation --history path\to\rotation-history.csv
+python cli\commands.py backtest --strategy rotation --report-output data\rotation-report.md
 python cli\commands.py backtest --strategy rotation --equity-output data\rotation-equity.csv
 python cli\commands.py backtest --strategy rotation --portfolio-output data\rotation-portfolio.csv
 python cli\commands.py backtest --strategy rotation --trades-output data\rotation-trades.csv
@@ -148,6 +150,7 @@ date,symbol,close,prices,volume
 2026-01-01,510500,9.0,10|9.5|9,1000000
 ```
 
+`--report-output` 会把 CLI 中展示的回测摘要写成 UTF-8 Markdown 文件，便于归档和评审。
 权益曲线 CSV 字段：`date,total_value,pnl,pnl_percent,period_return,drawdown`。
 组合快照 CSV 字段：`date,cash,position_count,positions_market_value,total_value,pnl,pnl_percent,realized_pnl,unrealized_pnl,total_value_delta`。其中 `total_value_delta` 用于校验 `cash + positions_market_value` 与 `total_value` 的差异。
 成交明细 CSV 字段：`timestamp,action,symbol,price,shares,amount,commission,entry_commission,profit,net_profit`。

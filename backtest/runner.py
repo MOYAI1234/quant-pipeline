@@ -746,6 +746,13 @@ def write_portfolio_csv(path: str, portfolio_curve: list) -> Path:
     return output_path
 
 
+def write_markdown_report(path: str, report: str) -> Path:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(f"{report.rstrip()}\n", encoding='utf-8')
+    return output_path
+
+
 def _trade_outcome_stats(trades: list) -> dict:
     closed_trades = [
         trade for trade in trades

@@ -1442,6 +1442,32 @@ def test_cli_backtest_smoke_outputs_markdown_report():
     assert '- 最大回撤区间:' in completed.stdout
 
 
+def test_cli_backtest_exports_markdown_report(tmp_path):
+    output_file = tmp_path / 'reports' / 'grid.md'
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'grid',
+            '--report-output',
+            str(output_file),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert f'回测报告 Markdown: {output_file}' in completed.stdout
+    report = output_file.read_text(encoding='utf-8')
+    assert report.startswith('# 回测报告 - 网格回测\n')
+    assert '- 标的: 510300' in report
+    assert '- 交易次数: 2' in report
+    assert report.endswith('\n')
+
+
 def test_cli_backtest_exports_equity_curve_csv(tmp_path):
     output_file = tmp_path / 'grid-equity.csv'
 
@@ -1735,6 +1761,32 @@ def test_cli_rotation_backtest_smoke_outputs_markdown_report():
     assert '- 手续费占初始资金:' in completed.stdout
     assert '- 滑点: 0.00%' in completed.stdout
     assert '- 最大回撤区间:' in completed.stdout
+
+
+def test_cli_rotation_backtest_exports_markdown_report(tmp_path):
+    output_file = tmp_path / 'reports' / 'rotation.md'
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'rotation',
+            '--report-output',
+            str(output_file),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert f'回测报告 Markdown: {output_file}' in completed.stdout
+    report = output_file.read_text(encoding='utf-8')
+    assert report.startswith('# 回测报告 - 轮动回测\n')
+    assert '- 标的池: 510300,510500,159915' in report
+    assert '- 交易次数: 3' in report
+    assert report.endswith('\n')
 
 
 def test_cli_rotation_backtest_exports_equity_curve_csv(tmp_path):

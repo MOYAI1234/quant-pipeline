@@ -19,6 +19,7 @@ from backtest.runner import (
     sample_grid_history,
     sample_rotation_history,
     write_equity_curve_csv,
+    write_markdown_report,
     write_portfolio_csv,
     write_positions_csv,
     write_rejected_orders_csv,
@@ -356,8 +357,9 @@ def _run_grid_backtest(
         'max_volume_participation': max_volume_participation,
     }, trading_calendar=trading_calendar)
     result = runner.run(history)
-    print(runner.render_markdown(result))
-    _write_backtest_outputs(args, result)
+    report = runner.render_markdown(result)
+    print(report)
+    _write_backtest_outputs(args, result, report)
 
 
 def _run_rotation_backtest(
@@ -410,8 +412,9 @@ def _run_rotation_backtest(
         'max_volume_participation': max_volume_participation,
     }, trading_calendar=trading_calendar)
     result = runner.run(history)
-    print(runner.render_markdown(result))
-    _write_backtest_outputs(args, result)
+    report = runner.render_markdown(result)
+    print(report)
+    _write_backtest_outputs(args, result, report)
 
 
 def _resolve_symbol(symbol: str) -> str:
@@ -553,7 +556,13 @@ def _build_trading_calendar(args) -> TradingCalendar | None:
     )
 
 
-def _write_backtest_outputs(args, result: dict) -> None:
+def _write_backtest_outputs(args, result: dict, report: str) -> None:
+    if args.report_output:
+        report_path = write_markdown_report(
+            str(_resolve_project_path(args.report_output)),
+            report,
+        )
+        print(f"回测报告 Markdown: {report_path}")
     if args.equity_output:
         equity_path = write_equity_curve_csv(
             str(_resolve_project_path(args.equity_output)),
@@ -1087,6 +1096,7 @@ def main():
         action='append',
         help='显式交易日，格式 YYYY-MM-DD，可重复指定并覆盖周末或休市日',
     )
+    backtest_parser.add_argument('--report-output', type=str, help='导出 Markdown 回测报告路径')
     backtest_parser.add_argument('--equity-output', type=str, help='导出权益曲线 CSV 路径')
     backtest_parser.add_argument('--portfolio-output', type=str, help='导出逐期组合快照 CSV 路径')
     backtest_parser.add_argument('--trades-output', type=str, help='导出成交明细 CSV 路径')
