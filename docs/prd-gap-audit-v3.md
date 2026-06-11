@@ -278,7 +278,7 @@ PRD 将“可回测策略系统”列为阶段二交付物，但当前只有实�
 
 建议下一轮继续做 M2，不碰实盘接口，先把回测输入和结果审计能力打牢：
 
-1. 调研 GitHub 上维护活跃、star 较高的整合行情数据包，比较 ETF 覆盖、历史/实时能力、频率限制、授权边界和稳定性，形成 mx-data 之外的 provider 选型矩阵。
+1. 基于 [数据源 provider 选型矩阵](data-source-provider-evaluation.md)，优先实现 AKShare 命令式历史 provider POC，并继续保留 a-stock-data / TuShare 作为备选。
 2. 用实际 provider 配置生成一份真实回测输入样例；仓库已提供 `history probe` 作为不落盘最小查询入口，并记录不可提交凭据的运行说明。
 3. 使用本地真实 provider 配置执行 `history probe`，完成环境侧 guarded e2e。
 
