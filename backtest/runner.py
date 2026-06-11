@@ -192,6 +192,12 @@ class BacktestRunner:
         cost_stats = _trade_cost_stats(
             self.executor.trades,
             self.executor.initial_capital,
+            len(history),
+        )
+        viability_stats = _grid_viability_stats(
+            self.strategy,
+            self.executor,
+            self.slippage_rate,
         )
 
         return {
@@ -209,6 +215,7 @@ class BacktestRunner:
             **_rejection_stats(self.rejected_orders),
             **_trade_outcome_stats(self.executor.trades),
             **cost_stats,
+            **viability_stats,
             'buy_commission_rate': self.executor.buy_commission_rate,
             'sell_commission_rate': self.executor.sell_commission_rate,
             'min_commission': self.executor.min_commission,
@@ -242,10 +249,19 @@ class BacktestRunner:
             f"- 胜率: {result['win_rate']:.2%}",
             f"- 总手续费: {result['total_commission']:.2f}",
             f"- 手续费占初始资金: {result['commission_ratio']:.4%}",
+            f"- 总成交额: {result['total_traded_amount']:.2f}",
+            f"- 成交额占初始资金: {result['turnover_ratio']:.2%}",
+            f"- 每周期交易次数: {result['trades_per_period']:.4f}",
+            _render_commission_drag(result['commission_to_gross_profit_ratio']),
             f"- 买入佣金率: {result['buy_commission_rate']:.4%}",
             f"- 卖出佣金率: {result['sell_commission_rate']:.4%}",
             f"- 单笔最低佣金: {result['min_commission']:.2f}",
             f"- 滑点: {result['slippage_rate']:.2%}",
+            (
+                "- 最小网格一轮预估净收益: "
+                f"{result['minimum_grid_round_trip_net_profit']:.2f}"
+            ),
+            _render_viability_warnings(result['viability_warnings']),
             _render_volume_participation(result['max_volume_participation']),
             f"- 已实现盈亏: {result['realized_pnl']:.2f}",
         ]
@@ -423,6 +439,7 @@ class RotationBacktestRunner:
         cost_stats = _trade_cost_stats(
             self.executor.trades,
             self.executor.initial_capital,
+            len(history),
         )
 
         return {
@@ -473,6 +490,10 @@ class RotationBacktestRunner:
             f"- 胜率: {result['win_rate']:.2%}",
             f"- 总手续费: {result['total_commission']:.2f}",
             f"- 手续费占初始资金: {result['commission_ratio']:.4%}",
+            f"- 总成交额: {result['total_traded_amount']:.2f}",
+            f"- 成交额占初始资金: {result['turnover_ratio']:.2%}",
+            f"- 每周期交易次数: {result['trades_per_period']:.4f}",
+            _render_commission_drag(result['commission_to_gross_profit_ratio']),
             f"- 买入佣金率: {result['buy_commission_rate']:.4%}",
             f"- 卖出佣金率: {result['sell_commission_rate']:.4%}",
             f"- 单笔最低佣金: {result['min_commission']:.2f}",
@@ -1008,10 +1029,48 @@ def _render_rejection_reasons(reasons: dict) -> str:
     return f'- 拒单原因: {summary}'
 
 
-def _trade_cost_stats(trades: list, initial_capital: float) -> dict:
+def _render_commission_drag(ratio: float | None) -> str:
+    if ratio is None:
+        return '- 手续费/毛盈利: 不可计算（无正毛盈利）'
+    return f'- 手续费/毛盈利: {ratio:.2%}'
+
+
+def _render_viability_warnings(warnings: list) -> str:
+    if not warnings:
+        return '- 生产可行性警告: 无'
+    labels = {
+        'grid_round_trip_non_positive_after_costs': (
+            '最小网格一轮扣除手续费和滑点后收益不为正'
+        ),
+        'grid_round_trip_cost_drag_high': (
+            '最小网格一轮手续费和滑点侵蚀至少 50% 毛收益'
+        ),
+    }
+    return '- 生产可行性警告: ' + '；'.join(
+        labels.get(warning, warning)
+        for warning in warnings
+    )
+
+
+def _trade_cost_stats(
+    trades: list,
+    initial_capital: float,
+    period_count: int = 0,
+) -> dict:
     total_commission = sum(
         trade.get('commission', 0)
         for trade in trades
+    )
+    total_traded_amount = sum(
+        trade.get('amount', 0)
+        for trade in trades
+    )
+    gross_realized_profit = sum(
+        _trade_net_profit(trade)
+        + trade.get('entry_commission', 0)
+        + trade.get('commission', 0)
+        for trade in trades
+        if trade.get('action') == 'sell' and 'profit' in trade
     )
     return {
         'total_commission': total_commission,
@@ -1019,6 +1078,68 @@ def _trade_cost_stats(trades: list, initial_capital: float) -> dict:
             total_commission / initial_capital
             if initial_capital > 0 else 0.0
         ),
+        'total_traded_amount': total_traded_amount,
+        'turnover_ratio': (
+            total_traded_amount / initial_capital
+            if initial_capital > 0 else 0.0
+        ),
+        'trades_per_period': (
+            len(trades) / period_count
+            if period_count > 0 else 0.0
+        ),
+        'gross_realized_profit': gross_realized_profit,
+        'commission_to_gross_profit_ratio': (
+            total_commission / gross_realized_profit
+            if gross_realized_profit > 0 else None
+        ),
+    }
+
+
+def _grid_viability_stats(strategy, executor, slippage_rate: float) -> dict:
+    buy_price = strategy.center_price - strategy.grid_size
+    sell_price = strategy.center_price + strategy.grid_size
+    shares = strategy.shares_per_grid
+    buy_execution_price = _apply_slippage(
+        {'action': 'buy', 'price': buy_price},
+        slippage_rate,
+    )['price']
+    sell_execution_price = _apply_slippage(
+        {'action': 'sell', 'price': sell_price},
+        slippage_rate,
+    )['price']
+    buy_amount = buy_execution_price * shares
+    sell_amount = sell_execution_price * shares
+    buy_commission = max(
+        buy_amount * executor.buy_commission_rate,
+        executor.min_commission,
+    )
+    sell_commission = max(
+        sell_amount * executor.sell_commission_rate,
+        executor.min_commission,
+    )
+    gross_profit = (sell_price - buy_price) * shares
+    slippage_cost = (
+        (buy_execution_price - buy_price)
+        + (sell_price - sell_execution_price)
+    ) * shares
+    estimated_cost = buy_commission + sell_commission + slippage_cost
+    net_profit = gross_profit - estimated_cost
+    cost_drag_ratio = (
+        estimated_cost / gross_profit
+        if gross_profit > 0 else None
+    )
+    warnings = []
+    if net_profit <= 0:
+        warnings.append('grid_round_trip_non_positive_after_costs')
+    elif cost_drag_ratio is not None and cost_drag_ratio >= 0.5:
+        warnings.append('grid_round_trip_cost_drag_high')
+
+    return {
+        'minimum_grid_round_trip_gross_profit': gross_profit,
+        'minimum_grid_round_trip_estimated_cost': estimated_cost,
+        'minimum_grid_round_trip_net_profit': net_profit,
+        'minimum_grid_round_trip_cost_drag_ratio': cost_drag_ratio,
+        'viability_warnings': warnings,
     }
 
 

@@ -153,6 +153,8 @@ date,symbol,close,prices,volume
 
 `--report-output` 会把 CLI 中展示的回测摘要写成 UTF-8 Markdown 文件，便于归档和评审。
 `--commission-rate` 保留为买卖双边费率的兼容默认值；`buy_commission_rate` / `sell_commission_rate` 在配置中为 `null` 时继承该值，也可通过 `--buy-commission-rate`、`--sell-commission-rate` 分别覆盖。`--min-commission` 表示每笔成交的最低佣金。默认最低佣金为 0，以保持旧回测结果兼容；生产验收应按实际券商费率显式配置。
+回测摘要还会输出总成交额、成交额占初始资金、每个历史周期的交易次数，以及手续费相对已平仓毛盈利的侵蚀比例。这里的“成交额占初始资金”是用于比较策略交易强度的简化审计指标，不等同于基金或组合管理中的标准年化换手率。
+grid 回测会额外估算最近一档买卖网格完成一轮后的毛收益、手续费、滑点和净收益；若成本吞掉至少 50% 毛收益，或扣除成本后净收益不为正，Markdown 报告会输出生产可行性警告。警告不会修改策略成交，只用于阻止把密集网格的毛收益误当成可落地收益。
 权益曲线 CSV 字段：`date,total_value,pnl,pnl_percent,period_return,drawdown`。
 组合快照 CSV 字段：`date,cash,position_count,positions_market_value,total_value,pnl,pnl_percent,realized_pnl,unrealized_pnl,total_value_delta`。其中 `total_value_delta` 用于校验 `cash + positions_market_value` 与 `total_value` 的差异。
 成交明细 CSV 字段：`timestamp,action,symbol,price,shares,amount,commission,entry_commission,profit,net_profit`。
@@ -286,8 +288,9 @@ python -m compileall -q .
 1. 补强测试和主循环可测性。
 2. 明确 adapter 的 mock/real 模式和数据契约。
 3. 扩展历史行情驱动的回测引擎。
-4. 持久化账户、成交和策略状态。
-5. 完善监控报告和告警闭环。
-6. 在模拟和回测稳定后，再预研 QMT/实盘执行。
+4. 调研 GitHub 上维护活跃、star 较高的整合行情数据包，形成 mx-data 之外的 provider 选型矩阵，再以 adapter 方式接入。
+5. 持久化账户、成交和策略状态。
+6. 完善监控报告和告警闭环。
+7. 在模拟和回测稳定后，再预研 QMT/实盘执行。
 
 实盘相关能力必须在显式配置、充分测试和状态可恢复后再启用。
