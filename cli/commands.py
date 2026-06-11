@@ -3,6 +3,7 @@ import json
 import math
 import sys
 import os
+import tempfile
 from copy import deepcopy
 from pathlib import Path
 
@@ -154,15 +155,23 @@ def cmd_config_init(args):
     if output_path.exists() and not args.force:
         raise ValueError(f'配置文件已存在，使用 --force 覆盖: {output_path}')
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = output_path.with_suffix(f'{output_path.suffix}.tmp')
+    temp_path = None
     try:
-        temp_path.write_text(
-            json.dumps(SYSTEM_CONFIG, ensure_ascii=False, indent=2) + '\n',
+        with tempfile.NamedTemporaryFile(
+            mode='w',
             encoding='utf-8',
-        )
+            dir=output_path.parent,
+            prefix=f'.{output_path.name}.',
+            suffix='.tmp',
+            delete=False,
+        ) as temp_file:
+            temp_path = Path(temp_file.name)
+            temp_file.write(
+                json.dumps(SYSTEM_CONFIG, ensure_ascii=False, indent=2) + '\n'
+            )
         temp_path.replace(output_path)
     finally:
-        if temp_path.exists():
+        if temp_path is not None and temp_path.exists():
             temp_path.unlink()
     print(f'配置模板: {output_path}')
 

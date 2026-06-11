@@ -95,6 +95,9 @@ def test_cli_config_show_outputs_supplied_config(tmp_path):
 
 def test_cli_config_init_creates_valid_default_template(tmp_path):
     output_path = tmp_path / 'nested' / 'config.json'
+    sibling_temp_path = output_path.with_suffix(f'{output_path.suffix}.tmp')
+    output_path.parent.mkdir(parents=True)
+    sibling_temp_path.write_text('keep me', encoding='utf-8')
 
     completed = subprocess.run(
         [
@@ -115,6 +118,7 @@ def test_cli_config_init_creates_valid_default_template(tmp_path):
     created_config = json.loads(output_path.read_text(encoding='utf-8'))
     assert created_config == SYSTEM_CONFIG
     assert validate_config(created_config)['valid'] is True
+    assert sibling_temp_path.read_text(encoding='utf-8') == 'keep me'
 
 
 def test_cli_config_init_refuses_overwrite_unless_forced(tmp_path):
