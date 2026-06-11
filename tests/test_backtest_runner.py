@@ -322,8 +322,57 @@ def test_trade_cost_stats_reports_turnover_frequency_and_fee_drag():
     assert stats['total_traded_amount'] == pytest.approx(2100)
     assert stats['turnover_ratio'] == pytest.approx(0.21)
     assert stats['trades_per_period'] == pytest.approx(0.5)
+    assert stats['closed_trade_commission'] == pytest.approx(10)
     assert stats['gross_realized_profit'] == pytest.approx(100)
     assert stats['commission_to_gross_profit_ratio'] == pytest.approx(0.1)
+
+
+def test_trade_cost_drag_excludes_commission_from_open_position():
+    stats = _trade_cost_stats([
+        {'action': 'buy', 'amount': 1000, 'commission': 5},
+        {
+            'action': 'sell',
+            'amount': 1100,
+            'commission': 5,
+            'entry_commission': 5,
+            'profit': 95,
+            'net_profit': 90,
+        },
+        {'action': 'buy', 'amount': 500, 'commission': 5},
+    ], initial_capital=10000)
+
+    assert stats['total_commission'] == pytest.approx(15)
+    assert stats['closed_trade_commission'] == pytest.approx(10)
+    assert stats['gross_realized_profit'] == pytest.approx(100)
+    assert stats['commission_to_gross_profit_ratio'] == pytest.approx(0.1)
+
+
+def test_grid_viability_warns_when_order_is_below_whole_lot():
+    strategy = GridStrategy({
+        'name': '不足一手网格',
+        'symbol': '510300',
+        'center_price': 4.0,
+        'grid_size': 0.1,
+        'grid_count': 1,
+        'shares_per_grid': 50,
+    })
+    runner = BacktestRunner(strategy, {'initial_capital': 100000})
+
+    result = runner.run([{
+        'date': '2026-01-01',
+        'open': 4.0,
+        'high': 4.0,
+        'low': 4.0,
+        'close': 4.0,
+        'volume': 100000,
+        'amount': 400000,
+    }])
+
+    assert result['minimum_grid_round_trip_shares'] == 0
+    assert result['minimum_grid_round_trip_net_profit'] == 0
+    assert result['minimum_grid_round_trip_cost_drag_ratio'] is None
+    assert result['viability_warnings'] == ['grid_order_below_minimum_lot']
+    assert '模拟器无法执行整手订单' in runner.render_markdown(result)
 
 
 def test_grid_viability_warns_when_minimum_commission_exceeds_grid_profit():
@@ -353,6 +402,7 @@ def test_grid_viability_warns_when_minimum_commission_exceeds_grid_profit():
         },
     ])
 
+    assert result['minimum_grid_round_trip_shares'] == 100
     assert result['minimum_grid_round_trip_gross_profit'] == pytest.approx(2)
     assert result['minimum_grid_round_trip_estimated_cost'] == pytest.approx(10)
     assert result['minimum_grid_round_trip_net_profit'] == pytest.approx(-8)
@@ -1604,7 +1654,8 @@ def test_cli_backtest_smoke_outputs_markdown_report():
     assert '- 总成交额:' in completed.stdout
     assert '- 成交额占初始资金:' in completed.stdout
     assert '- 每周期交易次数:' in completed.stdout
-    assert '- 手续费/毛盈利:' in completed.stdout
+    assert '- 已平仓手续费/毛盈利:' in completed.stdout
+    assert '- 最小网格一轮估算成交股数:' in completed.stdout
     assert '- 最小网格一轮预估净收益:' in completed.stdout
     assert '- 生产可行性警告: 无' in completed.stdout
     assert '- 买入佣金率: 0.0300%' in completed.stdout

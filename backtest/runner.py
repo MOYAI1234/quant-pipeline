@@ -258,6 +258,10 @@ class BacktestRunner:
             f"- 单笔最低佣金: {result['min_commission']:.2f}",
             f"- 滑点: {result['slippage_rate']:.2%}",
             (
+                "- 最小网格一轮估算成交股数: "
+                f"{result['minimum_grid_round_trip_shares']}"
+            ),
+            (
                 "- 最小网格一轮预估净收益: "
                 f"{result['minimum_grid_round_trip_net_profit']:.2f}"
             ),
@@ -1031,8 +1035,8 @@ def _render_rejection_reasons(reasons: dict) -> str:
 
 def _render_commission_drag(ratio: float | None) -> str:
     if ratio is None:
-        return '- 手续费/毛盈利: 不可计算（无正毛盈利）'
-    return f'- 手续费/毛盈利: {ratio:.2%}'
+        return '- 已平仓手续费/毛盈利: 不可计算（无正毛盈利）'
+    return f'- 已平仓手续费/毛盈利: {ratio:.2%}'
 
 
 def _render_viability_warnings(warnings: list) -> str:
@@ -1044,6 +1048,9 @@ def _render_viability_warnings(warnings: list) -> str:
         ),
         'grid_round_trip_cost_drag_high': (
             '最小网格一轮手续费和滑点侵蚀至少 50% 毛收益'
+        ),
+        'grid_order_below_minimum_lot': (
+            '每格股数不足 100 股，模拟器无法执行整手订单'
         ),
     }
     return '- 生产可行性警告: ' + '；'.join(
@@ -1065,12 +1072,19 @@ def _trade_cost_stats(
         trade.get('amount', 0)
         for trade in trades
     )
+    closed_trades = [
+        trade for trade in trades
+        if trade.get('action') == 'sell' and 'profit' in trade
+    ]
+    closed_trade_commission = sum(
+        trade.get('entry_commission', 0) + trade.get('commission', 0)
+        for trade in closed_trades
+    )
     gross_realized_profit = sum(
         _trade_net_profit(trade)
         + trade.get('entry_commission', 0)
         + trade.get('commission', 0)
-        for trade in trades
-        if trade.get('action') == 'sell' and 'profit' in trade
+        for trade in closed_trades
     )
     return {
         'total_commission': total_commission,
@@ -1087,9 +1101,10 @@ def _trade_cost_stats(
             len(trades) / period_count
             if period_count > 0 else 0.0
         ),
+        'closed_trade_commission': closed_trade_commission,
         'gross_realized_profit': gross_realized_profit,
         'commission_to_gross_profit_ratio': (
-            total_commission / gross_realized_profit
+            closed_trade_commission / gross_realized_profit
             if gross_realized_profit > 0 else None
         ),
     }
@@ -1098,7 +1113,17 @@ def _trade_cost_stats(
 def _grid_viability_stats(strategy, executor, slippage_rate: float) -> dict:
     buy_price = strategy.center_price - strategy.grid_size
     sell_price = strategy.center_price + strategy.grid_size
-    shares = strategy.shares_per_grid
+    requested_shares = strategy.shares_per_grid
+    shares = (requested_shares // 100) * 100
+    if shares <= 0:
+        return {
+            'minimum_grid_round_trip_shares': 0,
+            'minimum_grid_round_trip_gross_profit': 0.0,
+            'minimum_grid_round_trip_estimated_cost': 0.0,
+            'minimum_grid_round_trip_net_profit': 0.0,
+            'minimum_grid_round_trip_cost_drag_ratio': None,
+            'viability_warnings': ['grid_order_below_minimum_lot'],
+        }
     buy_execution_price = _apply_slippage(
         {'action': 'buy', 'price': buy_price},
         slippage_rate,
@@ -1135,6 +1160,7 @@ def _grid_viability_stats(strategy, executor, slippage_rate: float) -> dict:
         warnings.append('grid_round_trip_cost_drag_high')
 
     return {
+        'minimum_grid_round_trip_shares': shares,
         'minimum_grid_round_trip_gross_profit': gross_profit,
         'minimum_grid_round_trip_estimated_cost': estimated_cost,
         'minimum_grid_round_trip_net_profit': net_profit,
