@@ -408,6 +408,39 @@ def test_validate_config_rejects_invalid_commission_rate():
     assert 'account.commission_rate 必须在 0 到 1 之间' in result['errors']
 
 
+def test_validate_config_rejects_invalid_side_commission_rates():
+    config = deepcopy(SYSTEM_CONFIG)
+    config['account']['buy_commission_rate'] = -0.1
+    config['account']['sell_commission_rate'] = 2
+
+    result = validate_config(config)
+
+    assert result['valid'] is False
+    assert 'account.buy_commission_rate 必须在 0 到 1 之间' in result['errors']
+    assert 'account.sell_commission_rate 必须在 0 到 1 之间' in result['errors']
+
+
+def test_validate_config_accepts_inherited_side_commission_rates():
+    config = deepcopy(SYSTEM_CONFIG)
+    config['account']['commission_rate'] = 0.001
+    config['account']['buy_commission_rate'] = None
+    config['account']['sell_commission_rate'] = None
+
+    result = validate_config(config)
+
+    assert result['valid'] is True
+
+
+def test_validate_config_rejects_invalid_min_commission():
+    config = deepcopy(SYSTEM_CONFIG)
+    config['account']['min_commission'] = -1
+
+    result = validate_config(config)
+
+    assert result['valid'] is False
+    assert 'account.min_commission 不能小于 0' in result['errors']
+
+
 def test_validate_config_rejects_invalid_risk_adapter_mode():
     config = deepcopy(SYSTEM_CONFIG)
     config['risk']['mx_data'] = {'mode': 'paper'}

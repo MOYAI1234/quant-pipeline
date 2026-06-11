@@ -31,6 +31,70 @@ class TestSimulator:
         result = self.sim.execute_order(order)
         assert result is False
 
+    def test_minimum_commission_applies_to_each_side(self):
+        sim = Simulator({
+            'initial_capital': 20000,
+            'buy_commission_rate': 0.001,
+            'sell_commission_rate': 0.002,
+            'min_commission': 5,
+        })
+
+        assert sim.execute_order({
+            'action': 'buy',
+            'symbol': '510300',
+            'price': 10,
+            'shares': 100,
+        }) is True
+        assert sim.execute_order({
+            'action': 'sell',
+            'symbol': '510300',
+            'price': 11,
+            'shares': 100,
+        }) is True
+
+        assert sim.trades[0]['commission'] == pytest.approx(5)
+        assert sim.trades[1]['commission'] == pytest.approx(5)
+        assert sim.trades[1]['entry_commission'] == pytest.approx(5)
+        assert sim.trades[1]['net_profit'] == pytest.approx(90)
+
+    def test_buy_funds_check_includes_minimum_commission(self):
+        sim = Simulator({
+            'initial_capital': 1000,
+            'commission_rate': 0.0003,
+            'min_commission': 5,
+        })
+
+        assert sim.execute_order({
+            'action': 'buy',
+            'symbol': '510300',
+            'price': 9.96,
+            'shares': 100,
+        }) is False
+        assert sim.capital == 1000
+
+    def test_legacy_commission_rate_applies_to_both_sides(self):
+        sim = Simulator({
+            'initial_capital': 20000,
+            'commission_rate': 0.001,
+            'buy_commission_rate': None,
+            'sell_commission_rate': None,
+        })
+
+        assert sim.buy_commission_rate == pytest.approx(0.001)
+        assert sim.sell_commission_rate == pytest.approx(0.001)
+
+    @pytest.mark.parametrize(
+        ('config', 'message'),
+        [
+            ({'buy_commission_rate': -0.1}, 'buy_commission_rate'),
+            ({'sell_commission_rate': 1.1}, 'sell_commission_rate'),
+            ({'min_commission': float('nan')}, 'min_commission'),
+        ],
+    )
+    def test_rejects_invalid_cost_config(self, config, message):
+        with pytest.raises(ValueError, match=message):
+            Simulator({'initial_capital': 100000, **config})
+
     def test_buy_avg_price(self):
         # 第一次买入
         self.sim.execute_order({'action': 'buy', 'symbol': '510300', 'price': 4.0, 'amount': 40000})

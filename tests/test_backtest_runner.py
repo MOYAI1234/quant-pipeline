@@ -342,6 +342,66 @@ def test_rotation_backtest_runner_applies_slippage_to_rebalance_orders():
     assert runner.strategy.selected_etfs == ['510500']
 
 
+def test_rotation_backtest_runner_rebalances_with_minimum_commission():
+    strategy = RotationStrategy({
+        'name': '最低佣金轮动',
+        'symbol': '510300',
+        'etf_pool': ['510300', '510500'],
+        'lookback': 2,
+        'top_n': 1,
+        'rebalance_days': 0,
+    })
+    runner = RotationBacktestRunner(strategy, {
+        'initial_capital': 20010,
+        'commission_rate': 0.0003,
+        'min_commission': 5,
+    })
+    history = [
+        {
+            'date': '2026-01-01',
+            'symbols': {
+                '510300': {
+                    'close': 100,
+                    'prices': [90, 100],
+                    'volume': 1000000,
+                },
+                '510500': {
+                    'close': 100,
+                    'prices': [100, 90],
+                    'volume': 1000000,
+                },
+            },
+        },
+        {
+            'date': '2026-01-02',
+            'symbols': {
+                '510300': {
+                    'close': 100,
+                    'prices': [100, 90],
+                    'volume': 1000000,
+                },
+                '510500': {
+                    'close': 100,
+                    'prices': [90, 100],
+                    'volume': 1000000,
+                },
+            },
+        },
+    ]
+
+    result = runner.run(history)
+
+    assert [trade['action'] for trade in result['trades']] == [
+        'buy',
+        'sell',
+        'buy',
+    ]
+    assert [trade['shares'] for trade in result['trades']] == [200, 200, 100]
+    assert '510300' not in result['portfolio']['positions']
+    assert result['portfolio']['positions']['510500']['shares'] == 100
+    assert result['rejected_order_count'] == 0
+
+
 def test_rotation_backtest_runner_retries_after_volume_rejection():
     runner = RotationBacktestRunner(_rotation_strategy(), {
         'initial_capital': 100000,
@@ -1438,8 +1498,37 @@ def test_cli_backtest_smoke_outputs_markdown_report():
     assert '- 胜率: 100.00%' in completed.stdout
     assert '- 总手续费:' in completed.stdout
     assert '- 手续费占初始资金:' in completed.stdout
+    assert '- 买入佣金率: 0.0300%' in completed.stdout
+    assert '- 卖出佣金率: 0.0300%' in completed.stdout
+    assert '- 单笔最低佣金: 0.00' in completed.stdout
     assert '- 滑点: 0.00%' in completed.stdout
     assert '- 最大回撤区间:' in completed.stdout
+
+
+def test_cli_backtest_accepts_production_commission_options():
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'grid',
+            '--buy-commission-rate',
+            '0.0002',
+            '--sell-commission-rate',
+            '0.0004',
+            '--min-commission',
+            '5',
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert '- 总手续费: 10.00' in completed.stdout
+    assert '- 买入佣金率: 0.0200%' in completed.stdout
+    assert '- 卖出佣金率: 0.0400%' in completed.stdout
+    assert '- 单笔最低佣金: 5.00' in completed.stdout
 
 
 def test_cli_backtest_exports_markdown_report(tmp_path):

@@ -92,17 +92,24 @@ class RotationStrategy(BaseStrategy):
 
         if valid_buy_symbols:
             buy_weight = 1.0 / len(valid_buy_symbols)
-            # 计算可用于买入的总金额 = 当前现金 + 预计卖出所得
+            costs = self._trading_costs(portfolio)
+            # 计算可用于买入的总金额 = 当前现金 + 预计卖出净所得
             capital = portfolio.get('capital', 0) if portfolio else 0
             sold_value = sum(
-                s.get('amount', 0) for s in signals if s.get('action') == 'sell'
+                self._net_sell_proceeds(s.get('amount', 0), costs)
+                for s in signals
+                if s.get('action') == 'sell'
             )
             available_capital = capital + sold_value
 
             for symbol in valid_buy_symbols:
-                target_amount = available_capital * buy_weight
+                target_budget = available_capital * buy_weight
                 price = symbol_prices[symbol]
-                shares = int(target_amount / price / 100) * 100
+                shares = self._affordable_buy_shares(
+                    target_budget,
+                    price,
+                    costs,
+                )
                 signals.append({
                     'action': 'buy',
                     'symbol': symbol,
@@ -114,6 +121,37 @@ class RotationStrategy(BaseStrategy):
                 })
 
         return signals
+
+    def _trading_costs(self, portfolio: dict = None) -> dict:
+        costs = portfolio.get('trading_costs', {}) if portfolio else {}
+        return {
+            'buy_commission_rate': costs.get('buy_commission_rate', 0),
+            'sell_commission_rate': costs.get('sell_commission_rate', 0),
+            'min_commission': costs.get('min_commission', 0),
+        }
+
+    def _net_sell_proceeds(self, amount: float, costs: dict) -> float:
+        commission = max(
+            amount * costs['sell_commission_rate'],
+            costs['min_commission'],
+        )
+        return max(amount - commission, 0)
+
+    def _affordable_buy_shares(
+        self,
+        budget: float,
+        price: float,
+        costs: dict,
+    ) -> int:
+        if budget <= 0 or price <= 0:
+            return 0
+        max_notional = min(
+            budget / (1 + costs['buy_commission_rate']),
+            budget - costs['min_commission'],
+        )
+        if max_notional <= 0:
+            return 0
+        return int(max_notional / price / 100) * 100
 
     def need_rebalance(self, data: dict = None) -> bool:
         if self.pending_rebalance_count > 0:

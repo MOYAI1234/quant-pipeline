@@ -22,6 +22,9 @@ SYSTEM_CONFIG = {
     'account': {
         'initial_capital': 100000,
         'commission_rate': 0.0003,
+        'buy_commission_rate': None,
+        'sell_commission_rate': None,
+        'min_commission': 0.0,
     },
     'risk': {
         'max_position': 5,

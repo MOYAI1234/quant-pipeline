@@ -1,5 +1,7 @@
 from copy import deepcopy
 from datetime import datetime
+import math
+
 from .executor import BaseExecutor
 
 
@@ -14,6 +16,18 @@ class Simulator(BaseExecutor):
         self.positions = {}
         self.trades = []
         self.commission_rate = config.get('commission_rate', 0.0003)
+        self.buy_commission_rate = (
+            config.get('buy_commission_rate')
+            if config.get('buy_commission_rate') is not None
+            else self.commission_rate
+        )
+        self.sell_commission_rate = (
+            config.get('sell_commission_rate')
+            if config.get('sell_commission_rate') is not None
+            else self.commission_rate
+        )
+        self.min_commission = config.get('min_commission', 0.0)
+        self._validate_cost_config()
 
     def execute_order(self, order: dict) -> bool:
         action = order.get('action')
@@ -45,7 +59,7 @@ class Simulator(BaseExecutor):
             return False
 
         actual_amount = shares * price
-        commission = actual_amount * self.commission_rate
+        commission = self._commission(actual_amount, self.buy_commission_rate)
         total_cost = actual_amount + commission
 
         if total_cost > self.capital:
@@ -105,7 +119,7 @@ class Simulator(BaseExecutor):
             return False
 
         sell_amount = shares_to_sell * price
-        commission = sell_amount * self.commission_rate
+        commission = self._commission(sell_amount, self.sell_commission_rate)
         net_amount = sell_amount - commission
 
         cost_basis = shares_to_sell * pos['avg_price']
@@ -220,7 +234,12 @@ class Simulator(BaseExecutor):
             'initial_capital': self.initial_capital,
             'pnl': total_market_value - self.initial_capital,
             'pnl_percent': (total_market_value - self.initial_capital) / self.initial_capital * 100,
-            'realized_pnl': realized_pnl
+            'realized_pnl': realized_pnl,
+            'trading_costs': {
+                'buy_commission_rate': self.buy_commission_rate,
+                'sell_commission_rate': self.sell_commission_rate,
+                'min_commission': self.min_commission,
+            },
         }
 
     def snapshot(self) -> dict:
@@ -231,6 +250,9 @@ class Simulator(BaseExecutor):
             'positions': deepcopy(self.positions),
             'trades': [self._serialize_trade(trade) for trade in self.trades],
             'commission_rate': self.commission_rate,
+            'buy_commission_rate': self.buy_commission_rate,
+            'sell_commission_rate': self.sell_commission_rate,
+            'min_commission': self.min_commission,
         }
 
     def restore(self, snapshot: dict):
@@ -250,6 +272,18 @@ class Simulator(BaseExecutor):
             for trade in snapshot.get('trades', [])
         ]
         self.commission_rate = snapshot.get('commission_rate', self.commission_rate)
+        self.buy_commission_rate = (
+            snapshot.get('buy_commission_rate')
+            if snapshot.get('buy_commission_rate') is not None
+            else self.commission_rate
+        )
+        self.sell_commission_rate = (
+            snapshot.get('sell_commission_rate')
+            if snapshot.get('sell_commission_rate') is not None
+            else self.commission_rate
+        )
+        self.min_commission = snapshot.get('min_commission', 0.0)
+        self._validate_cost_config()
 
     def _serialize_trade(self, trade: dict) -> dict:
         serialized = deepcopy(trade)
@@ -271,6 +305,31 @@ class Simulator(BaseExecutor):
         if position_shares <= 0:
             return 0
         return position.get('commission', 0) * shares_to_sell / position_shares
+
+    def _commission(self, amount: float, rate: float) -> float:
+        return max(amount * rate, self.min_commission)
+
+    def _validate_cost_config(self) -> None:
+        for name, value in (
+            ('commission_rate', self.commission_rate),
+            ('buy_commission_rate', self.buy_commission_rate),
+            ('sell_commission_rate', self.sell_commission_rate),
+        ):
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or value < 0
+                or value > 1
+            ):
+                raise ValueError(f'{name} 必须在 0 到 1 之间')
+        if (
+            isinstance(self.min_commission, bool)
+            or not isinstance(self.min_commission, (int, float))
+            or not math.isfinite(self.min_commission)
+            or self.min_commission < 0
+        ):
+            raise ValueError('min_commission 不能小于 0')
 
     def _trade_net_profit(self, trade: dict) -> float:
         if 'net_profit' in trade:
