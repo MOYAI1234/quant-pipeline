@@ -22,6 +22,8 @@ CLI smoke：
 python cli\commands.py --help
 python cli\commands.py diagnose
 python cli\commands.py health
+python cli\commands.py config show
+python cli\commands.py config init --help
 python cli\commands.py config validate
 python cli\commands.py report --type daily
 python cli\commands.py backtest --strategy grid
@@ -31,7 +33,7 @@ python cli\commands.py history export-grid --help
 python cli\commands.py history export-rotation --help
 ```
 
-当前基线：`pytest` 应通过 297 个测试。
+当前基线：`pytest` 应通过 302 个测试。
 
 ## 分层测试
 
@@ -112,6 +114,7 @@ python -m pytest tests\test_report_health.py tests\test_alerts.py tests\test_cli
 - `AlertManager` 支持结构化事件、内存历史和可选 JSONL 文件输出。
 - CLI `alerts` 能读取 JSONL 并输出文本或 JSON。
 - CLI `diagnose` 能汇总配置校验、数据源健康状态和状态文件可恢复性。
+- CLI `config show/init` 能查看有效配置并安全生成默认本地模板。
 
 ## CLI 回测验收样例
 

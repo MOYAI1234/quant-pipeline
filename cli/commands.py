@@ -3,6 +3,7 @@ import json
 import math
 import sys
 import os
+import tempfile
 from copy import deepcopy
 from pathlib import Path
 
@@ -136,6 +137,43 @@ def cmd_config_validate(args):
         print(_render_config_validation(result))
     if not result['valid']:
         raise SystemExit(1)
+
+
+def cmd_config_show(args):
+    config = (
+        _load_config_file(args.config)
+        if args.config
+        else deepcopy(SYSTEM_CONFIG)
+    )
+    print(json.dumps(config, ensure_ascii=False, indent=2))
+
+
+def cmd_config_init(args):
+    output_path = _resolve_project_path(args.output)
+    if output_path.exists() and not output_path.is_file():
+        raise ValueError(f'配置输出路径不是文件: {output_path}')
+    if output_path.exists() and not args.force:
+        raise ValueError(f'配置文件已存在，使用 --force 覆盖: {output_path}')
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode='w',
+            encoding='utf-8',
+            dir=output_path.parent,
+            prefix=f'.{output_path.name}.',
+            suffix='.tmp',
+            delete=False,
+        ) as temp_file:
+            temp_path = Path(temp_file.name)
+            temp_file.write(
+                json.dumps(SYSTEM_CONFIG, ensure_ascii=False, indent=2) + '\n'
+            )
+        temp_path.replace(output_path)
+    finally:
+        if temp_path is not None and temp_path.exists():
+            temp_path.unlink()
+    print(f'配置模板: {output_path}')
 
 
 def cmd_diagnose(args):
@@ -925,8 +963,30 @@ def main():
     config_parser = subparsers.add_parser('config', help='配置工具')
     config_subparsers = config_parser.add_subparsers(dest='config_command')
     validate_parser = config_subparsers.add_parser('validate', help='校验配置')
-    validate_parser.add_argument('--config', type=str, help='JSON 配置文件路径，默认校验内置配置')
+    validate_parser.add_argument(
+        '--config',
+        type=str,
+        help='JSON 配置文件路径，默认校验内置配置',
+    )
     validate_parser.add_argument('--json', action='store_true', help='输出 JSON 格式')
+    show_parser = config_subparsers.add_parser('show', help='显示有效配置')
+    show_parser.add_argument(
+        '--config',
+        type=str,
+        help='JSON 配置文件路径，默认显示内置配置',
+    )
+    init_parser = config_subparsers.add_parser('init', help='生成默认配置模板')
+    init_parser.add_argument(
+        '--output',
+        type=str,
+        default='config.local.json',
+        help='输出路径，默认 config.local.json',
+    )
+    init_parser.add_argument(
+        '--force',
+        action='store_true',
+        help='覆盖已有配置文件',
+    )
 
     history_parser = subparsers.add_parser('history', help='历史数据转换工具')
     history_subparsers = history_parser.add_subparsers(dest='history_command')
@@ -1051,13 +1111,17 @@ def main():
         except ValueError as exc:
             parser.error(str(exc))
     elif args.command == 'config':
-        if args.config_command == 'validate':
-            try:
+        try:
+            if args.config_command == 'validate':
                 cmd_config_validate(args)
-            except (TypeError, ValueError) as exc:
-                parser.error(str(exc))
-        else:
-            config_parser.print_help()
+            elif args.config_command == 'show':
+                cmd_config_show(args)
+            elif args.config_command == 'init':
+                cmd_config_init(args)
+            else:
+                config_parser.print_help()
+        except (OSError, TypeError, ValueError) as exc:
+            parser.error(str(exc))
     elif args.command == 'history':
         try:
             if args.history_command == 'probe':
