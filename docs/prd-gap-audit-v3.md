@@ -35,7 +35,7 @@ python cli\commands.py history probe --help
 结果：
 
 - `compileall` 通过
-- `pytest` 通过，`302 passed`
+- `pytest` 通过，`303 passed`
 - CLI help 可用
 - CLI daily report 可生成包含数据源健康状态的空组合报告
 - CLI health 可输出数据源健康状态

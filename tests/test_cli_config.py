@@ -4,11 +4,22 @@ import sys
 from copy import deepcopy
 from pathlib import Path
 
+from cli.commands import _unlink_if_present
 from config.settings import SYSTEM_CONFIG
 from config.validation import validate_config
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def test_unlink_if_present_handles_existing_and_missing_file(tmp_path):
+    temp_path = tmp_path / 'config.tmp'
+    temp_path.write_text('temporary', encoding='utf-8')
+
+    _unlink_if_present(temp_path)
+    _unlink_if_present(temp_path)
+
+    assert not temp_path.exists()
 
 
 def test_cli_config_validate_default_config_passes():

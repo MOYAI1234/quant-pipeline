@@ -148,6 +148,13 @@ def cmd_config_show(args):
     print(json.dumps(config, ensure_ascii=False, indent=2))
 
 
+def _unlink_if_present(path):
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+
+
 def cmd_config_init(args):
     output_path = _resolve_project_path(args.output)
     if output_path.exists() and not output_path.is_file():
@@ -171,8 +178,8 @@ def cmd_config_init(args):
             )
         temp_path.replace(output_path)
     finally:
-        if temp_path is not None and temp_path.exists():
-            temp_path.unlink()
+        if temp_path is not None:
+            _unlink_if_present(temp_path)
     print(f'配置模板: {output_path}')
 
 
