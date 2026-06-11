@@ -88,11 +88,10 @@ def normalize_akshare_records(records: list[dict[str, Any]]) -> list[dict[str, A
             'high': _number(record.get(AKSHARE_COLUMNS['high']), 'high', index),
             'low': _number(record.get(AKSHARE_COLUMNS['low']), 'low', index),
             'close': _number(record.get(AKSHARE_COLUMNS['close']), 'close', index),
-            'volume': _number(
+            'volume': _integer(
                 record.get(AKSHARE_COLUMNS['volume']),
                 'volume',
                 index,
-                non_negative=True,
             ),
             'amount': _number(
                 record.get(AKSHARE_COLUMNS['amount']),
@@ -141,6 +140,17 @@ def _number(
     if non_negative and number < 0:
         raise ValueError(f'row {index} field {field} must be non-negative')
     return number
+
+
+def _integer(
+    value: Any,
+    field: str,
+    index: int,
+) -> int:
+    number = _number(value, field, index, non_negative=True)
+    if not number.is_integer():
+        raise ValueError(f'row {index} field {field} must be an integer')
+    return int(number)
 
 
 if __name__ == '__main__':

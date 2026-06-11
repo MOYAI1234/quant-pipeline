@@ -79,7 +79,7 @@ provider 必须向 stdout 输出 UTF-8 JSON，且必须是以下二者之一：
 | high | number | 有限正数，且满足 OHLC 合法性 |
 | low | number | 有限正数，且满足 OHLC 合法性 |
 | close | number | 有限正数 |
-| volume | number | 有限非负数 |
+| volume | integer | 非负整数 |
 | amount | number | 有限非负数 |
 
 返回顺序必须按日期严格递增。history probe 会校验空数据、字段缺失、非法数值、日期乱序和请求区间外数据。

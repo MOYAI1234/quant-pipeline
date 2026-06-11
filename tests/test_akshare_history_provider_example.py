@@ -3,6 +3,8 @@ from pathlib import Path
 
 import pytest
 
+from data.data_manager import DataManager
+
 
 PROVIDER_PATH = (
     Path(__file__).resolve().parent.parent
@@ -53,7 +55,7 @@ def test_akshare_provider_normalizes_etf_history_rows():
             'high': 4.2,
             'low': 3.9,
             'close': 4.1,
-            'volume': 1000.0,
+            'volume': 1000,
             'amount': 4100.0,
         },
         {
@@ -62,7 +64,7 @@ def test_akshare_provider_normalizes_etf_history_rows():
             'high': 4.3,
             'low': 4.0,
             'close': 4.2,
-            'volume': 1100.0,
+            'volume': 1100,
             'amount': 4620.5,
         },
     ]
@@ -83,6 +85,54 @@ def test_akshare_provider_rejects_invalid_history_rows():
                 '成交额': 4100,
             },
         ])
+
+
+def test_akshare_provider_rejects_fractional_volume():
+    provider = _load_provider_module()
+
+    with pytest.raises(ValueError, match='field volume must be an integer'):
+        provider.normalize_akshare_records([
+            {
+                '日期': '2026-01-01',
+                '开盘': 4.0,
+                '收盘': 4.1,
+                '最高': 4.2,
+                '最低': 3.9,
+                '成交量': 1000.5,
+                '成交额': 4100,
+            },
+        ])
+
+
+def test_akshare_provider_rows_pass_data_manager_history_contract():
+    provider = _load_provider_module()
+    rows = provider.normalize_akshare_records([
+        {
+            '日期': '2026-01-01',
+            '开盘': 4.0,
+            '收盘': 4.1,
+            '最高': 4.2,
+            '最低': 3.9,
+            '成交量': 1000.0,
+            '成交额': 4100,
+        },
+    ])
+
+    manager = DataManager({
+        'mx_data': {'mode': 'mock'},
+        'mx_xuangu': {'mode': 'mock'},
+        'mx_search': {'mode': 'mock'},
+    })
+    manager.mx_data.get_etf_history = lambda *_args: rows
+
+    history = manager.get_etf_history(
+        '510300',
+        '2026-01-01',
+        '2026-01-01',
+    )
+
+    assert history[0]['volume'] == 1000
+    assert isinstance(history[0]['volume'], int)
 
 
 def test_akshare_provider_compacts_cli_dates():
