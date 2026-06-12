@@ -33,7 +33,7 @@ python cli\commands.py history export-grid --help
 python cli\commands.py history export-rotation --help
 ```
 
-当前基线：`pytest` 应通过 328 个测试。
+当前基线：`pytest` 应通过 336 个测试。
 
 ## 分层测试
 
@@ -65,8 +65,8 @@ python -m pytest tests\test_simulator.py tests\test_e2e_grid.py tests\test_rotat
 
 - `Simulator` 支持买入、卖出、均价、手续费、部分卖出和市值估算。
 - 回测结果能审计成交额、交易频率、手续费对毛盈利的侵蚀，并对扣除最低佣金和滑点后不可行的密集网格给出警告。
-- `GridStrategy` 支持多格买入、同格防重复、卖出和止损后 ledger 重置。
-- `RotationStrategy` 支持首次调仓、卖旧买新、失败 pending 清理和重试。
+- `GridStrategy` 支持多格买入、部分成交股数 ledger、同格防重复、卖出和止损后 ledger 重置。
+- `RotationStrategy` 支持首次调仓、卖旧买新、部分/失败批次不完成、pending 清理和重试。
 - `RiskManager` 覆盖仓位、ETF 质量、固定止损、单笔止损、跟踪止损和组合亏损告警边界。
 
 ### 回测
@@ -82,7 +82,7 @@ python -m pytest tests\test_backtest_runner.py tests\test_backtest_history_adapt
 - grid 和 rotation 都能跑内置历史样例并生成 Markdown 报告。
 - grid 支持历史 bar list/CSV；rotation 支持 JSON snapshot 和 CSV 长表。
 - 回测必须校验历史日期/盘中时间严格递增、OHLC 合法性、价格、成交量和成交额。
-- `BacktestExecutionModel` 统一处理滑点、成交量参与率限制、同一 bar 成交量占用和成交前拒单归因。
+- `BacktestExecutionModel` 统一处理滑点、成交量参与率限制、同一 bar 成交量占用、可选整手部分成交和成交前拒单归因。
 - 导出文件包括权益曲线、组合快照、成交明细、持仓明细和拒单明细。
 - `history export-grid/export-rotation` 能把本地 JSON 或 `DataManager.get_etf_history()` 返回值转换为回测 CSV。
 - `history probe` 能对真实命令 provider 执行不落盘的最小查询，并拒绝无数据、乱序或越界历史。

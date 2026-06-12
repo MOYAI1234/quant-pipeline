@@ -109,17 +109,18 @@ def test_backtest_runner_applies_slippage_to_execution_prices():
     runner = BacktestRunner(_grid_strategy(), {
         'initial_capital': 100000,
         'commission_rate': 0.0003,
-        'slippage_rate': 0.01,
+        'slippage_rate': 0.03,
     })
 
     result = runner.run(sample_grid_history())
 
     buy_trade, sell_trade = runner.executor.trades
-    assert buy_trade['price'] == pytest.approx(3.9 * 1.01)
-    assert sell_trade['price'] == pytest.approx(4.1 * 0.99)
-    assert runner.strategy.trades[0]['price'] == pytest.approx(3.9 * 1.01)
-    assert runner.strategy.trades[1]['price'] == pytest.approx(4.1 * 0.99)
-    assert result['slippage_rate'] == 0.01
+    assert buy_trade['price'] == pytest.approx(3.9 * 1.03)
+    assert sell_trade['price'] == pytest.approx(4.1 * 0.97)
+    assert runner.strategy.trades[0]['price'] == pytest.approx(3.9 * 1.03)
+    assert runner.strategy.trades[0]['signal_price'] == pytest.approx(3.9)
+    assert runner.strategy.trades[1]['price'] == pytest.approx(4.1 * 0.97)
+    assert result['slippage_rate'] == 0.03
     assert result['portfolio']['positions'] == {}
     assert runner.strategy.grid_ledger[3.9]['bought'] is False
 
@@ -147,6 +148,32 @@ def test_backtest_runner_rejects_order_above_volume_participation_limit():
         'signal_reason': '网格买入，价格3.9',
     }]
     assert result['max_volume_participation'] == 0.1
+    assert result['allow_partial_fills'] is False
+    assert runner.strategy.grid_ledger[3.9]['bought'] is False
+
+
+def test_backtest_runner_partially_fills_volume_limited_order_when_enabled():
+    runner = BacktestRunner(_grid_strategy(), {
+        'initial_capital': 100000,
+        'max_volume_participation': 0.1,
+        'allow_partial_fills': True,
+    })
+    buy_bar = dict(sample_grid_history()[1], volume=5000)
+    sell_bar = dict(sample_grid_history()[2], volume=5000)
+
+    result = runner.run([buy_bar, sell_bar])
+
+    assert result['trade_count'] == 2
+    assert result['rejected_order_count'] == 0
+    assert result['allow_partial_fills'] is True
+    assert result['trades'][0]['shares'] == 500
+    assert result['trades'][0]['requested_shares'] == 1000
+    assert result['trades'][0]['partial_fill'] is True
+    assert result['trades'][0]['amount'] == pytest.approx(1950)
+    assert runner.strategy.trades[0]['shares'] == 500
+    assert result['trades'][1]['shares'] == 500
+    assert result['portfolio']['positions'] == {}
+    assert runner.strategy.grid_ledger[3.9]['shares'] == 0
     assert runner.strategy.grid_ledger[3.9]['bought'] is False
 
 
@@ -241,8 +268,58 @@ def test_backtest_execution_model_prepares_slipped_volume_rejection():
 
     assert not decision.accepted
     assert decision.rejection_reason == 'volume_limit'
+    assert decision.signal['signal_price'] == pytest.approx(4.0)
     assert decision.signal['price'] == pytest.approx(4.04)
     assert decision.signal['amount'] == pytest.approx(4040.0)
+
+
+def test_backtest_execution_model_prepares_partial_volume_fill():
+    model = BacktestExecutionModel(
+        slippage_rate=0.01,
+        max_volume_participation=0.1,
+        allow_partial_fills=True,
+    )
+    limits = model.build_volume_limits({'510300': 5000})
+    signal = {
+        'action': 'buy',
+        'symbol': '510300',
+        'price': 4.0,
+        'shares': 1000,
+    }
+
+    decision = model.prepare_order(signal, limits)
+
+    assert decision.accepted
+    assert decision.partial_fill
+    assert decision.signal['shares'] == 500
+    assert decision.signal['requested_shares'] == 1000
+    assert decision.signal['partial_fill'] is True
+    assert decision.signal['price'] == pytest.approx(4.04)
+    assert decision.signal['amount'] == pytest.approx(2020.0)
+
+
+def test_backtest_execution_model_rejects_partial_fill_below_one_lot():
+    model = BacktestExecutionModel(
+        max_volume_participation=0.1,
+        allow_partial_fills=True,
+    )
+    limits = model.build_volume_limits({'510300': 999})
+    signal = {
+        'action': 'buy',
+        'symbol': '510300',
+        'price': 4.0,
+        'shares': 1000,
+    }
+
+    decision = model.prepare_order(signal, limits)
+
+    assert not decision.accepted
+    assert decision.rejection_reason == 'volume_limit'
+
+
+def test_backtest_execution_model_rejects_non_boolean_partial_fill_flag():
+    with pytest.raises(ValueError, match='allow_partial_fills 必须是布尔值'):
+        BacktestExecutionModel(allow_partial_fills='false')
 
 
 def test_backtest_execution_model_consumes_fill_volume():
@@ -572,6 +649,27 @@ def test_rotation_backtest_runner_retries_after_volume_rejection():
     )
     assert result['max_volume_participation'] == 0.001
     assert runner.strategy.pending_rebalance_count == 0
+    assert runner.strategy.last_rebalance is None
+
+
+def test_rotation_backtest_runner_does_not_complete_partial_rebalance():
+    runner = RotationBacktestRunner(_rotation_strategy(), {
+        'initial_capital': 100000,
+        'max_volume_participation': 0.001,
+        'allow_partial_fills': True,
+    })
+
+    result = runner.run(sample_rotation_history())
+
+    assert result['trade_count'] == 3
+    assert result['rejected_order_count'] == 0
+    assert [trade['partial_fill'] for trade in result['trades']] == [
+        True,
+        False,
+        True,
+    ]
+    assert runner.strategy.pending_rebalance_count == 0
+    assert runner.strategy.pending_rebalance_failed is True
     assert runner.strategy.last_rebalance is None
 
 
@@ -1520,6 +1618,8 @@ def test_write_trades_csv_writes_optional_sell_fields(tmp_path):
     with output_file.open(newline='', encoding='utf-8') as file:
         rows = list(csv.DictReader(file))
     assert rows[0]['action'] == 'buy'
+    assert rows[0]['requested_shares'] == ''
+    assert rows[0]['partial_fill'] == ''
     assert rows[0]['entry_commission'] == ''
     assert rows[1]['action'] == 'sell'
     assert rows[1]['entry_commission'] == '1.17'
@@ -1829,6 +1929,8 @@ def test_cli_backtest_exports_trades_csv(tmp_path):
         '2026-01-03',
     ]
     assert rows[0]['symbol'] == '510300'
+    assert rows[0]['requested_shares'] == '1000'
+    assert rows[0]['partial_fill'] == 'False'
     assert float(rows[0]['amount']) > 0
     assert float(rows[1]['net_profit']) > 0
 
@@ -1965,6 +2067,24 @@ def test_cli_backtest_accepts_volume_participation_limit():
     assert '- 成交量参与率上限: 0.10%' in completed.stdout
     assert '- 拒单次数: 0' in completed.stdout
     assert '- 拒单原因: 无' in completed.stdout
+
+
+def test_cli_backtest_accepts_partial_fill_flag():
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'backtest',
+            '--strategy',
+            'grid',
+            '--allow-partial-fills',
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert '- 部分成交: 开启' in completed.stdout
 
 
 def test_cli_backtest_date_range_limits_report_period():

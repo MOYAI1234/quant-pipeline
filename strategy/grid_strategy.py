@@ -18,7 +18,7 @@ class GridStrategy(BaseStrategy):
         self.max_grids = config.get('max_grids', self.grid_count)
         self.buy_grids = []
         self.sell_grids = []
-        self.grid_ledger = {}  # {grid_price: {'bought': bool, 'sold': bool}}
+        self.grid_ledger = {}
         self.calc_grids()
         self._init_ledger()
 
@@ -31,25 +31,44 @@ class GridStrategy(BaseStrategy):
 
     def _init_ledger(self):
         for grid_price in self.buy_grids:
-            self.grid_ledger[grid_price] = {'bought': False, 'sold': False}
+            self.grid_ledger[grid_price] = {
+                'bought': False,
+                'sold': False,
+                'shares': 0,
+            }
 
     def on_trade_confirmed(self, trade: dict):
         """交易确认后更新 grid ledger"""
         action = trade.get('action')
         price = trade.get('price', 0)
+        signal_price = trade.get('signal_price', price)
+        trade_shares = self._trade_shares(trade)
 
         if action == 'buy':
-            # 找到对应的网格价格
             for grid_price in self.buy_grids:
                 upper_bound = grid_price + self.grid_size
-                if grid_price <= price < upper_bound:
-                    self.grid_ledger[grid_price]['bought'] = True
+                if grid_price <= signal_price < upper_bound:
+                    state = self.grid_ledger[grid_price]
+                    state['shares'] = min(
+                        state.get('shares', 0) + trade_shares,
+                        self.shares_per_grid,
+                    )
+                    state['bought'] = state['shares'] >= self.shares_per_grid
+                    state['sold'] = False
                     break
         elif action == 'sell':
-            # 找到对应的网格价格并重置状态（允许再次买入）
+            remaining_shares = trade_shares
             for grid_price in self.buy_grids:
-                if self.grid_ledger[grid_price]['bought'] and not self.grid_ledger[grid_price]['sold']:
-                    self.grid_ledger[grid_price] = {'bought': False, 'sold': False}
+                state = self.grid_ledger[grid_price]
+                grid_shares = state.get('shares', 0)
+                if grid_shares <= 0:
+                    continue
+                sold_shares = min(grid_shares, remaining_shares)
+                state['shares'] = grid_shares - sold_shares
+                state['bought'] = state['shares'] >= self.shares_per_grid
+                state['sold'] = False
+                remaining_shares -= sold_shares
+                if remaining_shares <= 0:
                     break
 
     def generate_signal(self, data: dict, portfolio: dict = None) -> list:
@@ -59,12 +78,33 @@ class GridStrategy(BaseStrategy):
 
         signals = []
         current_shares = self.get_current_shares(portfolio)
-        current_grids = current_shares // self.shares_per_grid
+        ledger_grids = sum(
+            1
+            for state in self.grid_ledger.values()
+            if state.get('shares', 0) > 0
+        )
+        position_grids = (
+            (current_shares + self.shares_per_grid - 1)
+            // self.shares_per_grid
+        )
+        occupied_grids = max(ledger_grids, position_grids)
 
         # 检查买入信号：找到未买入的网格
-        if current_grids < self.max_grids:
+        if occupied_grids <= self.max_grids:
             for buy_price in self.buy_grids:
-                if self.grid_ledger[buy_price]['bought']:
+                state = self.grid_ledger[buy_price]
+                if state['bought']:
+                    continue
+                if (
+                    state.get('shares', 0) <= 0
+                    and occupied_grids >= self.max_grids
+                ):
+                    continue
+                remaining_shares = (
+                    self.shares_per_grid
+                    - state.get('shares', 0)
+                )
+                if remaining_shares <= 0:
                     continue
                 upper_bound = buy_price + self.grid_size
                 if buy_price <= current_price < upper_bound:
@@ -72,25 +112,26 @@ class GridStrategy(BaseStrategy):
                         'action': 'buy',
                         'symbol': self.symbol,
                         'price': buy_price,
-                        'shares': self.shares_per_grid,
-                        'amount': self.shares_per_grid * buy_price,
+                        'shares': remaining_shares,
+                        'amount': remaining_shares * buy_price,
                         'reason': f'网格买入，价格{buy_price}'
                     })
                     break
 
-        # 检查卖出信号：找已买入未卖出的网格
-        if current_shares >= self.shares_per_grid:
+        # 检查卖出信号：完整或部分买入的网格都可以按实际股数退出。
+        if current_shares > 0:
             for sell_price in self.sell_grids:
                 if current_price >= sell_price:
-                    # 找对应的买入网格
                     for buy_price in self.buy_grids:
-                        if self.grid_ledger[buy_price]['bought'] and not self.grid_ledger[buy_price]['sold']:
+                        grid_shares = self.grid_ledger[buy_price].get('shares', 0)
+                        if grid_shares > 0:
+                            sell_shares = min(grid_shares, current_shares)
                             signals.append({
                                 'action': 'sell',
                                 'symbol': self.symbol,
                                 'price': sell_price,
-                                'shares': self.shares_per_grid,
-                                'amount': self.shares_per_grid * sell_price,
+                                'shares': sell_shares,
+                                'amount': sell_shares * sell_price,
                                 'reason': f'网格卖出，价格{sell_price}'
                             })
                             break
@@ -100,6 +141,16 @@ class GridStrategy(BaseStrategy):
 
     def calc_position_size(self, capital: float, price: float) -> int:
         return self.shares_per_grid
+
+    def _trade_shares(self, trade: dict) -> int:
+        shares = trade.get('shares', 0)
+        if shares > 0:
+            return int(shares / 100) * 100
+        price = trade.get('price', 0)
+        amount = trade.get('amount', 0)
+        if price <= 0 or amount <= 0:
+            return 0
+        return int(amount / price / 100) * 100
 
     def snapshot(self) -> dict:
         return {
@@ -129,9 +180,16 @@ class GridStrategy(BaseStrategy):
             )
         restored_ledger = {}
         for grid_price in self.buy_grids:
-            restored_ledger[grid_price] = dict(
-                ledger.get(str(grid_price), {'bought': False, 'sold': False})
+            state = dict(ledger.get(str(grid_price), {}))
+            shares = state.get(
+                'shares',
+                self.shares_per_grid if state.get('bought') else 0,
             )
+            restored_ledger[grid_price] = {
+                'bought': shares >= self.shares_per_grid,
+                'sold': False,
+                'shares': shares,
+            }
         self.grid_ledger = restored_ledger
         self._restore_trades(snapshot.get('trades', []))
 

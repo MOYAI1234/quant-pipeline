@@ -14,6 +14,7 @@ class RotationStrategy(BaseStrategy):
         self.selected_etfs = []
         self.last_rebalance = None
         self.pending_rebalance_count = 0
+        self.pending_rebalance_failed = False
 
     def generate_signal(self, data: dict, portfolio: dict = None) -> list:
         signals = []
@@ -27,18 +28,25 @@ class RotationStrategy(BaseStrategy):
             signals = self.generate_rebalance_signals(data, portfolio)
             if signals:
                 self.pending_rebalance_count = len(signals)
+                self.pending_rebalance_failed = False
         return signals
 
     def on_trade_confirmed(self, trade: dict):
         """交易确认后更新 rebalance 状态"""
         if self.pending_rebalance_count > 0:
+            if trade.get('partial_fill'):
+                self.pending_rebalance_failed = True
             self.pending_rebalance_count -= 1
-            if self.pending_rebalance_count == 0:
+            if (
+                self.pending_rebalance_count == 0
+                and not self.pending_rebalance_failed
+            ):
                 self.last_rebalance = self._resolve_datetime(trade) or datetime.now()
 
     def on_trade_failed(self, trade: dict):
         """交易失败后递减 pending，允许重试"""
         if self.pending_rebalance_count > 0:
+            self.pending_rebalance_failed = True
             self.pending_rebalance_count -= 1
 
     def calculate_momentum(self, data: dict) -> dict:
@@ -195,6 +203,7 @@ class RotationStrategy(BaseStrategy):
                 if self.last_rebalance else None
             ),
             'pending_rebalance_count': self.pending_rebalance_count,
+            'pending_rebalance_failed': self.pending_rebalance_failed,
             'trades': self._serialize_trades(),
         }
 
@@ -206,4 +215,8 @@ class RotationStrategy(BaseStrategy):
             'timestamp': snapshot.get('last_rebalance')
         })
         self.pending_rebalance_count = snapshot.get('pending_rebalance_count', 0)
+        self.pending_rebalance_failed = snapshot.get(
+            'pending_rebalance_failed',
+            False,
+        )
         self._restore_trades(snapshot.get('trades', []))

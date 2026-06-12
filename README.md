@@ -108,6 +108,7 @@ python cli\commands.py backtest --strategy grid
 python cli\commands.py backtest --strategy grid --start-date 2026-01-02 --end-date 2026-01-03
 python cli\commands.py backtest --strategy grid --slippage-rate 0.001
 python cli\commands.py backtest --strategy grid --max-volume-participation 0.05
+python cli\commands.py backtest --strategy grid --max-volume-participation 0.05 --allow-partial-fills
 python cli\commands.py backtest --strategy grid --buy-commission-rate 0.0002 --sell-commission-rate 0.0004 --min-commission 5
 python cli\commands.py backtest --strategy grid --history path\to\history.csv --strict-trading-calendar
 python cli\commands.py backtest --strategy grid --history path\to\history.csv --strict-trading-calendar --holiday 2026-01-02
@@ -219,7 +220,7 @@ python cli\commands.py history export-rotation --config path\to\config.json --et
 
 严格交易日历默认按周一至周五判断；`--holiday YYYY-MM-DD` 可重复指定额外休市日，`--trading-day YYYY-MM-DD` 可显式覆盖周末或休市日。未启用 `--strict-trading-calendar` 时保持原有行为，不额外拒绝历史日期。
 
-`--max-volume-participation` 可选范围为 `(0, 1]`，限制同一根 bar 内单标的全部买入和卖出成交合计最多占该 bar 成交量的比例。超限订单（含卖出订单）当前整笔按不成交处理，不进行部分成交；少于 100 股的非整手信号由模拟执行器拒绝，不归因于成交量上限。未配置时保持原有无限流动性假设。
+`--max-volume-participation` 可选范围为 `(0, 1]`，限制同一根 bar 内单标的全部买入和卖出成交合计最多占该 bar 成交量的比例。默认情况下超限订单（含卖出订单）整笔按不成交处理；显式增加 `--allow-partial-fills` 后，回测会把超限订单裁成剩余成交量允许的 100 股整手数量，并在成交明细中记录原始申请股数和部分成交标记。GridStrategy 会按实际成交股数维护每格 ledger，RotationStrategy 不会把包含部分成交的调仓批次标记为完成。当前不会把未成交余量结转到下一根 bar。少于 100 股的非整手信号仍由模拟执行器拒绝，不归因于成交量上限。未配置参与率限制时保持原有无限流动性假设。
 
 回测结果中的 `rejected_order_count`、`rejection_reasons` 和 `rejected_orders` 会区分成交量超限（`volume_limit`）与模拟执行器拒绝（`executor_rejected`）；拒单明细同时保留策略原始 `signal_reason`，便于判断零成交究竟来自无信号还是有信号但未成交。
 
