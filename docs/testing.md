@@ -33,7 +33,7 @@ python cli\commands.py history export-grid --help
 python cli\commands.py history export-rotation --help
 ```
 
-当前基线：`pytest` 应通过 328 个测试。
+当前基线：`pytest` 应通过 333 个测试。
 
 ## 分层测试
 
@@ -82,7 +82,7 @@ python -m pytest tests\test_backtest_runner.py tests\test_backtest_history_adapt
 - grid 和 rotation 都能跑内置历史样例并生成 Markdown 报告。
 - grid 支持历史 bar list/CSV；rotation 支持 JSON snapshot 和 CSV 长表。
 - 回测必须校验历史日期/盘中时间严格递增、OHLC 合法性、价格、成交量和成交额。
-- `BacktestExecutionModel` 统一处理滑点、成交量参与率限制、同一 bar 成交量占用和成交前拒单归因。
+- `BacktestExecutionModel` 统一处理滑点、成交量参与率限制、同一 bar 成交量占用、可选整手部分成交和成交前拒单归因。
 - 导出文件包括权益曲线、组合快照、成交明细、持仓明细和拒单明细。
 - `history export-grid/export-rotation` 能把本地 JSON 或 `DataManager.get_etf_history()` 返回值转换为回测 CSV。
 - `history probe` 能对真实命令 provider 执行不落盘的最小查询，并拒绝无数据、乱序或越界历史。

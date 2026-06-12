@@ -36,6 +36,8 @@ TRADE_CSV_FIELDS = (
     'symbol',
     'price',
     'shares',
+    'requested_shares',
+    'partial_fill',
     'amount',
     'commission',
     'entry_commission',
@@ -96,6 +98,7 @@ class BacktestRunner:
         self.max_volume_participation = (
             self.execution_model.max_volume_participation
         )
+        self.allow_partial_fills = self.execution_model.allow_partial_fills
         self.executor = None
         self.equity_curve = []
         self.portfolio_curve = []
@@ -150,10 +153,14 @@ class BacktestRunner:
                         execution_signal,
                         volume_limits,
                     )
-                    self._stamp_new_trades(previous_trade_count, quote['timestamp'])
+                    self._stamp_new_trades(
+                        previous_trade_count,
+                        quote['timestamp'],
+                        execution_signal,
+                    )
                     self.strategy.record_trade(execution_signal)
                     if hasattr(self.strategy, 'on_trade_confirmed'):
-                        self.strategy.on_trade_confirmed(signal)
+                        self.strategy.on_trade_confirmed(execution_signal)
                 else:
                     _record_rejection(
                         self.rejected_orders,
@@ -221,6 +228,7 @@ class BacktestRunner:
             'min_commission': self.executor.min_commission,
             'slippage_rate': self.slippage_rate,
             'max_volume_participation': self.max_volume_participation,
+            'allow_partial_fills': self.allow_partial_fills,
             'realized_pnl': final_portfolio['realized_pnl'],
             'portfolio': final_portfolio,
             'equity_curve': list(self.equity_curve),
@@ -267,6 +275,7 @@ class BacktestRunner:
             ),
             _render_viability_warnings(result['viability_warnings']),
             _render_volume_participation(result['max_volume_participation']),
+            _render_partial_fills(result['allow_partial_fills']),
             f"- 已实现盈亏: {result['realized_pnl']:.2f}",
         ]
         return "\n".join(lines)
@@ -317,9 +326,21 @@ class BacktestRunner:
         price = signal.get('price', 0)
         return quote['low'] <= price <= quote['high']
 
-    def _stamp_new_trades(self, previous_trade_count: int, timestamp: str) -> None:
+    def _stamp_new_trades(
+        self,
+        previous_trade_count: int,
+        timestamp: str,
+        execution_signal: dict,
+    ) -> None:
         for trade in self.executor.trades[previous_trade_count:]:
             trade['timestamp'] = timestamp
+            trade['requested_shares'] = execution_signal.get(
+                'requested_shares',
+                trade.get('shares', 0),
+            )
+            trade['partial_fill'] = bool(
+                execution_signal.get('partial_fill', False)
+            )
 
 class RotationBacktestRunner:
 
@@ -340,6 +361,7 @@ class RotationBacktestRunner:
         self.max_volume_participation = (
             self.execution_model.max_volume_participation
         )
+        self.allow_partial_fills = self.execution_model.allow_partial_fills
         self.executor = None
         self.equity_curve = []
         self.portfolio_curve = []
@@ -396,7 +418,11 @@ class RotationBacktestRunner:
                         execution_signal,
                         volume_limits,
                     )
-                    self._stamp_new_trades(previous_trade_count, market_data['_date'])
+                    self._stamp_new_trades(
+                        previous_trade_count,
+                        market_data['_date'],
+                        execution_signal,
+                    )
                     self.strategy.record_trade(execution_signal)
                     if hasattr(self.strategy, 'on_trade_confirmed'):
                         self.strategy.on_trade_confirmed(execution_signal)
@@ -466,6 +492,7 @@ class RotationBacktestRunner:
             'min_commission': self.executor.min_commission,
             'slippage_rate': self.slippage_rate,
             'max_volume_participation': self.max_volume_participation,
+            'allow_partial_fills': self.allow_partial_fills,
             'realized_pnl': final_portfolio['realized_pnl'],
             'portfolio': final_portfolio,
             'equity_curve': list(self.equity_curve),
@@ -503,6 +530,7 @@ class RotationBacktestRunner:
             f"- 单笔最低佣金: {result['min_commission']:.2f}",
             f"- 滑点: {result['slippage_rate']:.2%}",
             _render_volume_participation(result['max_volume_participation']),
+            _render_partial_fills(result['allow_partial_fills']),
             f"- 已实现盈亏: {result['realized_pnl']:.2f}",
         ]
         return "\n".join(lines)
@@ -573,9 +601,21 @@ class RotationBacktestRunner:
             return volume
         return bar.get('volume', 0)
 
-    def _stamp_new_trades(self, previous_trade_count: int, timestamp: str) -> None:
+    def _stamp_new_trades(
+        self,
+        previous_trade_count: int,
+        timestamp: str,
+        execution_signal: dict,
+    ) -> None:
         for trade in self.executor.trades[previous_trade_count:]:
             trade['timestamp'] = timestamp
+            trade['requested_shares'] = execution_signal.get(
+                'requested_shares',
+                trade.get('shares', 0),
+            )
+            trade['partial_fill'] = bool(
+                execution_signal.get('partial_fill', False)
+            )
 
 def load_history_csv(path: str) -> list:
     csv_path = Path(path)
@@ -1251,6 +1291,10 @@ def _render_volume_participation(value: float | None) -> str:
     if value is None:
         return '- 成交量参与率上限: 未启用'
     return f'- 成交量参与率上限: {value:.2%}'
+
+
+def _render_partial_fills(value: bool) -> str:
+    return f"- 部分成交: {'开启' if value else '关闭'}"
 
 
 def _validate_grid_quote(quote: dict, index: int) -> None:

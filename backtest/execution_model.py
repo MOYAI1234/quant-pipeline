@@ -7,6 +7,7 @@ class ExecutionDecision:
     accepted: bool
     signal: dict
     rejection_reason: str | None = None
+    partial_fill: bool = False
 
 
 class BacktestExecutionModel:
@@ -15,10 +16,14 @@ class BacktestExecutionModel:
         self,
         slippage_rate: float = 0.0,
         max_volume_participation: float | None = None,
+        allow_partial_fills: bool = False,
     ):
         self.slippage_rate = _validate_slippage_rate(slippage_rate)
         self.max_volume_participation = _validate_volume_participation(
             max_volume_participation
+        )
+        self.allow_partial_fills = _validate_allow_partial_fills(
+            allow_partial_fills
         )
 
     @classmethod
@@ -28,6 +33,7 @@ class BacktestExecutionModel:
             max_volume_participation=account_config.get(
                 'max_volume_participation'
             ),
+            allow_partial_fills=account_config.get('allow_partial_fills', False),
         )
 
     def build_volume_limits(self, volumes: dict) -> dict | None:
@@ -40,6 +46,17 @@ class BacktestExecutionModel:
     ) -> ExecutionDecision:
         execution_signal = _apply_slippage(signal, self.slippage_rate)
         if not _signal_within_volume_limit(execution_signal, volume_limits):
+            if self.allow_partial_fills:
+                partial_signal = _fit_signal_to_volume_limit(
+                    execution_signal,
+                    volume_limits,
+                )
+                if partial_signal is not None:
+                    return ExecutionDecision(
+                        accepted=True,
+                        signal=partial_signal,
+                        partial_fill=True,
+                    )
             return ExecutionDecision(
                 accepted=False,
                 signal=execution_signal,
@@ -98,6 +115,12 @@ def _validate_volume_participation(value: float | None) -> float | None:
     return float(value)
 
 
+def _validate_allow_partial_fills(value: bool) -> bool:
+    if not isinstance(value, bool):
+        raise ValueError('allow_partial_fills 必须是布尔值')
+    return value
+
+
 def _build_volume_limits(
     volumes: dict,
     max_volume_participation: float | None,
@@ -130,6 +153,32 @@ def _consume_signal_volume(signal: dict, volume_limits: dict | None) -> None:
         volume_limits.get(symbol, 0) - _signal_shares(signal),
         0,
     )
+
+
+def _fit_signal_to_volume_limit(
+    signal: dict,
+    volume_limits: dict | None,
+) -> dict | None:
+    if volume_limits is None:
+        return signal
+    price = signal.get('price', 0)
+    if price <= 0:
+        return None
+    limit = volume_limits.get(signal.get('symbol'), 0)
+    fillable_shares = int(limit / 100) * 100
+    if fillable_shares <= 0:
+        return None
+
+    requested_shares = _signal_shares(signal)
+    if requested_shares <= 0:
+        return None
+    shares = min(requested_shares, fillable_shares)
+    partial_signal = dict(signal)
+    partial_signal['shares'] = shares
+    partial_signal['amount'] = shares * price
+    partial_signal['partial_fill'] = shares < requested_shares
+    partial_signal['requested_shares'] = requested_shares
+    return partial_signal
 
 
 def _signal_shares(signal: dict) -> int:

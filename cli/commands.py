@@ -307,6 +307,7 @@ def cmd_backtest(args):
         'min_commission': min_commission,
         'slippage_rate': slippage_rate,
         'max_volume_participation': max_volume_participation,
+        'allow_partial_fills': args.allow_partial_fills,
     }
 
     if args.strategy == 'grid':
@@ -1097,6 +1098,11 @@ def main():
         '--max-volume-participation',
         type=float,
         help='单标的单根 bar 最大成交量参与率，范围 (0, 1]',
+    )
+    backtest_parser.add_argument(
+        '--allow-partial-fills',
+        action='store_true',
+        help='启用成交量上限下的整手部分成交；默认超限整单拒绝',
     )
     backtest_parser.add_argument(
         '--strict-trading-calendar',
