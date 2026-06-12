@@ -17,7 +17,7 @@ ETF 量化助手 Pipeline，目标是把数据适配、策略生成、风控检�
 - 回测执行：两类 runner 均通过 `BacktestExecutionModel` 统一处理滑点、成交量参与率限制和拒单归因，再复用 `Simulator` 完成简化成交。
 - 回测输出：两类 runner 均输出收益、最大回撤、最大回撤区间、交易次数、拒单次数与原因、胜率、总手续费及其占初始资金占比，并支持权益曲线/成交明细/持仓明细/拒单明细 CSV 导出。
 - 回测配置：CLI 已支持可配置滑点、可选成交量参与率限制和可选严格交易日历。
-- 回测限制：当前还不是完整回测系统，不含交易所官方日历、部分成交和复杂组合；真实历史数据源目前只提供外部命令 provider 接入位，仓库不内置 API key 或真实服务凭据。
+- 回测限制：当前还不是完整回测系统，不含交易所官方日历、未成交余量结转和复杂组合；已支持成交量上限下的可选整手部分成交。真实历史数据源目前只提供外部命令 provider 接入位，仓库不内置 API key 或真实服务凭据。
 - `persistence/JsonStateStore` 已支持保存和恢复 `Simulator`、`GridStrategy`、`RotationStrategy`、`OrderManager` 的 JSON 快照和运行 metadata，并提供旧版无顶层 `version` 状态到 v1 的最小迁移入口；`QuantPipeline` 默认会在启动时恢复、停止时保存到 `data/state.json`，但完整多版本迁移和 SQLite 存储仍未实现。
 - QMT/实盘执行、API、Web、完整回测引擎仍未实现。
 
@@ -296,7 +296,7 @@ python -m compileall -q .
 1. 补强测试和主循环可测性。
 2. 明确 adapter 的 mock/real 模式和数据契约。
 3. 扩展历史行情驱动的回测引擎。
-4. 基于 provider 选型矩阵，优先做 AKShare 命令式历史 provider POC，再评估 a-stock-data / TuShare 等备选。
+4. 基于 provider 选型矩阵，继续设计多源重试、缓存、降级和监控；评估 TuShare 等具备明确调用边界的第二 provider。
 5. 持久化账户、成交和策略状态。
 6. 完善监控报告和告警闭环。
 7. 在模拟和回测稳定后，再预研 QMT/实盘执行。

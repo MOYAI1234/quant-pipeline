@@ -280,6 +280,6 @@ PRD 将“可回测策略系统”列为阶段二交付物，但当前只有实�
 
 1. 显式运行 AKShare guarded live e2e，持续验证 `history probe` 真实网络链路。
 2. 用实际 provider 配置生成一份真实回测输入样例；只保留本地验收结果，不提交真实行情或凭据。
-3. 继续评估 a-stock-data / TuShare 是否需要补充 provider POC，并设计多源降级。
+3. a-stock-data 已确认是内嵌代码的 Skill 而非稳定 provider 包，不直接接入；下一步设计多源重试、缓存、降级和监控，并评估 TuShare 等第二 provider。
 
 这组任务风险小、收益高，也最适合作为后续真实数据接入和 QMT 预研前的地基。
