@@ -109,17 +109,18 @@ def test_backtest_runner_applies_slippage_to_execution_prices():
     runner = BacktestRunner(_grid_strategy(), {
         'initial_capital': 100000,
         'commission_rate': 0.0003,
-        'slippage_rate': 0.01,
+        'slippage_rate': 0.03,
     })
 
     result = runner.run(sample_grid_history())
 
     buy_trade, sell_trade = runner.executor.trades
-    assert buy_trade['price'] == pytest.approx(3.9 * 1.01)
-    assert sell_trade['price'] == pytest.approx(4.1 * 0.99)
-    assert runner.strategy.trades[0]['price'] == pytest.approx(3.9 * 1.01)
-    assert runner.strategy.trades[1]['price'] == pytest.approx(4.1 * 0.99)
-    assert result['slippage_rate'] == 0.01
+    assert buy_trade['price'] == pytest.approx(3.9 * 1.03)
+    assert sell_trade['price'] == pytest.approx(4.1 * 0.97)
+    assert runner.strategy.trades[0]['price'] == pytest.approx(3.9 * 1.03)
+    assert runner.strategy.trades[0]['signal_price'] == pytest.approx(3.9)
+    assert runner.strategy.trades[1]['price'] == pytest.approx(4.1 * 0.97)
+    assert result['slippage_rate'] == 0.03
     assert result['portfolio']['positions'] == {}
     assert runner.strategy.grid_ledger[3.9]['bought'] is False
 
@@ -267,6 +268,7 @@ def test_backtest_execution_model_prepares_slipped_volume_rejection():
 
     assert not decision.accepted
     assert decision.rejection_reason == 'volume_limit'
+    assert decision.signal['signal_price'] == pytest.approx(4.0)
     assert decision.signal['price'] == pytest.approx(4.04)
     assert decision.signal['amount'] == pytest.approx(4040.0)
 

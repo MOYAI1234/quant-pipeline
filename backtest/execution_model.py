@@ -83,6 +83,7 @@ def _apply_slippage(signal: dict, slippage_rate: float) -> dict:
     else:
         execution_price = price
 
+    execution_signal['signal_price'] = price
     execution_signal['price'] = execution_price
     if execution_signal.get('shares', 0) > 0:
         execution_signal['amount'] = execution_signal['shares'] * execution_price
