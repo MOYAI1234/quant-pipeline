@@ -28,6 +28,7 @@ ETF 量化助手 Pipeline，目标是把数据适配、策略生成、风控检�
 - [PRD v3 差距审计与路线图](docs/prd-gap-audit-v3.md)
 - [数据源 provider 选型矩阵](docs/data-source-provider-evaluation.md)
 - [历史行情命令 provider 契约](docs/history-provider-contract.md)
+- [真实历史数据 guarded e2e 验收](docs/live-data-validation.md)
 
 ## 目录结构
 
@@ -217,6 +218,8 @@ python cli\commands.py history export-rotation --config path\to\config.json --et
 `history probe` 会执行一次不落盘的最小查询，校验 provider 命令、JSON、历史字段、日期顺序和请求区间，并输出返回行数及实际首尾日期。真实 API key、token 和私有 provider 脚本应保留在本地配置或环境变量中，不要提交到仓库。
 
 仓库提供可选 AKShare 示例脚本 `examples/providers/akshare_history_provider.py`。它不会把 AKShare 加入项目依赖；需要本地自行 `pip install akshare` 后，再通过 `history_command` 调用。完整 provider 契约见 [docs/history-provider-contract.md](docs/history-provider-contract.md)。
+
+如需验证真实 AKShare 网络链路，可按 [docs/live-data-validation.md](docs/live-data-validation.md) 显式设置 `RUN_AKSHARE_LIVE=1` 运行 guarded e2e。默认测试不会访问外部行情服务。
 
 严格交易日历默认按周一至周五判断；`--holiday YYYY-MM-DD` 可重复指定额外休市日，`--trading-day YYYY-MM-DD` 可显式覆盖周末或休市日。未启用 `--strict-trading-calendar` 时保持原有行为，不额外拒绝历史日期。
 

@@ -84,6 +84,6 @@ ETF 投资助手的默认方向应是低频、可解释、成本可承受的组�
 
 ## 后续 PR 建议
 
-1. 使用 examples/providers/akshare_history_provider.py 配置本地 AKShare POC，并通过 history probe 验证真实返回。
-2. 继续完善 docs/history-provider-contract.md，必要时加入 provider 错误样例和常见排障。
-3. 使用本地真实 provider 配置执行 guarded e2e，只提交文档和测试，不提交凭据。
+1. 使用 `RUN_AKSHARE_LIVE=1` 显式运行 guarded e2e，通过 `history probe` 验证真实返回。
+2. 根据 live test 的可用性记录评估重试、缓存和 provider 监控。
+3. 继续验证 a-stock-data 输出 schema，作为 AKShare 上游不可用时的备选 provider。
