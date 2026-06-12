@@ -24,7 +24,7 @@ def _load_provider_module():
     return module
 
 
-def test_akshare_provider_normalizes_etf_history_rows():
+def test_akshare_provider_normalizes_etf_history_rows_and_volume_lots():
     provider = _load_provider_module()
 
     rows = provider.normalize_akshare_records([
@@ -55,7 +55,7 @@ def test_akshare_provider_normalizes_etf_history_rows():
             'high': 4.2,
             'low': 3.9,
             'close': 4.1,
-            'volume': 1000,
+            'volume': 100000,
             'amount': 4100.0,
         },
         {
@@ -64,7 +64,7 @@ def test_akshare_provider_normalizes_etf_history_rows():
             'high': 4.3,
             'low': 4.0,
             'close': 4.2,
-            'volume': 1100,
+            'volume': 110000,
             'amount': 4620.5,
         },
     ]
@@ -131,7 +131,7 @@ def test_akshare_provider_rows_pass_data_manager_history_contract():
         '2026-01-01',
     )
 
-    assert history[0]['volume'] == 1000
+    assert history[0]['volume'] == 100000
     assert isinstance(history[0]['volume'], int)
 
 

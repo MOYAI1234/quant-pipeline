@@ -79,7 +79,7 @@ provider 必须向 stdout 输出 UTF-8 JSON，且必须是以下二者之一：
 | high | number | 有限正数，且满足 OHLC 合法性 |
 | low | number | 有限正数，且满足 OHLC 合法性 |
 | close | number | 有限正数 |
-| volume | integer | 非负整数 |
+| volume | integer | 非负整数，单位为股 |
 | amount | number | 有限非负数 |
 
 返回顺序必须按日期严格递增。history probe 会校验空数据、字段缺失、非法数值、日期乱序和请求区间外数据。
@@ -106,4 +106,4 @@ python examples\providers\akshare_history_provider.py --symbol 510300 --start-da
 pip install akshare
 ~~~
 
-脚本使用 AKShare 的 fund_etf_hist_em 日级 ETF 历史行情接口，将 AKShare 的中文字段转换为本项目历史行情契约字段。它适合作为本地 POC 和 history probe 验收入口，不应绕过 DataManager 的契约校验。
+脚本使用 AKShare 的 fund_etf_hist_em 日级 ETF 历史行情接口，将 AKShare 的中文字段转换为本项目历史行情契约字段。AKShare / Eastmoney 的成交量字段按“手”返回，脚本会先转换为“股”再输出 volume，避免回测成交量参与率限制低估真实可成交量。它适合作为本地 POC 和 history probe 验收入口，不应绕过 DataManager 的契约校验。

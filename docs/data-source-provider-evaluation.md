@@ -50,6 +50,7 @@ ETF 投资助手的默认方向应是低频、可解释、成本可承受的组�
 
 - 支持 ETF 日级历史行情。
 - 输出字段至少包含 date/open/high/low/close/volume/amount。
+- 明确字段单位，尤其是把 AKShare / Eastmoney 按“手”返回的成交量转换为按“股”输出。
 - 能通过 python cli\commands.py history probe --config ...。
 - 缺字段、无数据、乱序日期、越界日期会被现有 DataManager / probe 拒绝。
 - 不提交任何 token、cookie 或私有 provider 路径。

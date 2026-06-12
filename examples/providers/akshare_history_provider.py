@@ -24,6 +24,7 @@ AKSHARE_COLUMNS = {
     'volume': '成交量',
     'amount': '成交额',
 }
+AKSHARE_LOT_SIZE = 100
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -88,9 +89,8 @@ def normalize_akshare_records(records: list[dict[str, Any]]) -> list[dict[str, A
             'high': _number(record.get(AKSHARE_COLUMNS['high']), 'high', index),
             'low': _number(record.get(AKSHARE_COLUMNS['low']), 'low', index),
             'close': _number(record.get(AKSHARE_COLUMNS['close']), 'close', index),
-            'volume': _integer(
+            'volume': _akshare_volume_to_shares(
                 record.get(AKSHARE_COLUMNS['volume']),
-                'volume',
                 index,
             ),
             'amount': _number(
@@ -151,6 +151,11 @@ def _integer(
     if not number.is_integer():
         raise ValueError(f'row {index} field {field} must be an integer')
     return int(number)
+
+
+def _akshare_volume_to_shares(value: Any, index: int) -> int:
+    lots = _integer(value, 'volume', index)
+    return lots * AKSHARE_LOT_SIZE
 
 
 if __name__ == '__main__':

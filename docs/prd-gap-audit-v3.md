@@ -61,7 +61,7 @@ python cli\commands.py history probe --help
 | 监控告警 | 部分完成 | 状态指标、报告和结构化告警事件已存在，报告可展示最近告警摘要，并支持本地 JSONL 输出；外部通知通道尚未实现 |
 | CLI | 基础可用 | `start/status/report/health/diagnose/alerts/config show/config init/config validate/backtest/history probe/history export-grid/history export-rotation` 已有；配置初始化、查看、校验和运行诊断链路已具备 |
 | API/Web | 未完成 | PRD 中规划了 API 和 Web 界面，当前仓库没有对应模块 |
-| 测试体系 | 不足 | 现有 328 个测试覆盖 simulator、买卖双边费率和最低佣金、轮动按卖出净所得调仓、grid e2e、rotation、risk manager 边界、backtest runner、回测成交模型、回测历史转换、真实历史 provider 探测、AKShare 示例 provider 字段和整数成交量转换及 DataManager 契约集成、回测日期区间、历史日期/盘中时间顺序、OHLC 合法性、成交量参与率、组合快照一致性、拒单审计和可选交易日历校验、回测最大回撤区间、已平仓手续费侵蚀统计、整手网格生产可行性审计、权益曲线/组合快照/成交明细 CSV 导出、回测滑点、CLI smoke、配置模板生成、状态持久化、报告健康状态、启动前诊断、告警事件、配置校验、DataManager 缓存、数据契约和外部历史 provider 配置等；adapter、report 仍有缺口 |
+| 测试体系 | 不足 | 现有 328 个测试覆盖 simulator、买卖双边费率和最低佣金、轮动按卖出净所得调仓、grid e2e、rotation、risk manager 边界、backtest runner、回测成交模型、回测历史转换、真实历史 provider 探测、AKShare 示例 provider 字段、成交量手转股和整数成交量转换及 DataManager 契约集成、回测日期区间、历史日期/盘中时间顺序、OHLC 合法性、成交量参与率、组合快照一致性、拒单审计和可选交易日历校验、回测最大回撤区间、已平仓手续费侵蚀统计、整手网格生产可行性审计、权益曲线/组合快照/成交明细 CSV 导出、回测滑点、CLI smoke、配置模板生成、状态持久化、报告健康状态、启动前诊断、告警事件、配置校验、DataManager 缓存、数据契约和外部历史 provider 配置等；adapter、report 仍有缺口 |
 | 文档入口 | 基础可用 | `README.md` 已补充基础运行、测试和阶段边界；`docs/testing.md` 已说明测试分层和验收口径；`docs/architecture.md` 已说明模块职责、运行链路和当前 mock/simulator 边界 |
 
 回测能力细节：

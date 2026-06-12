@@ -86,7 +86,7 @@ python -m pytest tests\test_backtest_runner.py tests\test_backtest_history_adapt
 - 导出文件包括权益曲线、组合快照、成交明细、持仓明细和拒单明细。
 - `history export-grid/export-rotation` 能把本地 JSON 或 `DataManager.get_etf_history()` 返回值转换为回测 CSV。
 - `history probe` 能对真实命令 provider 执行不落盘的最小查询，并拒绝无数据、乱序或越界历史。
-- `examples/providers/akshare_history_provider.py` 作为可选 provider 示例，必须能把 AKShare 中文字段转换为 `date/open/high/low/close/volume/amount` 契约字段；测试只验证转换逻辑，不访问真实网络。
+- `examples/providers/akshare_history_provider.py` 作为可选 provider 示例，必须能把 AKShare 中文字段转换为 `date/open/high/low/close/volume/amount` 契约字段，并把 AKShare / Eastmoney 按“手”返回的成交量转换为按“股”输出；测试只验证转换逻辑，不访问真实网络。
 
 ### 状态持久化与主循环
 
