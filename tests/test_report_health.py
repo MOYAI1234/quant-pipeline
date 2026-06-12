@@ -35,10 +35,12 @@ def test_daily_report_includes_data_health_section():
         {'capital': 100000, 'position_count': 0, 'total_value': 100000},
         {},
         _health_statuses(),
+        cache_policy={'history_ttl_seconds': 3600},
     )
 
     assert '## 数据源状态' in report
     assert '- 总体: FAIL (mixed/real)' in report
+    assert '- 缓存: history_ttl_seconds=3600' in report
     assert '- mx_data: 可用, mode=mock' in report
     assert '- mx_search: 不可用, mode=real' in report
 
@@ -139,6 +141,15 @@ def test_generate_report_includes_monitor_alert_history():
     assert '- [warning] risk.position: 持仓告警: 5格' in report
 
 
+def test_generate_report_includes_cache_policy():
+    system = QuantPipeline()
+
+    report = system.generate_report('daily')
+
+    assert '## 数据源状态' in report
+    assert '- 缓存: history_ttl_seconds=3600' in report
+
+
 def test_cli_daily_report_includes_default_mock_data_health():
     completed = subprocess.run(
         [
@@ -157,4 +168,5 @@ def test_cli_daily_report_includes_default_mock_data_health():
 
     assert '## 数据源状态' in completed.stdout
     assert '- 总体: OK (mock)' in completed.stdout
+    assert '- 缓存: history_ttl_seconds=3600' in completed.stdout
     assert '- mx_data: 可用, mode=mock' in completed.stdout
