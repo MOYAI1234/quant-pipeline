@@ -241,7 +241,7 @@ python cli\commands.py history export-rotation --config path\to\config.json --et
 }
 ```
 
-同一 provider 的进程失败、非零退出或超时会按 `history_retry_attempts` 重试，然后再切换到下一个 provider。非法 JSON 或错误输出结构不会重复请求同一来源，但仍会尝试备源。`health --json` 会保留最近成功来源、总尝试次数和结构化失败链，便于发现“备源成功但主源已退化”的情况。历史结果缓存仍由 `DataManager` 负责。
+同一 provider 的进程启动失败、非零退出或超时会按 `history_retry_attempts` 重试，然后再切换到下一个 provider。非法 UTF-8、非法 JSON 或错误输出结构不会重复请求同一来源，但仍会尝试备源。重试次数范围为 1-10，等待时间范围为 0-60 秒；等待使用当前同步 pipeline 的阻塞式 sleep。`health --json` 会保留最近成功来源、总尝试次数和结构化失败链，便于发现“备源成功但主源已退化”的情况。历史结果缓存仍由 `DataManager` 负责。
 
 `history probe` 会执行一次不落盘的最小查询，校验 provider 命令、JSON、历史字段、日期顺序和请求区间，并输出返回行数及实际首尾日期。真实 API key、token 和私有 provider 脚本应保留在本地配置或环境变量中，不要提交到仓库。
 

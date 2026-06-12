@@ -309,6 +309,75 @@ def test_real_history_provider_does_not_retry_invalid_payload_before_fallback(
     assert adapter.health_check()['last_history_attempts'] == 2
 
 
+def test_real_history_provider_falls_back_after_non_utf8_output(monkeypatch):
+    responses = [
+        UnicodeDecodeError('utf-8', b'\xff', 0, 1, 'invalid start byte'),
+        CompletedProcess(['backup'], 0, '[]', ''),
+    ]
+
+    def fake_run(*_args, **_kwargs):
+        response = responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    monkeypatch.setattr(mx_data_adapter.subprocess, 'run', fake_run)
+    adapter = MXDataAdapter({
+        'mode': 'real',
+        'history_providers': [
+            {'name': 'primary', 'command': [sys.executable, 'primary.py']},
+            {'name': 'backup', 'command': [sys.executable, 'backup.py']},
+        ],
+        'history_retry_attempts': 3,
+    })
+
+    adapter.connect()
+    assert adapter.get_etf_history(
+        '510300',
+        '2026-01-01',
+        '2026-01-02',
+    ) == []
+    status = adapter.health_check()
+    assert status['last_history_provider'] == 'backup'
+    assert status['last_history_attempts'] == 2
+    assert status['last_history_failures'][0]['error_code'] == (
+        'INVALID_PROVIDER_RESPONSE'
+    )
+
+
+def test_real_history_providers_fall_back_when_primary_executable_is_missing(
+    tmp_path,
+):
+    backup = tmp_path / 'backup.py'
+    backup.write_text('print("[]")', encoding='utf-8')
+    adapter = MXDataAdapter({
+        'mode': 'real',
+        'history_providers': [
+            {
+                'name': 'missing',
+                'command': ['definitely-missing-quant-provider'],
+            },
+            {
+                'name': 'backup',
+                'command': [sys.executable, str(backup)],
+            },
+        ],
+        'history_retry_attempts': 2,
+    })
+
+    adapter.connect()
+    assert adapter.health_check()['connected'] is True
+    assert adapter.get_etf_history(
+        '510300',
+        '2026-01-01',
+        '2026-01-02',
+    ) == []
+    status = adapter.health_check()
+    assert status['last_history_provider'] == 'backup'
+    assert status['last_history_attempts'] == 3
+    assert len(status['last_history_failures']) == 2
+
+
 def test_real_history_providers_report_aggregated_failures(monkeypatch):
     monkeypatch.setattr(
         mx_data_adapter.subprocess,
@@ -373,7 +442,9 @@ def test_real_history_provider_rejects_invalid_retry_configuration():
     invalid_configs = [
         {'history_retry_attempts': 0},
         {'history_retry_attempts': True},
+        {'history_retry_attempts': 11},
         {'history_retry_delay_seconds': -1},
+        {'history_retry_delay_seconds': 61},
         {'history_retry_delay_seconds': float('nan')},
     ]
 

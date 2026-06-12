@@ -72,7 +72,7 @@
 }
 ~~~
 
-`history_retry_attempts` 是每个 provider 的总尝试次数，必须为正整数；默认 1。`history_retry_delay_seconds` 是可用性错误重试前的等待秒数，必须为非负数；默认 0。
+`history_retry_attempts` 是每个 provider 的总尝试次数，范围为 1-10；默认 1。`history_retry_delay_seconds` 是可用性错误重试前的等待秒数，范围为 0-60；默认 0。当前 pipeline 使用同步阻塞式等待，未来异步执行层需要替换该等待实现。
 
 ## stdout 契约
 
@@ -134,7 +134,7 @@ provider 必须向 stdout 输出 UTF-8 JSON，且必须是以下二者之一：
 - 失败：退出码非 0，stderr 写清楚原因；stdout 不应混入日志。
 - 超时：由 data.mx_data.timeout 控制，超时会被视为 provider 不可用。
 
-进程启动失败、非零退出和超时属于可用性错误，会在当前 provider 内重试，再按配置顺序切换备源。非法 JSON 或错误 JSON shape 属于确定性响应错误，不重试同一 provider，但会继续尝试下一个 provider。
+进程启动失败、非零退出和超时属于可用性错误，会在当前 provider 内重试，再按配置顺序切换备源。多 provider 模式不会因为某个 executable 在启动前不可解析而阻断整个链路。非法 UTF-8、非法 JSON 或错误 JSON shape 属于确定性响应错误，不重试同一 provider，但会继续尝试下一个 provider。
 
 所有 provider 都失败时，异常会包含 provider 名称、尝试序号和失败原因。`MXDataAdapter.health_check()` 还会输出：
 

@@ -12,6 +12,8 @@ from .base_adapter import BaseAdapter
 
 
 class MXDataAdapter(BaseAdapter):
+    MAX_HISTORY_RETRY_ATTEMPTS = 10
+    MAX_HISTORY_RETRY_DELAY_SECONDS = 60
     ALLOWED_HISTORY_PLACEHOLDERS = frozenset({
         'symbol',
         'start_date',
@@ -193,6 +195,12 @@ class MXDataAdapter(BaseAdapter):
                 encoding='utf-8',
                 timeout=self.config.get('timeout', 10),
             )
+        except UnicodeDecodeError as exc:
+            raise DataFetchError(
+                f"{provider_label} output is not valid UTF-8",
+                error_code='INVALID_PROVIDER_RESPONSE',
+                source='MXDataAdapter',
+            ) from exc
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise ServiceUnavailableError(
                 f"{provider_label} failed: {exc}",
@@ -262,16 +270,24 @@ class MXDataAdapter(BaseAdapter):
             not isinstance(retry_attempts, int)
             or isinstance(retry_attempts, bool)
             or retry_attempts <= 0
+            or retry_attempts > self.MAX_HISTORY_RETRY_ATTEMPTS
         ):
-            return 'history_retry_attempts must be a positive integer'
+            return (
+                'history_retry_attempts must be an integer between 1 and '
+                f'{self.MAX_HISTORY_RETRY_ATTEMPTS}'
+            )
         retry_delay = self.config.get('history_retry_delay_seconds', 0)
         if (
             isinstance(retry_delay, bool)
             or not isinstance(retry_delay, Real)
             or not math.isfinite(float(retry_delay))
             or retry_delay < 0
+            or retry_delay > self.MAX_HISTORY_RETRY_DELAY_SECONDS
         ):
-            return 'history_retry_delay_seconds must be a finite non-negative number'
+            return (
+                'history_retry_delay_seconds must be a finite number between '
+                f'0 and {self.MAX_HISTORY_RETRY_DELAY_SECONDS}'
+            )
 
         provider_configs = self._history_provider_configs()
         if not provider_configs:
@@ -288,14 +304,22 @@ class MXDataAdapter(BaseAdapter):
                 return f'history provider name is duplicated: {name}'
             names.add(name)
 
-            error = self._command_error(provider.get('command'))
+            error = self._command_error(
+                provider.get('command'),
+                validate_executable=not providers,
+            )
             if error:
                 if providers:
                     return f'history_providers[{index}].command {error}'
                 return f'history_command {error}'
         return ''
 
-    def _command_error(self, command) -> str:
+    def _command_error(
+        self,
+        command,
+        *,
+        validate_executable: bool,
+    ) -> str:
         if (
             not isinstance(command, list)
             or not command
@@ -326,6 +350,9 @@ class MXDataAdapter(BaseAdapter):
             )
         except (KeyError, ValueError) as exc:
             return f'template invalid: {exc}'
+
+        if not validate_executable:
+            return ''
 
         executable = sample_command[0]
         if self._is_path_like_command(executable):

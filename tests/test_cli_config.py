@@ -399,6 +399,24 @@ def test_validate_config_rejects_invalid_history_provider_settings():
     )
 
 
+def test_validate_config_rejects_excessive_history_retry_settings():
+    config = deepcopy(SYSTEM_CONFIG)
+    config['data']['mx_data']['history_retry_attempts'] = 11
+    config['data']['mx_data']['history_retry_delay_seconds'] = 61
+
+    result = validate_config(config)
+
+    assert result['valid'] is False
+    assert (
+        'data.mx_data.history_retry_attempts 不能大于 10'
+        in result['errors']
+    )
+    assert (
+        'data.mx_data.history_retry_delay_seconds 不能大于 60'
+        in result['errors']
+    )
+
+
 def test_validate_config_rejects_invalid_adapter_mode():
     config = deepcopy(SYSTEM_CONFIG)
     config['data']['mx_data']['mode'] = 'paper'

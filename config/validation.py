@@ -1,6 +1,10 @@
 import math
 
 
+MAX_HISTORY_RETRY_ATTEMPTS = 10
+MAX_HISTORY_RETRY_DELAY_SECONDS = 60
+
+
 def validate_config(config: dict) -> dict:
     errors = []
     warnings = []
@@ -246,12 +250,14 @@ def _validate_adapter_config(
             'history_retry_attempts',
             'data.mx_data.history_retry_attempts',
             errors,
+            maximum=MAX_HISTORY_RETRY_ATTEMPTS,
         )
         _validate_optional_non_negative_number(
             adapter_config,
             'history_retry_delay_seconds',
             'data.mx_data.history_retry_delay_seconds',
             errors,
+            maximum=MAX_HISTORY_RETRY_DELAY_SECONDS,
         )
 
     _validate_optional_positive_number(
@@ -317,9 +323,18 @@ def _validate_optional_non_negative_number(
     key: str,
     name: str,
     errors: list,
+    maximum=None,
 ) -> None:
     if key in config:
-        _validate_non_negative_number(config.get(key), name, errors)
+        value = config.get(key)
+        before = len(errors)
+        _validate_non_negative_number(value, name, errors)
+        if (
+            len(errors) == before
+            and maximum is not None
+            and value > maximum
+        ):
+            errors.append(f"{name} 不能大于 {maximum}")
 
 
 def _validate_optional_positive_int(
@@ -327,9 +342,18 @@ def _validate_optional_positive_int(
     key: str,
     name: str,
     errors: list,
+    maximum=None,
 ) -> None:
     if key in config:
-        _validate_positive_int(config.get(key), name, errors)
+        value = config.get(key)
+        before = len(errors)
+        _validate_positive_int(value, name, errors)
+        if (
+            len(errors) == before
+            and maximum is not None
+            and value > maximum
+        ):
+            errors.append(f"{name} 不能大于 {maximum}")
 
 
 def _validate_optional_nullable_positive_number(
