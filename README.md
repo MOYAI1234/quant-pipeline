@@ -215,6 +215,34 @@ python cli\commands.py history export-rotation --config path\to\config.json --et
 
 `history_command` 必须输出 JSON 数组，或输出包含 `history` / `data` 数组字段的 JSON object；数组元素仍需满足 `date,open,high,low,close,volume,amount` 历史行情契约。
 
+需要顺序降级时，可用 `history_providers` 替代单个 `history_command`：
+
+```json
+{
+  "data": {
+    "mx_data": {
+      "mode": "real",
+      "timeout": 10,
+      "history_command": null,
+      "history_providers": [
+        {
+          "name": "primary",
+          "command": ["python", "primary.py", "{symbol}", "{start_date}", "{end_date}"]
+        },
+        {
+          "name": "backup",
+          "command": ["python", "backup.py", "{symbol}", "{start_date}", "{end_date}"]
+        }
+      ],
+      "history_retry_attempts": 2,
+      "history_retry_delay_seconds": 0.5
+    }
+  }
+}
+```
+
+同一 provider 的进程启动失败、非零退出或超时会按 `history_retry_attempts` 重试，然后再切换到下一个 provider。非法 UTF-8、非法 JSON 或错误输出结构不会重复请求同一来源，但仍会尝试备源。重试次数范围为 1-10，等待时间范围为 0-60 秒；等待使用当前同步 pipeline 的阻塞式 sleep。`health --json` 会保留最近成功来源、总尝试次数和结构化失败链，便于发现“备源成功但主源已退化”的情况。历史结果缓存仍由 `DataManager` 负责。
+
 `history probe` 会执行一次不落盘的最小查询，校验 provider 命令、JSON、历史字段、日期顺序和请求区间，并输出返回行数及实际首尾日期。真实 API key、token 和私有 provider 脚本应保留在本地配置或环境变量中，不要提交到仓库。
 
 仓库提供可选 AKShare 示例脚本 `examples/providers/akshare_history_provider.py`。它不会把 AKShare 加入项目依赖；需要本地自行 `pip install akshare` 后，再通过 `history_command` 调用。完整 provider 契约见 [docs/history-provider-contract.md](docs/history-provider-contract.md)。
@@ -266,7 +294,7 @@ python -m compileall -q .
 
 当前测试重点覆盖：
 
-- adapter 的 mock/real 模式、结构化健康检查、未实现 real 操作错误和 `mx_data.history_command` provider
+- adapter 的 mock/real 模式、结构化健康检查、未实现 real 操作错误，以及命令式历史 provider 的重试和顺序降级
 - CLI `health` 对数据源健康状态的文本/JSON 输出
 - CLI `diagnose` 对配置、数据源和状态文件的启动前诊断
 - CLI `alerts` 对本地 JSONL 告警事件的文本/JSON 输出、limit 和错误处理

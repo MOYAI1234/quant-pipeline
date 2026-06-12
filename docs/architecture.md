@@ -7,7 +7,7 @@
 当前系统处于 mock/simulator 阶段：
 
 - adapter 默认返回 mock 或空数据，用于验证程序链路。
-- `mx_data.history` 的 `real` 模式可通过 `history_command` 接入外部命令式 provider，并提供显式启用的 AKShare guarded live e2e；其他 `real` 能力尚未接入真实外部服务，会明确标记为不可用。
+- `mx_data.history` 的 `real` 模式可通过单个 `history_command` 或命名 `history_providers` 接入外部命令式 provider，支持同源重试、顺序降级和最近失败链状态，并提供显式启用的 AKShare guarded live e2e；其他 `real` 能力尚未接入真实外部服务，会明确标记为不可用。
 - `Simulator` 是简化成交模型，不等价于券商撮合。
 - QMT/实盘执行、API 和 Web 界面尚未实现。
 - 回测可用于验证策略逻辑和导出审计数据，已支持成交量上限下的可选整手部分成交，但不包含交易所官方日历和复杂组合回测；真实历史数据源目前只提供外部命令 provider 接入位。

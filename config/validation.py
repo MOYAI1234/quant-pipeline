@@ -1,4 +1,14 @@
 import math
+from string import Formatter
+
+
+MAX_HISTORY_RETRY_ATTEMPTS = 10
+MAX_HISTORY_RETRY_DELAY_SECONDS = 60
+ALLOWED_HISTORY_PLACEHOLDERS = frozenset({
+    'symbol',
+    'start_date',
+    'end_date',
+})
 
 
 def validate_config(config: dict) -> dict:
@@ -210,9 +220,12 @@ def _validate_adapter_config(
     if mode not in ('mock', 'real'):
         errors.append(f"{name}.mode 必须是 mock 或 real")
     elif mode == 'real':
-        if name == 'data.mx_data' and adapter_config.get('history_command'):
+        if name == 'data.mx_data' and (
+            adapter_config.get('history_command')
+            or adapter_config.get('history_providers')
+        ):
             warnings.append(
-                'data.mx_data.mode=real 当前仅支持 history_command 历史行情 provider'
+                'data.mx_data.mode=real 当前仅支持命令式历史行情 provider'
             )
         else:
             warnings.append(f"{name}.mode=real 当前仍是未实现适配器")
@@ -228,6 +241,36 @@ def _validate_adapter_config(
             )
         ):
             errors.append('data.mx_data.history_command 必须是非空字符串数组')
+        elif history_command is not None:
+            _validate_history_command_template(
+                history_command,
+                'data.mx_data.history_command',
+                errors,
+            )
+
+    if name == 'data.mx_data':
+        _validate_history_providers(adapter_config, errors)
+        if (
+            adapter_config.get('history_command')
+            and adapter_config.get('history_providers')
+        ):
+            errors.append(
+                'data.mx_data.history_command 与 history_providers 不能同时配置'
+            )
+        _validate_optional_positive_int(
+            adapter_config,
+            'history_retry_attempts',
+            'data.mx_data.history_retry_attempts',
+            errors,
+            maximum=MAX_HISTORY_RETRY_ATTEMPTS,
+        )
+        _validate_optional_non_negative_number(
+            adapter_config,
+            'history_retry_delay_seconds',
+            'data.mx_data.history_retry_delay_seconds',
+            errors,
+            maximum=MAX_HISTORY_RETRY_DELAY_SECONDS,
+        )
 
     _validate_optional_positive_number(
         adapter_config,
@@ -235,6 +278,69 @@ def _validate_adapter_config(
         f"{name}.timeout",
         errors,
     )
+
+
+def _validate_history_providers(adapter_config: dict, errors: list) -> None:
+    if 'history_providers' not in adapter_config:
+        return
+    providers = adapter_config.get('history_providers')
+    if providers is None:
+        return
+    if not isinstance(providers, list) or not providers:
+        errors.append('data.mx_data.history_providers 必须是非空数组或 null')
+        return
+
+    names = set()
+    for index, provider in enumerate(providers):
+        prefix = f'data.mx_data.history_providers[{index}]'
+        if not isinstance(provider, dict):
+            errors.append(f'{prefix} 必须是 dict')
+            continue
+        name = provider.get('name')
+        if not isinstance(name, str) or not name.strip():
+            errors.append(f'{prefix}.name 必须是非空字符串')
+        elif name in names:
+            errors.append(f'data.mx_data.history_providers.name 不能重复: {name}')
+        else:
+            names.add(name)
+        command = provider.get('command')
+        if (
+            not isinstance(command, list)
+            or not command
+            or any(
+                not isinstance(part, str) or not part
+                for part in command
+            )
+        ):
+            errors.append(f'{prefix}.command 必须是非空字符串数组')
+        else:
+            _validate_history_command_template(
+                command,
+                f'{prefix}.command',
+                errors,
+            )
+
+
+def _validate_history_command_template(
+    command: list[str],
+    name: str,
+    errors: list,
+) -> None:
+    for part in command:
+        try:
+            parsed = Formatter().parse(part)
+            for _, field_name, format_spec, conversion in parsed:
+                if field_name is None:
+                    continue
+                if field_name not in ALLOWED_HISTORY_PLACEHOLDERS:
+                    errors.append(f'{name} 包含未知占位符: {field_name}')
+                    return
+                if format_spec or conversion:
+                    errors.append(f'{name} 不支持占位符格式化参数')
+                    return
+        except ValueError as exc:
+            errors.append(f'{name} 模板无效: {exc}')
+            return
 
 
 def _validate_positive_number(value, name: str, errors: list) -> None:
@@ -250,6 +356,44 @@ def _validate_optional_positive_number(
 ) -> None:
     if key in config:
         _validate_positive_number(config.get(key), name, errors)
+
+
+def _validate_optional_non_negative_number(
+    config: dict,
+    key: str,
+    name: str,
+    errors: list,
+    maximum=None,
+) -> None:
+    if key in config:
+        value = config.get(key)
+        before = len(errors)
+        _validate_non_negative_number(value, name, errors)
+        if (
+            len(errors) == before
+            and maximum is not None
+            and value > maximum
+        ):
+            errors.append(f"{name} 不能大于 {maximum}")
+
+
+def _validate_optional_positive_int(
+    config: dict,
+    key: str,
+    name: str,
+    errors: list,
+    maximum=None,
+) -> None:
+    if key in config:
+        value = config.get(key)
+        before = len(errors)
+        _validate_positive_int(value, name, errors)
+        if (
+            len(errors) == before
+            and maximum is not None
+            and value > maximum
+        ):
+            errors.append(f"{name} 不能大于 {maximum}")
 
 
 def _validate_optional_nullable_positive_number(

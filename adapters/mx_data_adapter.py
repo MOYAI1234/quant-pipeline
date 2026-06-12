@@ -1,14 +1,19 @@
 import json
+import math
 import os
 from pathlib import Path
+from numbers import Real
 import shutil
 import subprocess
 from string import Formatter
+import time
 
 from .base_adapter import BaseAdapter
 
 
 class MXDataAdapter(BaseAdapter):
+    MAX_HISTORY_RETRY_ATTEMPTS = 10
+    MAX_HISTORY_RETRY_DELAY_SECONDS = 60
     ALLOWED_HISTORY_PLACEHOLDERS = frozenset({
         'symbol',
         'start_date',
@@ -17,6 +22,10 @@ class MXDataAdapter(BaseAdapter):
 
     def __init__(self, config):
         super().__init__(config)
+        self.last_history_provider = None
+        self.last_history_attempts = 0
+        self.last_history_error = ''
+        self.last_history_failures = []
 
     def connect(self):
         if self.mode == 'mock':
@@ -42,11 +51,18 @@ class MXDataAdapter(BaseAdapter):
                 status['error'] = command_error
         status.update({
             'history_provider': None if command_error else 'command',
+            'history_provider_count': (
+                0 if command_error else len(self._history_provider_configs())
+            ),
             'history_available': (
                 self.mode == 'real'
                 and self.connected
                 and not command_error
             ),
+            'last_history_provider': self.last_history_provider,
+            'last_history_attempts': self.last_history_attempts,
+            'last_history_error': self.last_history_error,
+            'last_history_failures': self.last_history_failures,
         })
         return status
 
@@ -77,7 +93,99 @@ class MXDataAdapter(BaseAdapter):
             return []
 
         self._ensure_real_history_available()
-        command = self._build_history_command(symbol, start_date, end_date)
+        self.last_history_provider = None
+        self.last_history_attempts = 0
+        self.last_history_error = ''
+        self.last_history_failures = []
+        failures = []
+        retry_attempts = self.config.get('history_retry_attempts', 1)
+        retry_delay = self.config.get('history_retry_delay_seconds', 0)
+
+        provider_configs = self._history_provider_configs()
+        for provider in provider_configs:
+            for attempt in range(1, retry_attempts + 1):
+                self.last_history_attempts += 1
+                try:
+                    payload = self._run_history_provider(
+                        provider,
+                        symbol,
+                        start_date,
+                        end_date,
+                    )
+                except ServiceUnavailableError as exc:
+                    failures.append((provider['name'], attempt, exc))
+                    self._record_history_failure(provider['name'], attempt, exc)
+                    if attempt < retry_attempts and retry_delay > 0:
+                        time.sleep(retry_delay)
+                    continue
+                except DataFetchError as exc:
+                    failures.append((provider['name'], attempt, exc))
+                    self._record_history_failure(provider['name'], attempt, exc)
+                    break
+
+                self.last_history_provider = provider['name']
+                self.last_history_error = self._format_history_failures(failures)
+                return payload
+
+        details = self._format_history_failures(failures)
+        self.last_history_error = details
+        if len(failures) == 1 and len(provider_configs) == 1:
+            raise failures[0][2]
+        error_type = (
+            DataFetchError
+            if failures and all(
+                isinstance(exc, DataFetchError)
+                for _, _, exc in failures
+            )
+            else ServiceUnavailableError
+        )
+        error_code = (
+            'INVALID_PROVIDER_RESPONSE'
+            if error_type is DataFetchError
+            else 'REAL_HISTORY_PROVIDERS_FAILED'
+        )
+        raise error_type(
+            f'MXDataAdapter all history providers failed: {details or "-"}',
+            error_code=error_code,
+            source='MXDataAdapter',
+        )
+
+    def _record_history_failure(self, name: str, attempt: int, exc) -> None:
+        self.last_history_failures.append({
+            'provider': name,
+            'attempt': attempt,
+            'error_code': exc.error_code,
+            'error': str(exc),
+        })
+
+    def _format_history_failures(self, failures: list) -> str:
+        return '; '.join(
+            f'{name} attempt {attempt}: {exc}'
+            for name, attempt, exc in failures
+        )
+
+    def _run_history_provider(
+        self,
+        provider: dict,
+        symbol: str,
+        start_date: str,
+        end_date: str,
+    ) -> list:
+        from data.contracts import DataFetchError, ServiceUnavailableError
+
+        command = self._format_history_command(
+            provider['command'],
+            {
+                'symbol': symbol,
+                'start_date': start_date,
+                'end_date': end_date,
+            },
+        )
+        provider_label = (
+            'MXDataAdapter history provider'
+            if provider.get('legacy')
+            else f"history provider {provider['name']}"
+        )
         try:
             completed = subprocess.run(
                 command,
@@ -87,9 +195,15 @@ class MXDataAdapter(BaseAdapter):
                 encoding='utf-8',
                 timeout=self.config.get('timeout', 10),
             )
+        except UnicodeDecodeError as exc:
+            raise DataFetchError(
+                f"{provider_label} output is not valid UTF-8",
+                error_code='INVALID_PROVIDER_RESPONSE',
+                source='MXDataAdapter',
+            ) from exc
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise ServiceUnavailableError(
-                f"MXDataAdapter history provider failed: {exc}",
+                f"{provider_label} failed: {exc}",
                 error_code='REAL_HISTORY_PROVIDER_FAILED',
                 source='MXDataAdapter',
             ) from exc
@@ -97,7 +211,7 @@ class MXDataAdapter(BaseAdapter):
         if completed.returncode != 0:
             error = completed.stderr.strip() or completed.stdout.strip()
             raise ServiceUnavailableError(
-                f"MXDataAdapter history provider exited with "
+                f"{provider_label} exited with "
                 f"{completed.returncode}: {error or '-'}",
                 error_code='REAL_HISTORY_PROVIDER_FAILED',
                 source='MXDataAdapter',
@@ -107,7 +221,7 @@ class MXDataAdapter(BaseAdapter):
             payload = json.loads(completed.stdout)
         except json.JSONDecodeError as exc:
             raise DataFetchError(
-                'MXDataAdapter history provider output is not valid JSON',
+                f"{provider_label} output is not valid JSON",
                 error_code='INVALID_PROVIDER_RESPONSE',
                 source='MXDataAdapter',
             ) from exc
@@ -116,7 +230,8 @@ class MXDataAdapter(BaseAdapter):
             payload = payload.get('history', payload.get('data'))
         if not isinstance(payload, list):
             raise DataFetchError(
-                'MXDataAdapter history provider JSON must be a list or contain history/data list',
+                f"{provider_label} JSON must be a list or "
+                'contain history/data list',
                 error_code='INVALID_PROVIDER_RESPONSE',
                 source='MXDataAdapter',
             )
@@ -141,12 +256,76 @@ class MXDataAdapter(BaseAdapter):
 
     def _history_command_error(self) -> str:
         command = self.config.get('history_command')
+        providers = self.config.get('history_providers')
+        if command and providers:
+            return 'configure either history_command or history_providers, not both'
+        if providers is not None and (
+            not isinstance(providers, list)
+            or not providers
+        ):
+            return 'history_providers must be a non-empty list'
+
+        retry_attempts = self.config.get('history_retry_attempts', 1)
+        if (
+            not isinstance(retry_attempts, int)
+            or isinstance(retry_attempts, bool)
+            or retry_attempts <= 0
+            or retry_attempts > self.MAX_HISTORY_RETRY_ATTEMPTS
+        ):
+            return (
+                'history_retry_attempts must be an integer between 1 and '
+                f'{self.MAX_HISTORY_RETRY_ATTEMPTS}'
+            )
+        retry_delay = self.config.get('history_retry_delay_seconds', 0)
+        if (
+            isinstance(retry_delay, bool)
+            or not isinstance(retry_delay, Real)
+            or not math.isfinite(float(retry_delay))
+            or retry_delay < 0
+            or retry_delay > self.MAX_HISTORY_RETRY_DELAY_SECONDS
+        ):
+            return (
+                'history_retry_delay_seconds must be a finite number between '
+                f'0 and {self.MAX_HISTORY_RETRY_DELAY_SECONDS}'
+            )
+
+        provider_configs = self._history_provider_configs()
+        if not provider_configs:
+            return 'real history provider not configured'
+
+        names = set()
+        for index, provider in enumerate(provider_configs):
+            if not isinstance(provider, dict):
+                return f'history_providers[{index}] must be an object'
+            name = provider.get('name')
+            if not isinstance(name, str) or not name.strip():
+                return f'history_providers[{index}].name must be a non-empty string'
+            if name in names:
+                return f'history provider name is duplicated: {name}'
+            names.add(name)
+
+            error = self._command_error(
+                provider.get('command'),
+                validate_executable=not providers,
+            )
+            if error:
+                if providers:
+                    return f'history_providers[{index}].command {error}'
+                return f'history_command {error}'
+        return ''
+
+    def _command_error(
+        self,
+        command,
+        *,
+        validate_executable: bool,
+    ) -> str:
         if (
             not isinstance(command, list)
             or not command
             or any(not isinstance(part, str) or not part for part in command)
         ):
-            return 'real history provider not configured'
+            return 'must be a non-empty string list'
 
         for part in command:
             try:
@@ -154,30 +333,36 @@ class MXDataAdapter(BaseAdapter):
                     if field_name is None:
                         continue
                     if field_name not in self.ALLOWED_HISTORY_PLACEHOLDERS:
-                        return f'history_command contains unknown placeholder: {field_name}'
+                        return f'contains unknown placeholder: {field_name}'
                     if format_spec or conversion:
-                        return 'history_command placeholders do not support format specifiers'
+                        return 'placeholders do not support format specifiers'
             except ValueError as exc:
-                return f'history_command template invalid: {exc}'
+                return f'template invalid: {exc}'
 
         try:
-            sample_command = self._format_history_command({
-                'symbol': '510300',
-                'start_date': '2026-01-01',
-                'end_date': '2026-01-02',
-            })
+            sample_command = self._format_history_command(
+                command,
+                {
+                    'symbol': '510300',
+                    'start_date': '2026-01-01',
+                    'end_date': '2026-01-02',
+                },
+            )
         except (KeyError, ValueError) as exc:
-            return f'history_command template invalid: {exc}'
+            return f'template invalid: {exc}'
+
+        if not validate_executable:
+            return ''
 
         executable = sample_command[0]
         if self._is_path_like_command(executable):
             executable_path = Path(executable)
             if not executable_path.exists():
-                return f'history_command executable not found: {executable}'
+                return f'executable not found: {executable}'
             if not executable_path.is_file() or not os.access(executable_path, os.X_OK):
-                return f'history_command executable is not executable: {executable}'
+                return f'executable is not executable: {executable}'
         elif shutil.which(executable) is None:
-            return f'history_command executable not found: {executable}'
+            return f'executable not found: {executable}'
         return ''
 
     def _ensure_mock_operation(self, operation: str) -> None:
@@ -208,31 +393,27 @@ class MXDataAdapter(BaseAdapter):
                 source='MXDataAdapter',
             )
 
-    def _build_history_command(
+    def _history_provider_configs(self) -> list[dict]:
+        providers = self.config.get('history_providers')
+        if isinstance(providers, list):
+            return providers
+        command = self.config.get('history_command')
+        if command:
+            return [{
+                'name': 'default',
+                'command': command,
+                'legacy': True,
+            }]
+        return []
+
+    def _format_history_command(
         self,
-        symbol: str,
-        start_date: str,
-        end_date: str,
+        command: list[str],
+        values: dict,
     ) -> list[str]:
-        from data.contracts import ServiceUnavailableError
-
-        try:
-            return self._format_history_command({
-                'symbol': symbol,
-                'start_date': start_date,
-                'end_date': end_date,
-            })
-        except (KeyError, ValueError) as exc:
-            raise ServiceUnavailableError(
-                f'MXDataAdapter history command is invalid: {exc}',
-                error_code='REAL_HISTORY_PROVIDER_NOT_CONFIGURED',
-                source='MXDataAdapter',
-            ) from exc
-
-    def _format_history_command(self, values: dict) -> list[str]:
         return [
             part.format(**values)
-            for part in self.config['history_command']
+            for part in command
         ]
 
     def _is_path_like_command(self, executable: str) -> bool:

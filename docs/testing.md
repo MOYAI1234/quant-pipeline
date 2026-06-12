@@ -33,7 +33,7 @@ python cli\commands.py history export-grid --help
 python cli\commands.py history export-rotation --help
 ```
 
-当前离线基线：`pytest` 应通过 336 个测试，并跳过 1 个显式启用的 AKShare live test。
+当前离线基线：`pytest` 应通过 350 个测试，并跳过 1 个显式启用的 AKShare live test。
 
 ## 分层测试
 
@@ -50,6 +50,7 @@ python -m pytest tests\test_adapters.py tests\test_data_manager_contracts.py tes
 - adapter 必须明确 `mode=mock|real`。
 - `mock` 模式可用于链路验证，但不能伪装成真实行情。
 - `mx_data.history` 的 `real` 模式必须显式配置 `history_command`，未配置时必须明确不可用。
+- 多历史 provider 配置必须覆盖同源瞬时失败重试、主源失败后备源成功、非法响应跳过同源重试、全部失败聚合错误和最近失败链健康状态。
 - 非历史行情的 `real` 操作未实现时必须明确不可用，并抛出服务不可用错误。
 - `DataManager` 必须校验实时行情、净值和历史行情的字段、数值类型、非负单位和可选时效。
 
