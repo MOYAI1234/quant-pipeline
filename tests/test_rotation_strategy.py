@@ -135,3 +135,33 @@ class TestRotationStrategy:
         retry_signals = self.strategy.generate_signal(data, portfolio)
         assert len(retry_signals) == 2
         assert self.strategy.pending_rebalance_count == 2
+
+    def test_partial_rebalance_does_not_mark_batch_complete(self):
+        data = {
+            '510300': {'price': 5.0, 'prices': _history(12.0)},
+            '510500': {'price': 4.0, 'prices': _history(11.0)},
+            '159915': {'price': 3.0, 'prices': _history(9.0)},
+            '_date': '2026-01-20',
+        }
+        portfolio = {
+            'capital': 10000,
+            'positions': {},
+            'total_value': 10000,
+        }
+
+        signals = self.strategy.generate_signal(data, portfolio)
+        partial_signal = dict(
+            signals[0],
+            shares=500,
+            partial_fill=True,
+            timestamp='2026-01-20',
+        )
+        confirmed_signal = dict(signals[1], timestamp='2026-01-20')
+
+        self.strategy.on_trade_confirmed(partial_signal)
+        self.strategy.on_trade_confirmed(confirmed_signal)
+
+        assert self.strategy.pending_rebalance_count == 0
+        assert self.strategy.pending_rebalance_failed is True
+        assert self.strategy.last_rebalance is None
+        assert self.strategy.need_rebalance(data) is True

@@ -33,7 +33,7 @@ python cli\commands.py history export-grid --help
 python cli\commands.py history export-rotation --help
 ```
 
-当前基线：`pytest` 应通过 333 个测试。
+当前基线：`pytest` 应通过 335 个测试。
 
 ## 分层测试
 
@@ -65,8 +65,8 @@ python -m pytest tests\test_simulator.py tests\test_e2e_grid.py tests\test_rotat
 
 - `Simulator` 支持买入、卖出、均价、手续费、部分卖出和市值估算。
 - 回测结果能审计成交额、交易频率、手续费对毛盈利的侵蚀，并对扣除最低佣金和滑点后不可行的密集网格给出警告。
-- `GridStrategy` 支持多格买入、同格防重复、卖出和止损后 ledger 重置。
-- `RotationStrategy` 支持首次调仓、卖旧买新、失败 pending 清理和重试。
+- `GridStrategy` 支持多格买入、部分成交股数 ledger、同格防重复、卖出和止损后 ledger 重置。
+- `RotationStrategy` 支持首次调仓、卖旧买新、部分/失败批次不完成、pending 清理和重试。
 - `RiskManager` 覆盖仓位、ETF 质量、固定止损、单笔止损、跟踪止损和组合亏损告警边界。
 
 ### 回测

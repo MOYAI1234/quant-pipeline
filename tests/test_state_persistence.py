@@ -138,6 +138,7 @@ def test_grid_strategy_snapshot_round_trips_ledger_and_trades():
     restored.restore(strategy.snapshot())
 
     assert restored.grid_ledger[3.9]['bought'] is True
+    assert restored.grid_ledger[3.9]['shares'] == 1000
     assert restored.trades == [trade]
 
 
@@ -156,6 +157,7 @@ def test_grid_strategy_restore_warns_about_orphan_grid(caplog):
 
     assert '已失效的网格' in caplog.text
     assert strategy.grid_ledger[3.9]['bought'] is True
+    assert strategy.grid_ledger[3.9]['shares'] == 1000
     assert 2.0 not in strategy.grid_ledger
 
 
@@ -163,6 +165,7 @@ def test_rotation_strategy_snapshot_round_trips_rebalance_state():
     strategy = _rotation_strategy()
     strategy.selected_etfs = ['510500']
     strategy.pending_rebalance_count = 0
+    strategy.pending_rebalance_failed = True
     strategy.last_rebalance = datetime.fromisoformat('2026-01-20')
     strategy.record_trade({
         'action': 'buy',
@@ -175,6 +178,7 @@ def test_rotation_strategy_snapshot_round_trips_rebalance_state():
 
     assert restored.selected_etfs == ['510500']
     assert restored.pending_rebalance_count == 0
+    assert restored.pending_rebalance_failed is True
     assert restored.last_rebalance.isoformat() == '2026-01-20T00:00:00'
     assert restored.trades == [{
         'action': 'buy',

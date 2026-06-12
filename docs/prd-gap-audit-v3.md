@@ -35,7 +35,7 @@ python cli\commands.py history probe --help
 结果：
 
 - `compileall` 通过
-- `pytest` 通过，`333 passed`
+- `pytest` 通过，`335 passed`
 - CLI help 可用
 - CLI daily report 可生成包含数据源健康状态的空组合报告
 - CLI health 可输出数据源健康状态
@@ -51,8 +51,8 @@ python cli\commands.py history probe --help
 |---|---|---|
 | 数据适配层 | 部分完成 | 适配器类已存在；`mx_data.history` 已支持外部命令 provider 接入位，并提供 AKShare 可选示例脚本和命令 provider 契约文档；但 `mx-xuangu` / `mx-search` / `jason-kb` 以及 `mx-data` 的实时/净值/列表仍是 stub，未接真实服务 |
 | 数据管理器 | 部分完成 | `DataManager` 和 TTL 缓存已存在，已覆盖基础字段、数值类型、非负单位、可选行情时效、无时区 timestamp 的显式源时区解释、缓存过期和 adapter 异常传播；仍缺更完整单位归一 |
-| 网格策略 | 基础可用 | 已支持多格买入、成交确认后更新 ledger、卖出后允许再买；仍缺持久化和更丰富行情路径测试 |
-| 行业轮动策略 | 基础可用 | 已支持动量选择、卖旧买新、失败回调；仍缺独立测试和风控冲突场景覆盖 |
+| 网格策略 | 基础可用 | 已支持多格买入、按实际成交股数更新 ledger、部分成交补齐或退出、卖出后允许再买；仍缺更丰富行情路径测试 |
+| 行业轮动策略 | 基础可用 | 已支持动量选择、卖旧买新、部分成交/失败批次不更新完成时间并允许重试；仍缺风控冲突场景覆盖 |
 | 回测功能 | 已启动 | 已新增最小 `BacktestRunner`、`RotationBacktestRunner` 和 `BacktestExecutionModel`，支持历史 bar、CSV、JSON 驱动、基础回测指标、滑点、成交量参与率限制、可选整手部分成交、拒单归因、逐期组合快照导出和 DataManager 历史数据到回测 CSV 的转换入口；仍缺交易所官方日历、复杂组合、多策略和真实历史数据源 |
 | 模拟执行器 | 基础可用 | 买卖、整手、均价、买卖双边费率、单笔最低佣金、估值和部分盈亏计算已实现；回测层已抽出 `BacktestExecutionModel` 统一处理滑点、成交量参与率限制、可选整手部分成交和成交前拒单归因，但仍不支持未成交余量跨 bar 结转和更复杂撮合 |
 | QMT/实盘执行 | 未完成 | `qmt_executor.py` 不存在，实盘订单模型、状态同步、异常恢复都未开始 |
@@ -61,7 +61,7 @@ python cli\commands.py history probe --help
 | 监控告警 | 部分完成 | 状态指标、报告和结构化告警事件已存在，报告可展示最近告警摘要，并支持本地 JSONL 输出；外部通知通道尚未实现 |
 | CLI | 基础可用 | `start/status/report/health/diagnose/alerts/config show/config init/config validate/backtest/history probe/history export-grid/history export-rotation` 已有；配置初始化、查看、校验和运行诊断链路已具备 |
 | API/Web | 未完成 | PRD 中规划了 API 和 Web 界面，当前仓库没有对应模块 |
-| 测试体系 | 不足 | 现有 333 个测试覆盖 simulator、买卖双边费率和最低佣金、轮动按卖出净所得调仓、grid e2e、rotation、risk manager 边界、backtest runner、回测成交模型、成交量参与率下的可选整手部分成交、回测历史转换、真实历史 provider 探测、AKShare 示例 provider 字段、成交量手转股和整数成交量转换及 DataManager 契约集成、回测日期区间、历史日期/盘中时间顺序、OHLC 合法性、成交量参与率、组合快照一致性、拒单审计和可选交易日历校验、回测最大回撤区间、已平仓手续费侵蚀统计、整手网格生产可行性审计、权益曲线/组合快照/成交明细 CSV 导出、回测滑点、CLI smoke、配置模板生成、状态持久化、报告健康状态、启动前诊断、告警事件、配置校验、DataManager 缓存、数据契约和外部历史 provider 配置等；adapter、report 仍有缺口 |
+| 测试体系 | 不足 | 现有 335 个测试覆盖 simulator、买卖双边费率和最低佣金、轮动按卖出净所得调仓、部分调仓批次重试、grid e2e、网格部分成交 ledger、rotation、risk manager 边界、backtest runner、回测成交模型、成交量参与率下的可选整手部分成交、回测历史转换、真实历史 provider 探测、AKShare 示例 provider 字段、成交量手转股和整数成交量转换及 DataManager 契约集成、回测日期区间、历史日期/盘中时间顺序、OHLC 合法性、成交量参与率、组合快照一致性、拒单审计和可选交易日历校验、回测最大回撤区间、已平仓手续费侵蚀统计、整手网格生产可行性审计、权益曲线/组合快照/成交明细 CSV 导出、回测滑点、CLI smoke、配置模板生成、状态持久化、报告健康状态、启动前诊断、告警事件、配置校验、DataManager 缓存、数据契约和外部历史 provider 配置等；adapter、report 仍有缺口 |
 | 文档入口 | 基础可用 | `README.md` 已补充基础运行、测试和阶段边界；`docs/testing.md` 已说明测试分层和验收口径；`docs/architecture.md` 已说明模块职责、运行链路和当前 mock/simulator 边界 |
 
 回测能力细节：

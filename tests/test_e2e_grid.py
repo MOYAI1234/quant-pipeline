@@ -74,6 +74,29 @@ class TestGridE2E:
         signals = self.strategy.generate_signal(data, portfolio)
         assert len(signals) == 0
 
+    def test_partial_buy_tracks_remaining_grid_shares(self):
+        partial_buy = {
+            'action': 'buy',
+            'symbol': '510300',
+            'price': 3.9,
+            'shares': 500,
+            'partial_fill': True,
+        }
+        assert self.simulator.execute_order(partial_buy) is True
+        self.strategy.on_trade_confirmed(partial_buy)
+
+        assert self.strategy.grid_ledger[3.9]['shares'] == 500
+        assert self.strategy.grid_ledger[3.9]['bought'] is False
+
+        portfolio = self.simulator.get_portfolio()
+        signals = self.strategy.generate_signal(
+            {'price': 3.95, 'volume': 1000000, 'amount': 4000000},
+            portfolio,
+        )
+
+        assert len(signals) == 1
+        assert signals[0]['shares'] == 500
+
     def test_sell_full_grid(self):
         # 买入一格 (3.9 网格)
         data = {'price': 3.95, 'volume': 1000000, 'amount': 4000000}

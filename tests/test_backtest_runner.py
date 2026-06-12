@@ -157,11 +157,12 @@ def test_backtest_runner_partially_fills_volume_limited_order_when_enabled():
         'max_volume_participation': 0.1,
         'allow_partial_fills': True,
     })
-    bar = dict(sample_grid_history()[1], volume=5000)
+    buy_bar = dict(sample_grid_history()[1], volume=5000)
+    sell_bar = dict(sample_grid_history()[2], volume=5000)
 
-    result = runner.run([bar])
+    result = runner.run([buy_bar, sell_bar])
 
-    assert result['trade_count'] == 1
+    assert result['trade_count'] == 2
     assert result['rejected_order_count'] == 0
     assert result['allow_partial_fills'] is True
     assert result['trades'][0]['shares'] == 500
@@ -169,6 +170,10 @@ def test_backtest_runner_partially_fills_volume_limited_order_when_enabled():
     assert result['trades'][0]['partial_fill'] is True
     assert result['trades'][0]['amount'] == pytest.approx(1950)
     assert runner.strategy.trades[0]['shares'] == 500
+    assert result['trades'][1]['shares'] == 500
+    assert result['portfolio']['positions'] == {}
+    assert runner.strategy.grid_ledger[3.9]['shares'] == 0
+    assert runner.strategy.grid_ledger[3.9]['bought'] is False
 
 
 def test_backtest_runner_executes_order_at_volume_participation_limit():
