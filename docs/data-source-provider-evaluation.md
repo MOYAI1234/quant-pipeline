@@ -50,6 +50,7 @@ ETF 投资助手的默认方向应是低频、可解释、成本可承受的组�
 
 - 支持 ETF 日级历史行情。
 - 输出字段至少包含 date/open/high/low/close/volume/amount。
+- 明确字段单位，尤其是把 AKShare / Eastmoney 按“手”返回的成交量转换为按“股”输出。
 - 能通过 python cli\commands.py history probe --config ...。
 - 缺字段、无数据、乱序日期、越界日期会被现有 DataManager / probe 拒绝。
 - 不提交任何 token、cookie 或私有 provider 路径。
@@ -83,6 +84,6 @@ ETF 投资助手的默认方向应是低频、可解释、成本可承受的组�
 
 ## 后续 PR 建议
 
-1. 增加 examples/providers/akshare_history_provider.py，保持为可选示例脚本。
-2. 增加 docs/history-provider-contract.md，固化命令 provider 的 stdin/stdout、错误码和 schema。
+1. 使用 examples/providers/akshare_history_provider.py 配置本地 AKShare POC，并通过 history probe 验证真实返回。
+2. 继续完善 docs/history-provider-contract.md，必要时加入 provider 错误样例和常见排障。
 3. 使用本地真实 provider 配置执行 guarded e2e，只提交文档和测试，不提交凭据。
