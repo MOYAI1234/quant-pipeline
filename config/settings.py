@@ -9,6 +9,10 @@ SYSTEM_CONFIG = {
             'timeout': 10,
             # real 模式可配置命令数组, 支持 {symbol}/{start_date}/{end_date} 占位符。
             'history_command': None,
+            # 多 provider 时使用命名 command 列表；不能与 history_command 同时配置。
+            'history_providers': None,
+            'history_retry_attempts': 1,
+            'history_retry_delay_seconds': 0.0,
         },
         'mx_xuangu': {
             'mode': 'mock',

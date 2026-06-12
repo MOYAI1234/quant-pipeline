@@ -4,7 +4,12 @@
 
 ## 调用方式
 
-配置文件中 data.mx_data.mode 必须为 real，并提供 history_command 字符串数组。数组元素可使用以下占位符：
+配置文件中 `data.mx_data.mode` 必须为 `real`，并提供以下二者之一：
+
+- `history_command`：单个命令的字符串数组，保持向后兼容。
+- `history_providers`：按优先级排列的命名 provider 数组，每项包含 `name` 和 `command`。
+
+两者不能同时配置。命令数组元素可使用以下占位符：
 
 - {symbol}：ETF 代码，例如 510300
 - {start_date}：开始日期，格式 YYYY-MM-DD
@@ -29,6 +34,45 @@
   }
 }
 ~~~
+
+多 provider 示例：
+
+~~~json
+{
+  "data": {
+    "mx_data": {
+      "mode": "real",
+      "timeout": 30,
+      "history_providers": [
+        {
+          "name": "primary",
+          "command": [
+            "python",
+            "scripts/primary_history.py",
+            "--symbol", "{symbol}",
+            "--start-date", "{start_date}",
+            "--end-date", "{end_date}"
+          ]
+        },
+        {
+          "name": "backup",
+          "command": [
+            "python",
+            "scripts/backup_history.py",
+            "--symbol", "{symbol}",
+            "--start-date", "{start_date}",
+            "--end-date", "{end_date}"
+          ]
+        }
+      ],
+      "history_retry_attempts": 2,
+      "history_retry_delay_seconds": 0.5
+    }
+  }
+}
+~~~
+
+`history_retry_attempts` 是每个 provider 的总尝试次数，必须为正整数；默认 1。`history_retry_delay_seconds` 是可用性错误重试前的等待秒数，必须为非负数；默认 0。
 
 ## stdout 契约
 
@@ -89,6 +133,17 @@ provider 必须向 stdout 输出 UTF-8 JSON，且必须是以下二者之一：
 - 成功：退出码 0，stdout 是合法 JSON。
 - 失败：退出码非 0，stderr 写清楚原因；stdout 不应混入日志。
 - 超时：由 data.mx_data.timeout 控制，超时会被视为 provider 不可用。
+
+进程启动失败、非零退出和超时属于可用性错误，会在当前 provider 内重试，再按配置顺序切换备源。非法 JSON 或错误 JSON shape 属于确定性响应错误，不重试同一 provider，但会继续尝试下一个 provider。
+
+所有 provider 都失败时，异常会包含 provider 名称、尝试序号和失败原因。`MXDataAdapter.health_check()` 还会输出：
+
+- `last_history_provider`：最近一次成功 provider。
+- `last_history_attempts`：最近一次请求执行的命令总次数。
+- `last_history_failures`：最近一次请求的结构化失败链。
+- `last_history_error`：同一失败链的文本摘要。
+
+健康检查本身只报告配置和最近运行状态，不主动访问真实行情服务。
 
 不要把 API key、token、cookie、私有路径或完整真实行情缓存提交到仓库。需要凭据的数据源必须只通过本地配置或环境变量启用。
 

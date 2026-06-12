@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from subprocess import CompletedProcess
 import sys
 
 import pytest
@@ -159,6 +160,232 @@ def test_real_history_provider_rejects_invalid_json(tmp_path):
         adapter.get_etf_history('510300', '2026-01-01', '2026-01-02')
 
     assert exc.value.error_code == 'INVALID_PROVIDER_RESPONSE'
+
+
+def test_real_history_providers_fall_back_after_primary_failure(monkeypatch):
+    calls = []
+    responses = [
+        CompletedProcess(['primary'], 1, '', 'primary unavailable'),
+        CompletedProcess(
+            ['backup'],
+            0,
+            (
+                '{"history": [{"date": "2026-01-01", "open": 4.0, '
+                '"high": 4.2, "low": 3.9, "close": 4.1, '
+                '"volume": 1000, "amount": 4100.0}]}'
+            ),
+            '',
+        ),
+    ]
+
+    def fake_run(command, **_kwargs):
+        calls.append(command)
+        return responses.pop(0)
+
+    monkeypatch.setattr(
+        mx_data_adapter.subprocess,
+        'run',
+        fake_run,
+    )
+    adapter = MXDataAdapter({
+        'mode': 'real',
+        'history_providers': [
+            {
+                'name': 'primary',
+                'command': [
+                    sys.executable,
+                    'primary.py',
+                    '{symbol}',
+                    '{start_date}',
+                    '{end_date}',
+                ],
+            },
+            {
+                'name': 'backup',
+                'command': [
+                    sys.executable,
+                    'backup.py',
+                    '{symbol}',
+                    '{start_date}',
+                    '{end_date}',
+                ],
+            },
+        ],
+    })
+
+    adapter.connect()
+    rows = adapter.get_etf_history('510300', '2026-01-01', '2026-01-02')
+    status = adapter.health_check()
+
+    assert rows[0]['close'] == 4.1
+    assert calls == [
+        [
+            sys.executable,
+            'primary.py',
+            '510300',
+            '2026-01-01',
+            '2026-01-02',
+        ],
+        [
+            sys.executable,
+            'backup.py',
+            '510300',
+            '2026-01-01',
+            '2026-01-02',
+        ],
+    ]
+    assert status['history_provider_count'] == 2
+    assert status['last_history_provider'] == 'backup'
+    assert status['last_history_attempts'] == 2
+    assert 'primary attempt 1' in status['last_history_error']
+    assert status['last_history_failures'] == [
+        {
+            'provider': 'primary',
+            'attempt': 1,
+            'error_code': 'REAL_HISTORY_PROVIDER_FAILED',
+            'error': (
+                'history provider primary exited with 1: primary unavailable'
+            ),
+        },
+    ]
+
+
+def test_real_history_provider_retries_transient_failure(monkeypatch):
+    responses = [
+        CompletedProcess(['primary'], 1, '', 'temporary failure'),
+        CompletedProcess(['primary'], 0, '[]', ''),
+    ]
+    monkeypatch.setattr(
+        mx_data_adapter.subprocess,
+        'run',
+        lambda *_args, **_kwargs: responses.pop(0),
+    )
+    adapter = MXDataAdapter({
+        'mode': 'real',
+        'history_command': [sys.executable, 'primary.py'],
+        'history_retry_attempts': 2,
+        'history_retry_delay_seconds': 0,
+    })
+
+    adapter.connect()
+    assert adapter.get_etf_history(
+        '510300',
+        '2026-01-01',
+        '2026-01-02',
+    ) == []
+
+    status = adapter.health_check()
+    assert status['last_history_provider'] == 'default'
+    assert status['last_history_attempts'] == 2
+
+
+def test_real_history_provider_does_not_retry_invalid_payload_before_fallback(
+    monkeypatch,
+):
+    responses = [
+        CompletedProcess(['primary'], 0, 'not json', ''),
+        CompletedProcess(['backup'], 0, '[]', ''),
+    ]
+    monkeypatch.setattr(
+        mx_data_adapter.subprocess,
+        'run',
+        lambda *_args, **_kwargs: responses.pop(0),
+    )
+    adapter = MXDataAdapter({
+        'mode': 'real',
+        'history_providers': [
+            {'name': 'primary', 'command': [sys.executable, 'primary.py']},
+            {'name': 'backup', 'command': [sys.executable, 'backup.py']},
+        ],
+        'history_retry_attempts': 3,
+    })
+
+    adapter.connect()
+    assert adapter.get_etf_history(
+        '510300',
+        '2026-01-01',
+        '2026-01-02',
+    ) == []
+    assert adapter.health_check()['last_history_attempts'] == 2
+
+
+def test_real_history_providers_report_aggregated_failures(monkeypatch):
+    monkeypatch.setattr(
+        mx_data_adapter.subprocess,
+        'run',
+        lambda command, **_kwargs: CompletedProcess(
+            command,
+            1,
+            '',
+            f'{command[-1]} unavailable',
+        ),
+    )
+    adapter = MXDataAdapter({
+        'mode': 'real',
+        'history_providers': [
+            {'name': 'primary', 'command': [sys.executable, 'primary.py']},
+            {'name': 'backup', 'command': [sys.executable, 'backup.py']},
+        ],
+        'history_retry_attempts': 2,
+    })
+
+    adapter.connect()
+    with pytest.raises(ServiceUnavailableError) as exc:
+        adapter.get_etf_history('510300', '2026-01-01', '2026-01-02')
+
+    assert exc.value.error_code == 'REAL_HISTORY_PROVIDERS_FAILED'
+    assert 'primary attempt 1' in str(exc.value)
+    assert 'backup attempt 2' in str(exc.value)
+    status = adapter.health_check()
+    assert status['last_history_provider'] is None
+    assert status['last_history_attempts'] == 4
+    assert 'primary attempt 1' in status['last_history_error']
+
+
+def test_real_history_providers_reject_ambiguous_or_duplicate_configuration():
+    invalid_configs = [
+        {
+            'history_command': [sys.executable, 'legacy.py'],
+            'history_providers': [
+                {'name': 'primary', 'command': [sys.executable, 'primary.py']},
+            ],
+        },
+        {
+            'history_providers': [
+                {'name': 'same', 'command': [sys.executable, 'primary.py']},
+                {'name': 'same', 'command': [sys.executable, 'backup.py']},
+            ],
+        },
+        {'history_providers': ['not-an-object']},
+    ]
+
+    for config in invalid_configs:
+        adapter = MXDataAdapter({'mode': 'real', **config})
+        adapter.connect()
+
+        assert adapter.health_check()['connected'] is False
+        with pytest.raises(ServiceUnavailableError) as exc:
+            adapter.get_etf_history('510300', '2026-01-01', '2026-01-02')
+        assert exc.value.error_code == 'REAL_HISTORY_PROVIDER_NOT_CONFIGURED'
+
+
+def test_real_history_provider_rejects_invalid_retry_configuration():
+    invalid_configs = [
+        {'history_retry_attempts': 0},
+        {'history_retry_attempts': True},
+        {'history_retry_delay_seconds': -1},
+        {'history_retry_delay_seconds': float('nan')},
+    ]
+
+    for extra_config in invalid_configs:
+        adapter = MXDataAdapter({
+            'mode': 'real',
+            'history_command': [sys.executable, 'provider.py'],
+            **extra_config,
+        })
+        adapter.connect()
+
+        assert adapter.health_check()['connected'] is False
 
 
 def test_real_mode_non_history_operations_remain_unavailable(tmp_path):

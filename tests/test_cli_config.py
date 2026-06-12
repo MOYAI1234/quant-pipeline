@@ -325,7 +325,7 @@ def test_validate_config_warns_for_real_mx_data_history_provider_only():
     assert result['valid'] is True
     assert result['errors'] == []
     assert result['warnings'] == [
-        'data.mx_data.mode=real 当前仅支持 history_command 历史行情 provider',
+        'data.mx_data.mode=real 当前仅支持命令式历史行情 provider',
     ]
 
 
@@ -337,6 +337,66 @@ def test_validate_config_rejects_invalid_mx_data_history_command():
 
     assert result['valid'] is False
     assert 'data.mx_data.history_command 必须是非空字符串数组' in result['errors']
+
+
+def test_validate_config_accepts_named_history_providers():
+    config = deepcopy(SYSTEM_CONFIG)
+    config['data']['mx_data']['mode'] = 'real'
+    config['data']['mx_data']['history_providers'] = [
+        {
+            'name': 'primary',
+            'command': ['python', 'primary.py', '{symbol}'],
+        },
+        {
+            'name': 'backup',
+            'command': ['python', 'backup.py', '{symbol}'],
+        },
+    ]
+    config['data']['mx_data']['history_retry_attempts'] = 2
+    config['data']['mx_data']['history_retry_delay_seconds'] = 0.5
+
+    result = validate_config(config)
+
+    assert result['valid'] is True
+    assert result['errors'] == []
+    assert result['warnings'] == [
+        'data.mx_data.mode=real 当前仅支持命令式历史行情 provider',
+    ]
+
+
+def test_validate_config_rejects_invalid_history_provider_settings():
+    config = deepcopy(SYSTEM_CONFIG)
+    config['data']['mx_data']['history_command'] = ['python', 'legacy.py']
+    config['data']['mx_data']['history_providers'] = [
+        {'name': 'same', 'command': ['python', 'primary.py']},
+        {'name': 'same', 'command': 'python backup.py'},
+    ]
+    config['data']['mx_data']['history_retry_attempts'] = 0
+    config['data']['mx_data']['history_retry_delay_seconds'] = -1
+
+    result = validate_config(config)
+
+    assert result['valid'] is False
+    assert (
+        'data.mx_data.history_command 与 history_providers 不能同时配置'
+        in result['errors']
+    )
+    assert (
+        'data.mx_data.history_providers.name 不能重复: same'
+        in result['errors']
+    )
+    assert (
+        'data.mx_data.history_providers[1].command 必须是非空字符串数组'
+        in result['errors']
+    )
+    assert (
+        'data.mx_data.history_retry_attempts 必须是正整数'
+        in result['errors']
+    )
+    assert (
+        'data.mx_data.history_retry_delay_seconds 不能小于 0'
+        in result['errors']
+    )
 
 
 def test_validate_config_rejects_invalid_adapter_mode():
