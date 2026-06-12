@@ -55,6 +55,12 @@ def _validate_data_config(data_config: dict | None, errors: list, warnings: list
             f"data.{key}",
             errors,
         )
+    _validate_optional_non_negative_number(
+        data_config,
+        'history_cache_ttl_seconds',
+        'data.history_cache_ttl_seconds',
+        errors,
+    )
     _validate_optional_nullable_positive_number(
         data_config,
         'max_timestamp_future_skew_seconds',

@@ -4,6 +4,8 @@ import sys
 from copy import deepcopy
 from pathlib import Path
 
+import pytest
+
 from cli.commands import _unlink_if_present
 from config.settings import SYSTEM_CONFIG
 from config.validation import validate_config
@@ -468,6 +470,17 @@ def test_validate_config_rejects_excessive_history_retry_settings():
         'data.mx_data.history_retry_delay_seconds 不能大于 60'
         in result['errors']
     )
+
+
+@pytest.mark.parametrize('value', [-1, '3600'])
+def test_validate_config_rejects_invalid_history_cache_ttl(value):
+    config = deepcopy(SYSTEM_CONFIG)
+    config['data']['history_cache_ttl_seconds'] = value
+
+    result = validate_config(config)
+
+    assert result['valid'] is False
+    assert 'data.history_cache_ttl_seconds 不能小于 0' in result['errors']
 
 
 def test_validate_config_rejects_invalid_adapter_mode():

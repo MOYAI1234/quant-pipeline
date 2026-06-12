@@ -2,6 +2,7 @@ SYSTEM_CONFIG = {
     'data': {
         'max_realtime_age_seconds': None,
         'max_nav_age_seconds': None,
+        'history_cache_ttl_seconds': 3600,
         'max_timestamp_future_skew_seconds': 60,
         'timestamp_timezone_offset': '+08:00',
         'mx_data': {

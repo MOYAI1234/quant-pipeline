@@ -47,6 +47,19 @@ class ExplodingMXDataAdapter(BrokenMXDataAdapter):
         raise RuntimeError('upstream timeout')
 
 
+class CountingHistoryAdapter(BrokenMXDataAdapter):
+
+    def __init__(self, histories):
+        super().__init__()
+        self.histories = list(histories)
+        self.calls = 0
+
+    def get_etf_history(self, symbol, start_date, end_date):
+        history = self.histories[min(self.calls, len(self.histories) - 1)]
+        self.calls += 1
+        return history
+
+
 def _manager_with_adapter(adapter, config_overrides=None):
     config = {
         'mx_data': {'mode': 'mock'},
@@ -575,6 +588,63 @@ def test_expired_quote_cache_refetches_from_adapter():
     assert first_quote['price'] == 4.0
     assert refetched_quote['price'] == 4.2
     assert refetched_quote['timestamp'] == '2026-06-02 10:01:00'
+
+
+def test_get_etf_history_uses_configured_cache_ttl():
+    history = [{
+        'date': '2026-06-02',
+        'open': 4.0,
+        'high': 4.1,
+        'low': 3.9,
+        'close': 4.05,
+        'volume': 100,
+        'amount': 40500.0,
+    }]
+    manager = _manager_with_adapter(
+        CountingHistoryAdapter([history]),
+        {'history_cache_ttl_seconds': 30},
+    )
+
+    manager.get_etf_history('510300', '2026-06-01', '2026-06-02')
+
+    remaining_cache_ttl = (
+        manager.cache._cache['history_510300_2026-06-01_2026-06-02']['expire_at']
+        - time.time()
+    )
+    assert 0 < remaining_cache_ttl <= 31
+
+
+def test_get_etf_history_can_disable_cache_with_zero_ttl():
+    first_history = [{
+        'date': '2026-06-02',
+        'open': 4.0,
+        'high': 4.1,
+        'low': 3.9,
+        'close': 4.05,
+        'volume': 100,
+        'amount': 40500.0,
+    }]
+    second_history = [{
+        'date': '2026-06-02',
+        'open': 4.2,
+        'high': 4.3,
+        'low': 4.1,
+        'close': 4.25,
+        'volume': 120,
+        'amount': 51000.0,
+    }]
+    adapter = CountingHistoryAdapter([first_history, second_history])
+    manager = _manager_with_adapter(
+        adapter,
+        {'history_cache_ttl_seconds': 0},
+    )
+
+    first = manager.get_etf_history('510300', '2026-06-01', '2026-06-02')
+    second = manager.get_etf_history('510300', '2026-06-01', '2026-06-02')
+
+    assert adapter.calls == 2
+    assert first[0]['close'] == 4.05
+    assert second[0]['close'] == 4.25
 
 
 def test_data_manager_wraps_unexpected_adapter_errors():
