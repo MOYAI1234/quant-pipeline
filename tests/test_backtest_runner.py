@@ -650,6 +650,27 @@ def test_rotation_backtest_runner_retries_after_volume_rejection():
     assert runner.strategy.last_rebalance is None
 
 
+def test_rotation_backtest_runner_does_not_complete_partial_rebalance():
+    runner = RotationBacktestRunner(_rotation_strategy(), {
+        'initial_capital': 100000,
+        'max_volume_participation': 0.001,
+        'allow_partial_fills': True,
+    })
+
+    result = runner.run(sample_rotation_history())
+
+    assert result['trade_count'] == 3
+    assert result['rejected_order_count'] == 0
+    assert [trade['partial_fill'] for trade in result['trades']] == [
+        True,
+        False,
+        True,
+    ]
+    assert runner.strategy.pending_rebalance_count == 0
+    assert runner.strategy.pending_rebalance_failed is True
+    assert runner.strategy.last_rebalance is None
+
+
 def test_rotation_backtest_runner_classifies_zero_lot_as_executor_rejection():
     runner = RotationBacktestRunner(_rotation_strategy(), {
         'initial_capital': 1000,
