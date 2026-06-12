@@ -53,6 +53,7 @@ def test_cli_diagnose_json_outputs_structured_report(tmp_path):
     assert report['ready'] is True
     assert report['config']['valid'] is True
     assert report['data']['available'] is True
+    assert report['data']['cache']['history_ttl_seconds'] == 3600
     assert report['state']['ok'] is True
     assert report['state']['exists'] is False
     assert report['state']['has_data'] is False
