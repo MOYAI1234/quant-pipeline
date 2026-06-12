@@ -1,8 +1,14 @@
 import math
+from string import Formatter
 
 
 MAX_HISTORY_RETRY_ATTEMPTS = 10
 MAX_HISTORY_RETRY_DELAY_SECONDS = 60
+ALLOWED_HISTORY_PLACEHOLDERS = frozenset({
+    'symbol',
+    'start_date',
+    'end_date',
+})
 
 
 def validate_config(config: dict) -> dict:
@@ -235,6 +241,12 @@ def _validate_adapter_config(
             )
         ):
             errors.append('data.mx_data.history_command 必须是非空字符串数组')
+        elif history_command is not None:
+            _validate_history_command_template(
+                history_command,
+                'data.mx_data.history_command',
+                errors,
+            )
 
     if name == 'data.mx_data':
         _validate_history_providers(adapter_config, errors)
@@ -301,6 +313,34 @@ def _validate_history_providers(adapter_config: dict, errors: list) -> None:
             )
         ):
             errors.append(f'{prefix}.command 必须是非空字符串数组')
+        else:
+            _validate_history_command_template(
+                command,
+                f'{prefix}.command',
+                errors,
+            )
+
+
+def _validate_history_command_template(
+    command: list[str],
+    name: str,
+    errors: list,
+) -> None:
+    for part in command:
+        try:
+            parsed = Formatter().parse(part)
+            for _, field_name, format_spec, conversion in parsed:
+                if field_name is None:
+                    continue
+                if field_name not in ALLOWED_HISTORY_PLACEHOLDERS:
+                    errors.append(f'{name} 包含未知占位符: {field_name}')
+                    return
+                if format_spec or conversion:
+                    errors.append(f'{name} 不支持占位符格式化参数')
+                    return
+        except ValueError as exc:
+            errors.append(f'{name} 模板无效: {exc}')
+            return
 
 
 def _validate_positive_number(value, name: str, errors: list) -> None:

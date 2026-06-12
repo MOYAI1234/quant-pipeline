@@ -339,6 +339,23 @@ def test_validate_config_rejects_invalid_mx_data_history_command():
     assert 'data.mx_data.history_command 必须是非空字符串数组' in result['errors']
 
 
+def test_validate_config_rejects_unknown_history_command_placeholder():
+    config = deepcopy(SYSTEM_CONFIG)
+    config['data']['mx_data']['history_command'] = [
+        'python',
+        'fetch_history.py',
+        '{ticker}',
+    ]
+
+    result = validate_config(config)
+
+    assert result['valid'] is False
+    assert (
+        'data.mx_data.history_command 包含未知占位符: ticker'
+        in result['errors']
+    )
+
+
 def test_validate_config_accepts_named_history_providers():
     config = deepcopy(SYSTEM_CONFIG)
     config['data']['mx_data']['mode'] = 'real'
@@ -362,6 +379,42 @@ def test_validate_config_accepts_named_history_providers():
     assert result['warnings'] == [
         'data.mx_data.mode=real 当前仅支持命令式历史行情 provider',
     ]
+
+
+def test_validate_config_rejects_unknown_history_provider_placeholder():
+    config = deepcopy(SYSTEM_CONFIG)
+    config['data']['mx_data']['history_providers'] = [
+        {
+            'name': 'primary',
+            'command': ['python', 'primary.py', '{ticker}'],
+        },
+    ]
+
+    result = validate_config(config)
+
+    assert result['valid'] is False
+    assert (
+        'data.mx_data.history_providers[0].command 包含未知占位符: ticker'
+        in result['errors']
+    )
+
+
+def test_validate_config_rejects_history_provider_placeholder_formatting():
+    config = deepcopy(SYSTEM_CONFIG)
+    config['data']['mx_data']['history_providers'] = [
+        {
+            'name': 'primary',
+            'command': ['python', 'primary.py', '{symbol!r}'],
+        },
+    ]
+
+    result = validate_config(config)
+
+    assert result['valid'] is False
+    assert (
+        'data.mx_data.history_providers[0].command 不支持占位符格式化参数'
+        in result['errors']
+    )
 
 
 def test_validate_config_rejects_invalid_history_provider_settings():
