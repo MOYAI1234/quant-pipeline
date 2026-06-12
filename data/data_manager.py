@@ -181,6 +181,11 @@ class DataManager:
             'mx_search': self.mx_search.health_check(),
         }
 
+    def cache_policy(self) -> dict:
+        return {
+            'history_ttl_seconds': self.history_cache_ttl_seconds,
+        }
+
     def is_mock_mode(self) -> bool:
         return all(
             status.get('mock', False)

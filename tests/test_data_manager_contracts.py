@@ -614,6 +614,15 @@ def test_get_etf_history_uses_configured_cache_ttl():
     assert 0 < remaining_cache_ttl <= 31
 
 
+def test_cache_policy_reports_history_cache_ttl():
+    manager = _manager_with_adapter(
+        BrokenMXDataAdapter(),
+        {'history_cache_ttl_seconds': 30},
+    )
+
+    assert manager.cache_policy() == {'history_ttl_seconds': 30}
+
+
 def test_get_etf_history_can_disable_cache_with_zero_ttl():
     first_history = [{
         'date': '2026-06-02',

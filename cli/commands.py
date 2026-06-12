@@ -109,7 +109,10 @@ def cmd_health(args):
     system = QuantPipeline(_build_runtime_config(args))
     try:
         system.data_manager.connect()
-        summary = _build_health_summary(system.data_manager.health_check())
+        summary = _build_health_summary(
+            system.data_manager.health_check(),
+            cache_policy=_data_cache_policy(system.data_manager),
+        )
     finally:
         system.data_manager.disconnect()
 
@@ -716,7 +719,10 @@ def _diagnose_data_sources(config: dict) -> dict:
         }
     try:
         manager.connect()
-        return _build_health_summary(manager.health_check())
+        return _build_health_summary(
+            manager.health_check(),
+            cache_policy=_data_cache_policy(manager),
+        )
     finally:
         manager.disconnect()
 
@@ -787,7 +793,10 @@ def _state_has_data(state: dict) -> bool:
     )
 
 
-def _build_health_summary(adapter_statuses: dict) -> dict:
+def _build_health_summary(
+    adapter_statuses: dict,
+    cache_policy: dict | None = None,
+) -> dict:
     return {
         'available': bool(adapter_statuses) and all(
             status.get('available', False)
@@ -798,7 +807,14 @@ def _build_health_summary(adapter_statuses: dict) -> dict:
             for status in adapter_statuses.values()
         ),
         'adapters': adapter_statuses,
+        'cache': cache_policy or {},
     }
+
+
+def _data_cache_policy(manager) -> dict:
+    if not hasattr(manager, 'cache_policy'):
+        return {}
+    return manager.cache_policy()
 
 
 def _render_health_summary(summary: dict) -> str:
@@ -807,6 +823,9 @@ def _render_health_summary(summary: dict) -> str:
     lines = [f"数据源状态: {overall} ({mode})"]
     if summary.get('error'):
         lines.append(f"- error: {summary['error']}")
+    if summary.get('cache'):
+        history_ttl = summary['cache'].get('history_ttl_seconds')
+        lines.append(f"- 缓存: history_ttl_seconds={history_ttl}")
     for name, status in summary['adapters'].items():
         availability = '可用' if status.get('available') else '不可用'
         error = status.get('error') or '-'
