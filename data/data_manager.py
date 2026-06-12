@@ -44,6 +44,10 @@ class DataManager:
         self.mx_xuangu = MX_XuanguAdapter(config.get('mx_xuangu', {}))
         self.mx_search = MX_SearchAdapter(config.get('mx_search', {}))
         self.cache = DataCache(config.get('cache_ttl', 300))
+        self.history_cache_ttl_seconds = config.get(
+            'history_cache_ttl_seconds',
+            3600,
+        )
         self.max_realtime_age_seconds = config.get('max_realtime_age_seconds')
         self.max_nav_age_seconds = config.get('max_nav_age_seconds')
         self.max_timestamp_future_skew_seconds = config.get(
@@ -110,7 +114,7 @@ class DataManager:
             self.HISTORY_FIELDS,
             source='mx_data.history',
         )
-        self.cache.set(cache_key, data, ttl=3600)
+        self.cache.set(cache_key, data, ttl=self.history_cache_ttl_seconds)
         return data
 
     def get_etf_nav(self, symbol: str) -> dict:
