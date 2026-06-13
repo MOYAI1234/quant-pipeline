@@ -9,6 +9,9 @@ ALLOWED_HISTORY_PLACEHOLDERS = frozenset({
     'start_date',
     'end_date',
 })
+SUPPORTED_HISTORY_PROVIDER_WARNING = (
+    'data.mx_data.mode=real 当前仅支持命令式历史行情 provider'
+)
 
 
 def validate_config(config: dict) -> dict:
@@ -231,9 +234,7 @@ def _validate_adapter_config(
             adapter_config.get('history_command')
             or adapter_config.get('history_providers')
         ):
-            warnings.append(
-                'data.mx_data.mode=real 当前仅支持命令式历史行情 provider'
-            )
+            warnings.append(SUPPORTED_HISTORY_PROVIDER_WARNING)
         else:
             warnings.append(f"{name}.mode=real 当前仍是未实现适配器")
 

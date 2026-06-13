@@ -83,6 +83,39 @@ def test_cli_config_validate_strict_warnings_passes_without_warnings():
     assert completed.stdout.strip() == '配置校验: OK'
 
 
+def test_cli_config_validate_strict_warnings_allows_supported_history_provider_notice(
+    tmp_path,
+):
+    config = deepcopy(SYSTEM_CONFIG)
+    config['data']['mx_data']['mode'] = 'real'
+    config['data']['mx_data']['history_command'] = [
+        'python',
+        'fetch_history.py',
+        '{symbol}',
+    ]
+    config_path = tmp_path / 'supported-history-provider.json'
+    config_path.write_text(json.dumps(config), encoding='utf-8')
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / 'cli' / 'commands.py'),
+            'config',
+            'validate',
+            '--config',
+            str(config_path),
+            '--strict-warnings',
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=PROJECT_ROOT,
+    )
+
+    assert '配置校验: OK' in completed.stdout
+    assert 'data.mx_data.mode=real 当前仅支持命令式历史行情 provider' in completed.stdout
+
+
 def test_cli_config_validate_strict_warnings_fails_on_warning(tmp_path):
     config = deepcopy(SYSTEM_CONFIG)
     config['data']['history_cache_ttl_seconds'] = 0

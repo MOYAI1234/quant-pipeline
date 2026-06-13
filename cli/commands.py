@@ -35,7 +35,7 @@ from backtest.history_adapter import (
 from backtest.trading_calendar import TradingCalendar
 from main import QuantPipeline
 from config.settings import SYSTEM_CONFIG
-from config.validation import validate_config
+from config.validation import SUPPORTED_HISTORY_PROVIDER_WARNING, validate_config
 from data.contracts import AdapterError
 from data.data_manager import DataManager
 from persistence import JsonStateStore
@@ -142,8 +142,18 @@ def cmd_config_validate(args):
         print(_render_config_validation(result))
     if not result['valid']:
         raise SystemExit(1)
-    if getattr(args, 'strict_warnings', False) and result['warnings']:
+    if (
+        getattr(args, 'strict_warnings', False)
+        and _strict_config_warnings(result['warnings'])
+    ):
         raise SystemExit(1)
+
+
+def _strict_config_warnings(warnings):
+    return [
+        warning for warning in warnings
+        if warning != SUPPORTED_HISTORY_PROVIDER_WARNING
+    ]
 
 
 def cmd_config_show(args):
