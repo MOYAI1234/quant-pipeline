@@ -62,6 +62,7 @@ def test_cli_config_validate_json_outputs_structured_result():
         'valid': True,
         'errors': [],
         'warnings': [],
+        'strict_warnings': [],
     }
 
 
@@ -116,6 +117,43 @@ def test_cli_config_validate_strict_warnings_allows_supported_history_provider_n
     assert 'data.mx_data.mode=real 当前仅支持命令式历史行情 provider' in completed.stdout
 
 
+def test_cli_config_validate_json_marks_supported_history_provider_notice_non_blocking(
+    tmp_path,
+):
+    config = deepcopy(SYSTEM_CONFIG)
+    config['data']['mx_data']['mode'] = 'real'
+    config['data']['mx_data']['history_command'] = [
+        'python',
+        'fetch_history.py',
+        '{symbol}',
+    ]
+    config_path = tmp_path / 'supported-history-provider.json'
+    config_path.write_text(json.dumps(config), encoding='utf-8')
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / 'cli' / 'commands.py'),
+            'config',
+            'validate',
+            '--config',
+            str(config_path),
+            '--json',
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=PROJECT_ROOT,
+    )
+
+    result = json.loads(completed.stdout)
+
+    assert result['warnings'] == [
+        'data.mx_data.mode=real 当前仅支持命令式历史行情 provider',
+    ]
+    assert result['strict_warnings'] == []
+
+
 def test_cli_config_validate_strict_warnings_fails_on_warning(tmp_path):
     config = deepcopy(SYSTEM_CONFIG)
     config['data']['history_cache_ttl_seconds'] = 0
@@ -148,6 +186,51 @@ def test_cli_config_validate_strict_warnings_fails_on_warning(tmp_path):
     assert '配置校验: OK' in completed.stdout
     assert '警告:' in completed.stdout
     assert 'data.history_cache_ttl_seconds=0 会禁用历史行情缓存' in completed.stdout
+
+
+def test_cli_config_validate_json_reports_strict_warnings(tmp_path):
+    config = deepcopy(SYSTEM_CONFIG)
+    config['data']['history_cache_ttl_seconds'] = 0
+    config['data']['mx_data']['mode'] = 'real'
+    config['data']['mx_data']['history_command'] = [
+        'python',
+        'fetch_history.py',
+        '{symbol}',
+    ]
+    config_path = tmp_path / 'strict-warning-config.json'
+    config_path.write_text(json.dumps(config), encoding='utf-8')
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / 'cli' / 'commands.py'),
+            'config',
+            'validate',
+            '--config',
+            str(config_path),
+            '--json',
+            '--strict-warnings',
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=PROJECT_ROOT,
+    )
+
+    result = json.loads(completed.stdout)
+
+    assert completed.returncode == 1
+    assert result['valid'] is True
+    assert result['strict_warnings'] == [
+        (
+            'data.history_cache_ttl_seconds=0 会禁用历史行情缓存，'
+            '真实 provider 可能频繁请求上游'
+        ),
+    ]
+    assert result['warnings'] == [
+        'data.mx_data.mode=real 当前仅支持命令式历史行情 provider',
+        *result['strict_warnings'],
+    ]
 
 
 def test_cli_config_show_outputs_default_config():
