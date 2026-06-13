@@ -33,7 +33,7 @@ python cli\commands.py history export-grid --help
 python cli\commands.py history export-rotation --help
 ```
 
-当前离线基线：`pytest` 应通过 356 个测试，并跳过 1 个显式启用的 AKShare live test。
+当前离线基线：`pytest` 应通过 357 个测试，并跳过 1 个显式启用的 AKShare live test。
 
 ## 分层测试
 
@@ -54,6 +54,7 @@ python -m pytest tests\test_adapters.py tests\test_data_manager_contracts.py tes
 - 非历史行情的 `real` 操作未实现时必须明确不可用，并抛出服务不可用错误。
 - `DataManager` 必须校验实时行情、净值和历史行情的字段、数值类型、非负单位和可选时效，并支持配置历史行情缓存 TTL。
 - CLI `health` / `diagnose` 必须暴露历史行情缓存策略，便于确认 provider 是否会被频繁请求。
+- `config validate` 必须在真实历史 provider 启用且历史缓存 TTL 为 0 时给出 warning。
 
 ### 策略、风控与模拟执行
 
