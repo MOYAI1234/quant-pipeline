@@ -282,6 +282,7 @@ class QuantPipeline:
         portfolio = self.executor.get_portfolio()
         strategy_summary = self._get_strategy_summary()
         data_health = self._get_data_health()
+        cache_policy = self.data_manager.cache_policy()
         alerts = self.monitor.get_alert_history()
         if report_type == 'weekly':
             return self.report_generator.generate_weekly_report(
@@ -289,12 +290,14 @@ class QuantPipeline:
                 strategy_summary,
                 data_health,
                 alerts,
+                cache_policy=cache_policy,
             )
         return self.report_generator.generate_daily_report(
             portfolio,
             strategy_summary,
             data_health,
             alerts,
+            cache_policy=cache_policy,
         )
 
     def _get_data_health(self) -> dict:

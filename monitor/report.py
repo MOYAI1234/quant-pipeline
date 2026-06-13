@@ -12,6 +12,7 @@ class ReportGenerator:
         strategy_summary: dict,
         data_health: dict | None = None,
         alerts: list | None = None,
+        cache_policy: dict | None = None,
     ) -> str:
         report = []
         report.append(f"# 每日报告 - {datetime.now().strftime('%Y-%m-%d')}")
@@ -28,7 +29,7 @@ class ReportGenerator:
             report.append(f"- 交易次数: {perf.get('total_trades', 0)}")
             report.append(f"- 胜率: {perf.get('win_rate', 0):.2%}")
             report.append(f"- 总收益: {perf.get('total_profit', 0):.2f}")
-        self._append_data_health(report, data_health)
+        self._append_data_health(report, data_health, cache_policy)
         self._append_alerts(report, alerts)
         return "\n".join(report)
 
@@ -38,6 +39,7 @@ class ReportGenerator:
         strategy_summary: dict,
         data_health: dict | None = None,
         alerts: list | None = None,
+        cache_policy: dict | None = None,
     ) -> str:
         report = []
         report.append(f"# 周度报告 - {datetime.now().strftime('%Y-%m-%d')}")
@@ -45,11 +47,16 @@ class ReportGenerator:
         report.append("## 账户状态")
         report.append(f"- 总价值: {portfolio.get('total_value', 0):.2f}")
         report.append(f"- 盈亏: {portfolio.get('pnl', 0):.2f} ({portfolio.get('pnl_percent', 0):.2f}%)")
-        self._append_data_health(report, data_health)
+        self._append_data_health(report, data_health, cache_policy)
         self._append_alerts(report, alerts)
         return "\n".join(report)
 
-    def _append_data_health(self, report: list, data_health: dict | None):
+    def _append_data_health(
+        self,
+        report: list,
+        data_health: dict | None,
+        cache_policy: dict | None = None,
+    ):
         if data_health is None:
             return
 
@@ -67,6 +74,9 @@ class ReportGenerator:
         report.append("")
         report.append("## 数据源状态")
         report.append(f"- 总体: {overall} ({mode})")
+        if cache_policy:
+            history_ttl = cache_policy.get('history_ttl_seconds')
+            report.append(f"- 缓存: history_ttl_seconds={history_ttl}")
         for name, status in data_health.items():
             availability = '可用' if status.get('available') else '不可用'
             error = status.get('error') or '-'
