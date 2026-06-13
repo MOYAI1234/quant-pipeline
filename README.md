@@ -98,9 +98,10 @@ python cli\commands.py config show --config config.local.json
 python cli\commands.py config validate
 python cli\commands.py config validate --json
 python cli\commands.py config validate --config path\to\config.json
+python cli\commands.py config validate --config path\to\config.json --strict-warnings
 ```
 
-`config init` 默认生成被 `.gitignore` 忽略的 `config.local.json`，已有文件不会被覆盖；只有显式添加 `--force` 才会覆盖。真实 API key、token 和私有 provider 路径应只保存在本地配置或环境变量中。
+`config init` 默认生成被 `.gitignore` 忽略的 `config.local.json`，已有文件不会被覆盖；只有显式添加 `--force` 才会覆盖。真实 API key、token 和私有 provider 路径应只保存在本地配置或环境变量中。生产或 CI 场景可使用 `--strict-warnings` 将 warning 也视为失败。
 
 运行内置样例回测：
 
@@ -300,7 +301,7 @@ python -m compileall -q .
 - CLI `diagnose` 对配置、数据源、缓存策略和状态文件的启动前诊断
 - CLI `report` / `ReportGenerator` 对数据源健康状态、缓存策略和告警事件的报告输出
 - CLI `alerts` 对本地 JSONL 告警事件的文本/JSON 输出、limit 和错误处理
-- CLI `config validate` 对内置配置和 JSON 配置文件的校验，包括真实历史 provider 禁用缓存时的频率风险 warning
+- CLI `config validate` 对内置配置和 JSON 配置文件的校验，包括真实历史 provider 禁用缓存时的频率风险 warning 和 `--strict-warnings` 门禁
 - CLI `config show/init` 对有效配置查看和本地模板安全生成
 - `DataManager` 对实时行情、净值和历史行情的字段、数值类型、非负单位、可选时效契约校验、可配置历史缓存 TTL 和健康输出
 - `DataManager` 缓存过期重取和 adapter 异常包装
