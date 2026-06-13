@@ -692,15 +692,21 @@ def _build_diagnostic_config(args) -> dict:
 
 def _build_diagnostic_report(config: dict) -> dict:
     config_result = validate_config(config)
+    strict_warnings = strict_config_warnings(config_result['warnings'])
+    config_summary = {
+        **config_result,
+        'strict_warnings': strict_warnings,
+    }
     data_summary = _diagnose_data_sources(config)
     state_summary = _diagnose_state(config)
     return {
         'ready': (
             config_result['valid']
+            and not strict_warnings
             and data_summary['available']
             and state_summary['ok']
         ),
-        'config': config_result,
+        'config': config_summary,
         'data': data_summary,
         'state': state_summary,
     }
