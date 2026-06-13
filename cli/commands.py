@@ -35,7 +35,7 @@ from backtest.history_adapter import (
 from backtest.trading_calendar import TradingCalendar
 from main import QuantPipeline
 from config.settings import SYSTEM_CONFIG
-from config.validation import validate_config
+from config.validation import SUPPORTED_HISTORY_PROVIDER_WARNING, validate_config
 from data.contracts import AdapterError
 from data.data_manager import DataManager
 from persistence import JsonStateStore
@@ -142,6 +142,18 @@ def cmd_config_validate(args):
         print(_render_config_validation(result))
     if not result['valid']:
         raise SystemExit(1)
+    if (
+        getattr(args, 'strict_warnings', False)
+        and _strict_config_warnings(result['warnings'])
+    ):
+        raise SystemExit(1)
+
+
+def _strict_config_warnings(warnings):
+    return [
+        warning for warning in warnings
+        if warning != SUPPORTED_HISTORY_PROVIDER_WARNING
+    ]
 
 
 def cmd_config_show(args):
@@ -1019,6 +1031,11 @@ def main():
         help='JSON 配置文件路径，默认校验内置配置',
     )
     validate_parser.add_argument('--json', action='store_true', help='输出 JSON 格式')
+    validate_parser.add_argument(
+        '--strict-warnings',
+        action='store_true',
+        help='将 warning 视为失败，适合 CI 或生产配置门禁',
+    )
     show_parser = config_subparsers.add_parser('show', help='显示有效配置')
     show_parser.add_argument(
         '--config',
