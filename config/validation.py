@@ -12,6 +12,9 @@ ALLOWED_HISTORY_PLACEHOLDERS = frozenset({
 SUPPORTED_HISTORY_PROVIDER_WARNING = (
     'data.mx_data.mode=real 当前仅支持命令式历史行情 provider'
 )
+NON_BLOCKING_WARNINGS = frozenset({
+    SUPPORTED_HISTORY_PROVIDER_WARNING,
+})
 
 
 def validate_config(config: dict) -> dict:
@@ -38,6 +41,13 @@ def validate_config(config: dict) -> dict:
         'errors': errors,
         'warnings': warnings,
     }
+
+
+def strict_config_warnings(warnings: list[str]) -> list[str]:
+    return [
+        warning for warning in warnings
+        if warning not in NON_BLOCKING_WARNINGS
+    ]
 
 
 def _validate_required_sections(config: dict, errors: list) -> None:
