@@ -331,6 +331,31 @@ def test_validate_config_warns_for_real_mx_data_history_provider_only():
     ]
 
 
+def test_validate_config_warns_when_real_history_cache_is_disabled():
+    config = deepcopy(SYSTEM_CONFIG)
+    config['data']['history_cache_ttl_seconds'] = 0
+    config['data']['mx_data']['mode'] = 'real'
+    config['data']['mx_data']['history_command'] = [
+        'python',
+        'fetch_history.py',
+        '{symbol}',
+        '{start_date}',
+        '{end_date}',
+    ]
+
+    result = validate_config(config)
+
+    assert result['valid'] is True
+    assert result['errors'] == []
+    assert result['warnings'] == [
+        'data.mx_data.mode=real 当前仅支持命令式历史行情 provider',
+        (
+            'data.history_cache_ttl_seconds=0 会禁用历史行情缓存，'
+            '真实 provider 可能频繁请求上游'
+        ),
+    ]
+
+
 def test_validate_config_rejects_invalid_mx_data_history_command():
     config = deepcopy(SYSTEM_CONFIG)
     config['data']['mx_data']['history_command'] = 'python fetch_history.py'

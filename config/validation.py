@@ -82,6 +82,7 @@ def _validate_data_config(data_config: dict | None, errors: list, warnings: list
             warnings,
             require_mode=True,
         )
+    _warn_disabled_real_history_cache(data_config, warnings)
 
 
 def _validate_account_config(account_config: dict | None, errors: list) -> None:
@@ -325,6 +326,24 @@ def _validate_history_providers(adapter_config: dict, errors: list) -> None:
                 f'{prefix}.command',
                 errors,
             )
+
+
+def _warn_disabled_real_history_cache(data_config: dict, warnings: list) -> None:
+    mx_data_config = data_config.get('mx_data')
+    if not isinstance(mx_data_config, dict):
+        return
+    if mx_data_config.get('mode') != 'real':
+        return
+    if not (
+        mx_data_config.get('history_command')
+        or mx_data_config.get('history_providers')
+    ):
+        return
+    if data_config.get('history_cache_ttl_seconds') == 0:
+        warnings.append(
+            'data.history_cache_ttl_seconds=0 会禁用历史行情缓存，'
+            '真实 provider 可能频繁请求上游'
+        )
 
 
 def _validate_history_command_template(

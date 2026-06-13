@@ -242,7 +242,7 @@ python cli\commands.py history export-rotation --config path\to\config.json --et
 }
 ```
 
-同一 provider 的进程启动失败、非零退出或超时会按 `history_retry_attempts` 重试，然后再切换到下一个 provider。非法 UTF-8、非法 JSON 或错误输出结构不会重复请求同一来源，但仍会尝试备源。重试次数范围为 1-10，等待时间范围为 0-60 秒；等待使用当前同步 pipeline 的阻塞式 sleep。`health --json` 会保留最近成功来源、总尝试次数、结构化失败链和历史缓存 TTL，便于发现“备源成功但主源已退化”或“缓存窗口过长”的情况。历史结果缓存仍由 `DataManager` 负责，默认 `data.history_cache_ttl_seconds=3600`；如需调试 provider 可设为 `0` 禁用缓存，生产环境应避免过低 TTL 造成上游频率压力。
+同一 provider 的进程启动失败、非零退出或超时会按 `history_retry_attempts` 重试，然后再切换到下一个 provider。非法 UTF-8、非法 JSON 或错误输出结构不会重复请求同一来源，但仍会尝试备源。重试次数范围为 1-10，等待时间范围为 0-60 秒；等待使用当前同步 pipeline 的阻塞式 sleep。`health --json` 会保留最近成功来源、总尝试次数、结构化失败链和历史缓存 TTL，便于发现“备源成功但主源已退化”或“缓存窗口过长”的情况。历史结果缓存仍由 `DataManager` 负责，默认 `data.history_cache_ttl_seconds=3600`；如需调试 provider 可设为 `0` 禁用缓存，真实历史 provider 启用时 `config validate` 会对该配置给出上游请求压力警告，生产环境应避免过低 TTL。
 
 `history probe` 会执行一次不落盘的最小查询，校验 provider 命令、JSON、历史字段、日期顺序和请求区间，并输出返回行数及实际首尾日期。真实 API key、token 和私有 provider 脚本应保留在本地配置或环境变量中，不要提交到仓库。
 
@@ -300,7 +300,7 @@ python -m compileall -q .
 - CLI `diagnose` 对配置、数据源、缓存策略和状态文件的启动前诊断
 - CLI `report` / `ReportGenerator` 对数据源健康状态、缓存策略和告警事件的报告输出
 - CLI `alerts` 对本地 JSONL 告警事件的文本/JSON 输出、limit 和错误处理
-- CLI `config validate` 对内置配置和 JSON 配置文件的校验
+- CLI `config validate` 对内置配置和 JSON 配置文件的校验，包括真实历史 provider 禁用缓存时的频率风险 warning
 - CLI `config show/init` 对有效配置查看和本地模板安全生成
 - `DataManager` 对实时行情、净值和历史行情的字段、数值类型、非负单位、可选时效契约校验、可配置历史缓存 TTL 和健康输出
 - `DataManager` 缓存过期重取和 adapter 异常包装
