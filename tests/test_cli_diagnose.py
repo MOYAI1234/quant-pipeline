@@ -135,6 +135,41 @@ def test_cli_diagnose_strict_fails_config_strict_warnings(tmp_path):
     assert 'Traceback' not in completed.stderr
 
 
+def test_cli_diagnose_text_renders_config_strict_warnings(tmp_path):
+    config = deepcopy(SYSTEM_CONFIG)
+    config['data']['history_cache_ttl_seconds'] = 0
+    config['data']['mx_data']['mode'] = 'real'
+    config['data']['mx_data']['history_command'] = [
+        sys.executable,
+        '-c',
+        'print([])',
+    ]
+    config_path = tmp_path / 'strict-warning-config.json'
+    config_path.write_text(json.dumps(config), encoding='utf-8')
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / 'cli' / 'commands.py'),
+            'diagnose',
+            '--config',
+            str(config_path),
+            '--strict',
+            '--no-state',
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=PROJECT_ROOT,
+    )
+
+    assert completed.returncode == 1
+    assert '运行诊断: FAIL' in completed.stdout
+    assert '严格门禁 warning:' in completed.stdout
+    assert 'data.history_cache_ttl_seconds=0 会禁用历史行情缓存' in completed.stdout
+    assert 'Traceback' not in completed.stderr
+
+
 def test_cli_diagnose_reports_invalid_adapter_mode_without_traceback(tmp_path):
     config = deepcopy(SYSTEM_CONFIG)
     config['data']['mx_data']['mode'] = 'paper'
