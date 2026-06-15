@@ -38,12 +38,21 @@ class MXDataAdapter(BaseAdapter):
             self.last_error = command_error
             return
 
+        provider_statuses = self._history_provider_statuses()
+        if not any(status['ready'] for status in provider_statuses):
+            self.connected = False
+            self.last_error = self._format_missing_provider_env(provider_statuses)
+            return
+
         self.connected = True
         self.last_error = ''
 
     def health_check(self) -> dict:
         status = super().health_check()
         command_error = self._history_command_error()
+        provider_statuses = (
+            [] if command_error else self._history_provider_statuses()
+        )
         if self.mode == 'real':
             status['available'] = False
             if command_error:
@@ -54,6 +63,13 @@ class MXDataAdapter(BaseAdapter):
             'history_provider_count': (
                 0 if command_error else len(self._history_provider_configs())
             ),
+            'history_provider_ready_count': (
+                0 if command_error else sum(
+                    provider_status['ready']
+                    for provider_status in provider_statuses
+                )
+            ),
+            'history_providers': provider_statuses,
             'history_available': (
                 self.mode == 'real'
                 and self.connected
@@ -103,6 +119,18 @@ class MXDataAdapter(BaseAdapter):
 
         provider_configs = self._history_provider_configs()
         for provider in provider_configs:
+            missing_env = self._missing_provider_env(provider)
+            if missing_env:
+                self.last_history_attempts += 1
+                exc = ServiceUnavailableError(
+                    f"history provider {provider['name']} missing required "
+                    f"environment variables: {', '.join(missing_env)}",
+                    error_code='REAL_HISTORY_PROVIDER_ENV_MISSING',
+                    source='MXDataAdapter',
+                )
+                failures.append((provider['name'], 1, exc))
+                self._record_history_failure(provider['name'], 1, exc)
+                continue
             for attempt in range(1, retry_attempts + 1):
                 self.last_history_attempts += 1
                 try:
@@ -312,6 +340,15 @@ class MXDataAdapter(BaseAdapter):
                 if providers:
                     return f'history_providers[{index}].command {error}'
                 return f'history_command {error}'
+            if 'required_env' in provider:
+                required_env_error = self._required_env_error(
+                    provider.get('required_env'),
+                )
+                if required_env_error:
+                    return (
+                        f'history_providers[{index}].required_env '
+                        f'{required_env_error}'
+                    )
         return ''
 
     def _command_error(
@@ -387,9 +424,17 @@ class MXDataAdapter(BaseAdapter):
                 source='MXDataAdapter',
             )
         if not self.connected:
+            error_code = (
+                'REAL_HISTORY_PROVIDER_ENV_MISSING'
+                if self.last_error.startswith(
+                    'history providers missing required environment variables:'
+                )
+                else 'ADAPTER_NOT_CONNECTED'
+            )
             raise ServiceUnavailableError(
-                'MXDataAdapter real history provider is not connected',
-                error_code='ADAPTER_NOT_CONNECTED',
+                self.last_error
+                or 'MXDataAdapter real history provider is not connected',
+                error_code=error_code,
                 source='MXDataAdapter',
             )
 
@@ -422,3 +467,45 @@ class MXDataAdapter(BaseAdapter):
             or '/' in executable
             or '\\' in executable
         )
+
+    def _history_provider_statuses(self) -> list[dict]:
+        return [
+            {
+                'name': provider['name'],
+                'ready': not self._missing_provider_env(provider),
+                'missing_env': self._missing_provider_env(provider),
+            }
+            for provider in self._history_provider_configs()
+        ]
+
+    def _missing_provider_env(self, provider: dict) -> list[str]:
+        return [
+            name
+            for name in provider.get('required_env', [])
+            if not os.environ.get(name)
+        ]
+
+    def _format_missing_provider_env(self, statuses: list[dict]) -> str:
+        details = '; '.join(
+            f"{status['name']}: {', '.join(status['missing_env'])}"
+            for status in statuses
+            if status['missing_env']
+        )
+        return (
+            'history providers missing required environment variables: '
+            f'{details}'
+        )
+
+    def _required_env_error(self, required_env) -> str:
+        if (
+            not isinstance(required_env, list)
+            or not required_env
+            or any(
+                not isinstance(name, str) or not name.strip()
+                for name in required_env
+            )
+        ):
+            return 'must be a non-empty string list'
+        if len(set(required_env)) != len(required_env):
+            return 'must not contain duplicate names'
+        return ''

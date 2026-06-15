@@ -8,7 +8,7 @@ import pytest
 
 from cli.commands import _unlink_if_present
 from config.settings import SYSTEM_CONFIG
-from config.validation import validate_config
+from config.validation import strict_config_warnings, validate_config
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -576,6 +576,76 @@ def test_validate_config_accepts_named_history_providers():
     ]
 
 
+def test_validate_config_reports_missing_history_provider_env(monkeypatch):
+    monkeypatch.delenv('TUSHARE_TOKEN', raising=False)
+    config = deepcopy(SYSTEM_CONFIG)
+    config['data']['mx_data']['mode'] = 'real'
+    config['data']['mx_data']['history_providers'] = [
+        {
+            'name': 'tushare',
+            'command': ['python', 'tushare_provider.py', '{symbol}'],
+            'required_env': ['TUSHARE_TOKEN'],
+        },
+    ]
+
+    result = validate_config(config)
+
+    assert result['valid'] is True
+    assert result['errors'] == []
+    assert result['warnings'] == [
+        'data.mx_data.mode=real 当前仅支持命令式历史行情 provider',
+        (
+            'data.mx_data.history_providers[0].required_env '
+            '缺少环境变量: TUSHARE_TOKEN'
+        ),
+    ]
+    assert strict_config_warnings(result['warnings']) == [
+        (
+            'data.mx_data.history_providers[0].required_env '
+            '缺少环境变量: TUSHARE_TOKEN'
+        ),
+    ]
+
+
+def test_validate_config_accepts_present_history_provider_env(monkeypatch):
+    monkeypatch.setenv('TUSHARE_TOKEN', 'secret')
+    config = deepcopy(SYSTEM_CONFIG)
+    config['data']['mx_data']['mode'] = 'real'
+    config['data']['mx_data']['history_providers'] = [
+        {
+            'name': 'tushare',
+            'command': ['python', 'tushare_provider.py', '{symbol}'],
+            'required_env': ['TUSHARE_TOKEN'],
+        },
+    ]
+
+    result = validate_config(config)
+
+    assert result['valid'] is True
+    assert result['errors'] == []
+    assert result['warnings'] == [
+        'data.mx_data.mode=real 当前仅支持命令式历史行情 provider',
+    ]
+
+
+def test_validate_config_does_not_require_provider_env_in_mock_mode(monkeypatch):
+    monkeypatch.delenv('TUSHARE_TOKEN', raising=False)
+    config = deepcopy(SYSTEM_CONFIG)
+    config['data']['mx_data']['history_providers'] = [
+        {
+            'name': 'tushare',
+            'command': ['python', 'tushare_provider.py', '{symbol}'],
+            'required_env': ['TUSHARE_TOKEN'],
+        },
+    ]
+
+    result = validate_config(config)
+
+    assert result['valid'] is True
+    assert result['errors'] == []
+    assert result['warnings'] == []
+
+
 def test_validate_config_rejects_unknown_history_provider_placeholder():
     config = deepcopy(SYSTEM_CONFIG)
     config['data']['mx_data']['history_providers'] = [
@@ -643,6 +713,37 @@ def test_validate_config_rejects_invalid_history_provider_settings():
     )
     assert (
         'data.mx_data.history_retry_delay_seconds 不能小于 0'
+        in result['errors']
+    )
+
+
+@pytest.mark.parametrize(
+    'required_env, expected_error',
+    [
+        ('TUSHARE_TOKEN', '必须是非空字符串数组'),
+        ([], '必须是非空字符串数组'),
+        ([''], '必须是非空字符串数组'),
+        (['TOKEN', 'TOKEN'], '不能包含重复变量名'),
+    ],
+)
+def test_validate_config_rejects_invalid_history_provider_required_env(
+    required_env,
+    expected_error,
+):
+    config = deepcopy(SYSTEM_CONFIG)
+    config['data']['mx_data']['history_providers'] = [
+        {
+            'name': 'primary',
+            'command': ['python', 'primary.py'],
+            'required_env': required_env,
+        },
+    ]
+
+    result = validate_config(config)
+
+    assert result['valid'] is False
+    assert (
+        f'data.mx_data.history_providers[0].required_env {expected_error}'
         in result['errors']
     )
 

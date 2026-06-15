@@ -8,6 +8,7 @@
 
 - `history_command`：单个命令的字符串数组，保持向后兼容。
 - `history_providers`：按优先级排列的命名 provider 数组，每项包含 `name` 和 `command`。
+- `history_providers[].required_env`：可选的非空环境变量名数组，用于声明 provider 所需凭据，不保存凭据值。
 
 两者不能同时配置。命令数组元素可使用以下占位符：
 
@@ -52,7 +53,8 @@
             "--symbol", "{symbol}",
             "--start-date", "{start_date}",
             "--end-date", "{end_date}"
-          ]
+          ],
+          "required_env": ["PRIMARY_API_TOKEN"]
         },
         {
           "name": "backup",
@@ -73,6 +75,8 @@
 ~~~
 
 `history_retry_attempts` 是每个 provider 的总尝试次数，范围为 1-10；默认 1。`history_retry_delay_seconds` 是可用性错误重试前的等待秒数，范围为 0-60；默认 0。当前 pipeline 使用同步阻塞式等待，未来异步执行层需要替换该等待实现。
+
+`required_env` 只声明环境变量名称。配置校验和启动诊断会检查变量是否存在，健康状态会输出 `ready` 与 `missing_env`，但不会读取或展示变量值。运行时缺少凭据的 provider 会被记录为失败并跳过，不会重复请求同一来源；如果后续备源可用，仍会继续降级。
 
 ## stdout 契约
 

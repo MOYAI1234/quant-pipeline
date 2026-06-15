@@ -250,6 +250,86 @@ def test_real_history_providers_fall_back_after_primary_failure(monkeypatch):
     ]
 
 
+def test_real_history_providers_skip_missing_env_and_use_backup(monkeypatch):
+    calls = []
+
+    def fake_run(command, **_kwargs):
+        calls.append(command)
+        return CompletedProcess(command, 0, '[]', '')
+
+    monkeypatch.delenv('TUSHARE_TOKEN', raising=False)
+    monkeypatch.setattr(mx_data_adapter.subprocess, 'run', fake_run)
+    adapter = MXDataAdapter({
+        'mode': 'real',
+        'history_providers': [
+            {
+                'name': 'tushare',
+                'command': [sys.executable, 'tushare_provider.py'],
+                'required_env': ['TUSHARE_TOKEN'],
+            },
+            {
+                'name': 'backup',
+                'command': [sys.executable, 'backup.py'],
+            },
+        ],
+    })
+
+    adapter.connect()
+    assert adapter.get_etf_history(
+        '510300',
+        '2026-01-01',
+        '2026-01-02',
+    ) == []
+
+    status = adapter.health_check()
+    assert calls == [[sys.executable, 'backup.py']]
+    assert status['history_provider_ready_count'] == 1
+    assert status['history_providers'] == [
+        {
+            'name': 'tushare',
+            'ready': False,
+            'missing_env': ['TUSHARE_TOKEN'],
+        },
+        {
+            'name': 'backup',
+            'ready': True,
+            'missing_env': [],
+        },
+    ]
+    assert status['last_history_provider'] == 'backup'
+    assert status['last_history_attempts'] == 2
+    assert status['last_history_failures'][0]['error_code'] == (
+        'REAL_HISTORY_PROVIDER_ENV_MISSING'
+    )
+
+
+def test_real_history_provider_is_unavailable_when_required_env_is_missing(
+    monkeypatch,
+):
+    monkeypatch.delenv('TUSHARE_TOKEN', raising=False)
+    adapter = MXDataAdapter({
+        'mode': 'real',
+        'history_providers': [
+            {
+                'name': 'tushare',
+                'command': [sys.executable, 'tushare_provider.py'],
+                'required_env': ['TUSHARE_TOKEN'],
+            },
+        ],
+    })
+
+    adapter.connect()
+    status = adapter.health_check()
+
+    assert status['connected'] is False
+    assert status['history_available'] is False
+    assert status['history_provider_ready_count'] == 0
+    assert 'tushare: TUSHARE_TOKEN' in status['error']
+    with pytest.raises(ServiceUnavailableError) as exc:
+        adapter.get_etf_history('510300', '2026-01-01', '2026-01-02')
+    assert exc.value.error_code == 'REAL_HISTORY_PROVIDER_ENV_MISSING'
+
+
 def test_real_history_provider_retries_transient_failure(monkeypatch):
     responses = [
         CompletedProcess(['primary'], 1, '', 'temporary failure'),
@@ -426,6 +506,24 @@ def test_real_history_providers_reject_ambiguous_or_duplicate_configuration():
             ],
         },
         {'history_providers': ['not-an-object']},
+        {
+            'history_providers': [
+                {
+                    'name': 'primary',
+                    'command': [sys.executable, 'primary.py'],
+                    'required_env': ['TOKEN', 'TOKEN'],
+                },
+            ],
+        },
+        {
+            'history_providers': [
+                {
+                    'name': 'primary',
+                    'command': [sys.executable, 'primary.py'],
+                    'required_env': None,
+                },
+            ],
+        },
     ]
 
     for config in invalid_configs:
