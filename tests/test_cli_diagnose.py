@@ -52,6 +52,7 @@ def test_cli_diagnose_json_outputs_structured_report(tmp_path):
 
     assert report['ready'] is True
     assert report['config']['valid'] is True
+    assert report['config']['strict_warnings'] == []
     assert report['data']['available'] is True
     assert report['data']['cache']['history_ttl_seconds'] == 3600
     assert report['state']['ok'] is True
@@ -85,6 +86,52 @@ def test_cli_diagnose_strict_fails_invalid_config(tmp_path):
     assert completed.returncode == 1
     assert '运行诊断: FAIL' in completed.stdout
     assert '- account.initial_capital 必须大于 0' in completed.stdout
+    assert 'Traceback' not in completed.stderr
+
+
+def test_cli_diagnose_strict_fails_config_strict_warnings(tmp_path):
+    config = deepcopy(SYSTEM_CONFIG)
+    config['data']['history_cache_ttl_seconds'] = 0
+    config['data']['mx_data']['mode'] = 'real'
+    config['data']['mx_data']['history_command'] = [
+        sys.executable,
+        '-c',
+        'print([])',
+    ]
+    config_path = tmp_path / 'strict-warning-config.json'
+    config_path.write_text(json.dumps(config), encoding='utf-8')
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / 'cli' / 'commands.py'),
+            'diagnose',
+            '--config',
+            str(config_path),
+            '--json',
+            '--strict',
+            '--no-state',
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=PROJECT_ROOT,
+    )
+
+    report = json.loads(completed.stdout)
+
+    assert completed.returncode == 1
+    assert report['ready'] is False
+    assert report['config']['valid'] is True
+    assert report['config']['strict_warnings'] == [
+        (
+            'data.history_cache_ttl_seconds=0 会禁用历史行情缓存，'
+            '真实 provider 可能频繁请求上游'
+        ),
+    ]
+    assert 'data.mx_data.mode=real 当前仅支持命令式历史行情 provider' in (
+        report['config']['warnings']
+    )
     assert 'Traceback' not in completed.stderr
 
 
