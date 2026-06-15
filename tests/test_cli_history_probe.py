@@ -138,3 +138,46 @@ print(json.dumps([
     assert completed.returncode == 2
     assert '历史 provider 返回了请求区间外的数据' in completed.stderr
     assert 'Traceback' not in completed.stderr
+
+
+def test_cli_history_probe_json_reports_provider_failure(tmp_path):
+    config_path = _write_provider_config(
+        tmp_path,
+        """
+print('not json')
+""".strip(),
+    )
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / 'cli' / 'commands.py'),
+            'history',
+            'probe',
+            '--config',
+            str(config_path),
+            '--start-date',
+            '2026-01-01',
+            '--end-date',
+            '2026-01-02',
+            '--json',
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=PROJECT_ROOT,
+    )
+
+    result = json.loads(completed.stdout)
+
+    assert completed.returncode == 2
+    assert completed.stderr == ''
+    assert result == {
+        'available': False,
+        'symbol': '510300',
+        'start_date': '2026-01-01',
+        'end_date': '2026-01-02',
+        'error_code': 'INVALID_PROVIDER_RESPONSE',
+        'source': 'MXDataAdapter',
+        'error': 'MXDataAdapter history provider output is not valid JSON',
+    }
