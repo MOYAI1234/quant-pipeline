@@ -245,7 +245,7 @@ python cli\commands.py history export-rotation --config path\to\config.json --et
 
 同一 provider 的进程启动失败、非零退出或超时会按 `history_retry_attempts` 重试，然后再切换到下一个 provider。非法 UTF-8、非法 JSON 或错误输出结构不会重复请求同一来源，但仍会尝试备源。重试次数范围为 1-10，等待时间范围为 0-60 秒；等待使用当前同步 pipeline 的阻塞式 sleep。`health --json` 会保留最近成功来源、总尝试次数、结构化失败链和历史缓存 TTL，便于发现“备源成功但主源已退化”或“缓存窗口过长”的情况。历史结果缓存仍由 `DataManager` 负责，默认 `data.history_cache_ttl_seconds=3600`；如需调试 provider 可设为 `0` 禁用缓存，真实历史 provider 启用时 `config validate` 会对该配置给出上游请求压力警告，生产环境应避免过低 TTL。
 
-`history probe` 会执行一次不落盘的最小查询，校验 provider 命令、JSON、历史字段、日期顺序和请求区间，并输出返回行数及实际首尾日期。真实 API key、token 和私有 provider 脚本应保留在本地配置或环境变量中，不要提交到仓库。
+`history probe` 会执行一次不落盘的最小查询，校验 provider 命令、JSON、历史字段、日期顺序和请求区间，并输出返回行数及实际首尾日期。使用 `--json` 时，失败也会输出 `available=false`、错误码、来源和错误消息，便于 CI 或本地 provider 接入脚本判断失败原因。真实 API key、token 和私有 provider 脚本应保留在本地配置或环境变量中，不要提交到仓库。
 
 仓库提供可选 AKShare 示例脚本 `examples/providers/akshare_history_provider.py`。它不会把 AKShare 加入项目依赖；需要本地自行 `pip install akshare` 后，再通过 `history_command` 调用。完整 provider 契约见 [docs/history-provider-contract.md](docs/history-provider-contract.md)。
 
@@ -310,7 +310,7 @@ python -m compileall -q .
 - `BacktestExecutionModel` 的滑点、成交量参与率限制和同一 bar 内成交量占用
 - `BacktestRunner` 的 grid 买卖周期、日期区间过滤、历史日期/盘中时间顺序与 OHLC 合法性校验、最大回撤区间、胜率/手续费统计、滑点执行价、权益曲线/组合快照/成交明细 CSV 导出、轮动样例回测、空历史保护、CSV 读取/错误处理和 CLI smoke
 - `history export-grid/export-rotation` 对 DataManager 历史数据、外部历史 provider 配置和本地 JSON 到回测 CSV 的转换
-- `history probe` 对真实历史 provider 的最小查询和数据契约校验
+- `history probe` 对真实历史 provider 的最小查询、数据契约校验和 JSON 失败输出
 - `GridStrategy` 多格买入、同格防重复、卖出、止损后 ledger 重置
 - `RotationStrategy` 首次调仓、卖旧买新、失败 pending 清理和重试
 - `JsonStateStore` 对账户、网格 ledger、轮动调仓状态、成交快照、订单状态、运行 metadata 和旧版状态迁移的保存/恢复

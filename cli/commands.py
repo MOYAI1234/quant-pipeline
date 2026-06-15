@@ -242,6 +242,25 @@ def cmd_history_export_rotation(args):
 
 
 def cmd_history_probe(args):
+    try:
+        result = _run_history_probe(args)
+    except (AdapterError, TypeError, ValueError) as exc:
+        if not args.json:
+            raise
+        print(json.dumps(
+            _history_probe_error_result(args, exc),
+            ensure_ascii=False,
+            indent=2,
+        ))
+        raise SystemExit(2) from exc
+
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(_render_history_probe(result))
+
+
+def _run_history_probe(args) -> dict:
     _require_date_range(args)
     symbol = _resolve_symbol(args.symbol)
     data_manager = DataManager(_load_history_data_config(args))
@@ -261,7 +280,7 @@ def cmd_history_probe(args):
         args.end_date,
     )
 
-    result = {
+    return {
         'available': True,
         'symbol': symbol,
         'start_date': args.start_date,
@@ -270,10 +289,27 @@ def cmd_history_probe(args):
         'first_date': validated_history[0]['date'],
         'last_date': validated_history[-1]['date'],
     }
-    if args.json:
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-    else:
-        print(_render_history_probe(result))
+
+
+def _history_probe_error_result(args, exc: Exception) -> dict:
+    return {
+        'available': False,
+        'symbol': getattr(args, 'symbol', None),
+        'start_date': getattr(args, 'start_date', None),
+        'end_date': getattr(args, 'end_date', None),
+        'error_code': (
+            getattr(exc, 'error_code', None)
+            or _history_probe_error_code(exc)
+        ),
+        'source': getattr(exc, 'source', None) or 'history_probe',
+        'error': str(exc),
+    }
+
+
+def _history_probe_error_code(exc: Exception) -> str:
+    if isinstance(exc, TypeError):
+        return 'HISTORY_PROBE_CONFIG_ERROR'
+    return 'HISTORY_PROBE_CONTRACT_FAILED'
 
 
 def cmd_backtest(args):
