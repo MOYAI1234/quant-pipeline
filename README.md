@@ -298,7 +298,7 @@ python -m compileall -q .
 
 - adapter 的 mock/real 模式、结构化健康检查、未实现 real 操作错误，以及命令式历史 provider 的重试和顺序降级
 - CLI `health` 对数据源健康状态的文本/JSON 输出
-- CLI `diagnose` 对配置、风险 warning、数据源、缓存策略和状态文件的启动前诊断
+- CLI `diagnose` 对配置、风险 warning、数据源、缓存策略和状态文件的启动前诊断，并输出结构化阻断原因
 - CLI `report` / `ReportGenerator` 对数据源健康状态、缓存策略和告警事件的报告输出
 - CLI `alerts` 对本地 JSONL 告警事件的文本/JSON 输出、limit 和错误处理
 - CLI `config validate` 对内置配置和 JSON 配置文件的校验，包括真实历史 provider 禁用缓存时的频率风险 warning、`--strict-warnings` 风险门禁和 JSON `strict_warnings` 输出

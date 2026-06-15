@@ -51,6 +51,7 @@ def test_cli_diagnose_json_outputs_structured_report(tmp_path):
     report = json.loads(completed.stdout)
 
     assert report['ready'] is True
+    assert report['blocking_reasons'] == []
     assert report['config']['valid'] is True
     assert report['config']['strict_warnings'] == []
     assert report['data']['available'] is True
@@ -85,6 +86,8 @@ def test_cli_diagnose_strict_fails_invalid_config(tmp_path):
 
     assert completed.returncode == 1
     assert '运行诊断: FAIL' in completed.stdout
+    assert '阻断原因:' in completed.stdout
+    assert '- [config.invalid_config] 配置校验失败' in completed.stdout
     assert '- account.initial_capital 必须大于 0' in completed.stdout
     assert 'Traceback' not in completed.stderr
 
@@ -122,6 +125,21 @@ def test_cli_diagnose_strict_fails_config_strict_warnings(tmp_path):
 
     assert completed.returncode == 1
     assert report['ready'] is False
+    assert report['blocking_reasons'] == [
+        {
+            'section': 'config',
+            'code': 'strict_warning',
+            'message': (
+                'data.history_cache_ttl_seconds=0 会禁用历史行情缓存，'
+                '真实 provider 可能频繁请求上游'
+            ),
+        },
+        {
+            'section': 'data',
+            'code': 'data_unavailable',
+            'message': '数据源不可用',
+        },
+    ]
     assert report['config']['valid'] is True
     assert report['config']['strict_warnings'] == [
         (
@@ -165,6 +183,8 @@ def test_cli_diagnose_text_renders_config_strict_warnings(tmp_path):
 
     assert completed.returncode == 1
     assert '运行诊断: FAIL' in completed.stdout
+    assert '- [config.strict_warning] ' in completed.stdout
+    assert '- [data.data_unavailable] 数据源不可用' in completed.stdout
     assert '严格门禁 warning:' in completed.stdout
     assert 'data.history_cache_ttl_seconds=0 会禁用历史行情缓存' in completed.stdout
     assert 'Traceback' not in completed.stderr
@@ -194,6 +214,8 @@ def test_cli_diagnose_reports_invalid_adapter_mode_without_traceback(tmp_path):
 
     assert completed.returncode == 1
     assert '运行诊断: FAIL' in completed.stdout
+    assert '- [config.invalid_config] 配置校验失败' in completed.stdout
+    assert '- [data.data_unavailable] 不支持的适配器模式: paper' in completed.stdout
     assert '- data.mx_data.mode 必须是 mock 或 real' in completed.stdout
     assert '- error: 不支持的适配器模式: paper' in completed.stdout
     assert 'Traceback' not in completed.stderr
@@ -292,4 +314,5 @@ def test_cli_diagnose_strict_fails_invalid_state_file(tmp_path):
     assert completed.returncode == 1
     assert '运行诊断: FAIL' in completed.stdout
     assert '状态文件: FAIL' in completed.stdout
+    assert '- [state.state_unavailable]' in completed.stdout
     assert 'Traceback' not in completed.stderr

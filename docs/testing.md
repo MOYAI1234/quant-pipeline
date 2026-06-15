@@ -119,7 +119,7 @@ python -m pytest tests\test_report_health.py tests\test_alerts.py tests\test_cli
 - 日报/周报包含组合、交易、风险、数据源健康状态、缓存策略和告警事件摘要。
 - `AlertManager` 支持结构化事件、内存历史和可选 JSONL 文件输出。
 - CLI `alerts` 能读取 JSONL 并输出文本或 JSON。
-- CLI `diagnose` 能汇总配置校验、配置风险 warning、数据源健康状态和状态文件可恢复性；`--strict` 必须把 `config.strict_warnings` 作为启动前门禁失败，并在文本输出中明确列出严格门禁 warning。
+- CLI `diagnose` 能汇总配置校验、配置风险 warning、数据源健康状态和状态文件可恢复性；`--strict` 必须把 `config.strict_warnings` 作为启动前门禁失败，并在 JSON/text 输出中明确列出阻断原因。
 - CLI `config show/init` 能查看有效配置并安全生成默认本地模板。
 
 ## CLI 回测验收样例
