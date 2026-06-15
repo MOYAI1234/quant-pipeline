@@ -1,4 +1,5 @@
 import math
+import os
 from string import Formatter
 
 
@@ -267,7 +268,12 @@ def _validate_adapter_config(
             )
 
     if name == 'data.mx_data':
-        _validate_history_providers(adapter_config, errors)
+        _validate_history_providers(
+            adapter_config,
+            errors,
+            warnings,
+            check_environment=mode == 'real',
+        )
         if (
             adapter_config.get('history_command')
             and adapter_config.get('history_providers')
@@ -298,7 +304,13 @@ def _validate_adapter_config(
     )
 
 
-def _validate_history_providers(adapter_config: dict, errors: list) -> None:
+def _validate_history_providers(
+    adapter_config: dict,
+    errors: list,
+    warnings: list,
+    *,
+    check_environment: bool,
+) -> None:
     if 'history_providers' not in adapter_config:
         return
     providers = adapter_config.get('history_providers')
@@ -337,6 +349,46 @@ def _validate_history_providers(adapter_config: dict, errors: list) -> None:
                 f'{prefix}.command',
                 errors,
             )
+        _validate_provider_required_env(
+            provider,
+            prefix,
+            errors,
+            warnings,
+            check_environment=check_environment,
+        )
+
+
+def _validate_provider_required_env(
+    provider: dict,
+    prefix: str,
+    errors: list,
+    warnings: list,
+    *,
+    check_environment: bool,
+) -> None:
+    if 'required_env' not in provider:
+        return
+    required_env = provider.get('required_env')
+    if (
+        not isinstance(required_env, list)
+        or not required_env
+        or any(
+            not isinstance(name, str) or not name.strip()
+            for name in required_env
+        )
+    ):
+        errors.append(f'{prefix}.required_env 必须是非空字符串数组')
+        return
+    if len(set(required_env)) != len(required_env):
+        errors.append(f'{prefix}.required_env 不能包含重复变量名')
+        return
+    if not check_environment:
+        return
+    missing = [name for name in required_env if not os.environ.get(name)]
+    if missing:
+        warnings.append(
+            f"{prefix}.required_env 缺少环境变量: {', '.join(missing)}"
+        )
 
 
 def _warn_disabled_real_history_cache(data_config: dict, warnings: list) -> None:

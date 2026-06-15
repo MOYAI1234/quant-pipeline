@@ -190,6 +190,55 @@ def test_cli_diagnose_text_renders_config_strict_warnings(tmp_path):
     assert 'Traceback' not in completed.stderr
 
 
+def test_cli_diagnose_reports_missing_history_provider_env(tmp_path):
+    config = deepcopy(SYSTEM_CONFIG)
+    config['data']['mx_data']['mode'] = 'real'
+    config['data']['mx_data']['history_providers'] = [
+        {
+            'name': 'tushare',
+            'command': [sys.executable, 'tushare_provider.py'],
+            'required_env': ['QUANT_PIPELINE_TEST_MISSING_TOKEN'],
+        },
+    ]
+    config_path = tmp_path / 'missing-provider-env.json'
+    config_path.write_text(json.dumps(config), encoding='utf-8')
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / 'cli' / 'commands.py'),
+            'diagnose',
+            '--config',
+            str(config_path),
+            '--json',
+            '--strict',
+            '--no-state',
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=PROJECT_ROOT,
+    )
+
+    report = json.loads(completed.stdout)
+
+    assert completed.returncode == 1
+    assert report['ready'] is False
+    assert report['config']['strict_warnings'] == [
+        (
+            'data.mx_data.history_providers[0].required_env '
+            '缺少环境变量: QUANT_PIPELINE_TEST_MISSING_TOKEN'
+        ),
+    ]
+    assert report['data']['adapters']['mx_data']['history_providers'] == [
+        {
+            'name': 'tushare',
+            'ready': False,
+            'missing_env': ['QUANT_PIPELINE_TEST_MISSING_TOKEN'],
+        },
+    ]
+
+
 def test_cli_diagnose_reports_invalid_adapter_mode_without_traceback(tmp_path):
     config = deepcopy(SYSTEM_CONFIG)
     config['data']['mx_data']['mode'] = 'paper'

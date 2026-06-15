@@ -229,7 +229,8 @@ python cli\commands.py history export-rotation --config path\to\config.json --et
       "history_providers": [
         {
           "name": "primary",
-          "command": ["python", "primary.py", "{symbol}", "{start_date}", "{end_date}"]
+          "command": ["python", "primary.py", "{symbol}", "{start_date}", "{end_date}"],
+          "required_env": ["PRIMARY_API_TOKEN"]
         },
         {
           "name": "backup",
@@ -243,7 +244,9 @@ python cli\commands.py history export-rotation --config path\to\config.json --et
 }
 ```
 
-同一 provider 的进程启动失败、非零退出或超时会按 `history_retry_attempts` 重试，然后再切换到下一个 provider。非法 UTF-8、非法 JSON 或错误输出结构不会重复请求同一来源，但仍会尝试备源。重试次数范围为 1-10，等待时间范围为 0-60 秒；等待使用当前同步 pipeline 的阻塞式 sleep。`health --json` 会保留最近成功来源、总尝试次数、结构化失败链和历史缓存 TTL，便于发现“备源成功但主源已退化”或“缓存窗口过长”的情况。历史结果缓存仍由 `DataManager` 负责，默认 `data.history_cache_ttl_seconds=3600`；如需调试 provider 可设为 `0` 禁用缓存，真实历史 provider 启用时 `config validate` 会对该配置给出上游请求压力警告，生产环境应避免过低 TTL。
+每个命名 provider 可用 `required_env` 声明所需环境变量。`config validate` / `diagnose` 会在变量缺失时给出严格门禁 warning；运行时会跳过缺少凭据的 provider 并继续尝试备源。健康状态只输出变量名、缺失列表和 provider ready 状态，不读取或暴露变量值。
+
+同一 provider 的进程启动失败、非零退出或超时会按 `history_retry_attempts` 重试，然后再切换到下一个 provider。缺少 `required_env` 属于配置可用性问题，不会反复重试同一来源；非法 UTF-8、非法 JSON 或错误输出结构也不会重复请求同一来源，但仍会尝试备源。重试次数范围为 1-10，等待时间范围为 0-60 秒；等待使用当前同步 pipeline 的阻塞式 sleep。`health --json` 会保留 provider ready 状态、最近成功来源、总尝试次数、结构化失败链和历史缓存 TTL，便于发现“凭据缺失”“备源成功但主源已退化”或“缓存窗口过长”的情况。历史结果缓存仍由 `DataManager` 负责，默认 `data.history_cache_ttl_seconds=3600`；如需调试 provider 可设为 `0` 禁用缓存，真实历史 provider 启用时 `config validate` 会对该配置给出上游请求压力警告，生产环境应避免过低 TTL。
 
 `history probe` 会执行一次不落盘的最小查询，校验 provider 命令、JSON、历史字段、日期顺序和请求区间，并输出返回行数及实际首尾日期。使用 `--json` 时，失败也会输出 `available=false`、错误码、来源和错误消息，便于 CI 或本地 provider 接入脚本判断失败原因。真实 API key、token 和私有 provider 脚本应保留在本地配置或环境变量中，不要提交到仓库。
 
@@ -296,7 +299,7 @@ python -m compileall -q .
 
 当前测试重点覆盖：
 
-- adapter 的 mock/real 模式、结构化健康检查、未实现 real 操作错误，以及命令式历史 provider 的重试和顺序降级
+- adapter 的 mock/real 模式、结构化健康检查、未实现 real 操作错误，以及命令式历史 provider 的凭据门禁、重试和顺序降级
 - CLI `health` 对数据源健康状态的文本/JSON 输出
 - CLI `diagnose` 对配置、风险 warning、数据源、缓存策略和状态文件的启动前诊断，并输出结构化阻断原因
 - CLI `report` / `ReportGenerator` 对数据源健康状态、缓存策略和告警事件的报告输出

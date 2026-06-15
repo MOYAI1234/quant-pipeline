@@ -33,7 +33,7 @@ python cli\commands.py history export-grid --help
 python cli\commands.py history export-rotation --help
 ```
 
-当前离线基线：`pytest` 应通过 365 个测试，并跳过 1 个显式启用的 AKShare live test。
+当前离线基线：`pytest` 应通过 375 个测试，并跳过 1 个显式启用的 AKShare live test。
 
 ## 分层测试
 
@@ -50,11 +50,11 @@ python -m pytest tests\test_adapters.py tests\test_data_manager_contracts.py tes
 - adapter 必须明确 `mode=mock|real`。
 - `mock` 模式可用于链路验证，但不能伪装成真实行情。
 - `mx_data.history` 的 `real` 模式必须显式配置 `history_command`，未配置时必须明确不可用。
-- 多历史 provider 配置必须覆盖同源瞬时失败重试、主源失败后备源成功、非法响应跳过同源重试、全部失败聚合错误和最近失败链健康状态。
+- 多历史 provider 配置必须覆盖必需环境变量门禁、缺凭据主源跳过、同源瞬时失败重试、主源失败后备源成功、非法响应跳过同源重试、全部失败聚合错误和最近失败链健康状态。
 - 非历史行情的 `real` 操作未实现时必须明确不可用，并抛出服务不可用错误。
 - `DataManager` 必须校验实时行情、净值和历史行情的字段、数值类型、非负单位和可选时效，并支持配置历史行情缓存 TTL。
 - CLI `health` / `diagnose` 必须暴露历史行情缓存策略，便于确认 provider 是否会被频繁请求。
-- `config validate` 必须在真实历史 provider 启用且历史缓存 TTL 为 0 时给出 warning，支持 `--strict-warnings` 将风险 warning 作为 CI/生产门禁失败，并在 `--json` 输出中提供 `strict_warnings`。
+- `config validate` 必须在真实历史 provider 启用且历史缓存 TTL 为 0 或 provider `required_env` 缺失时给出 warning，支持 `--strict-warnings` 将风险 warning 作为 CI/生产门禁失败，并在 `--json` 输出中提供 `strict_warnings`。
 
 ### 策略、风控与模拟执行
 
