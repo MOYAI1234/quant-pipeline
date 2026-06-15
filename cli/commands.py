@@ -931,6 +931,9 @@ def _render_config_validation(result: dict) -> str:
     if result['warnings']:
         lines.append("警告:")
         lines.extend(f"- {warning}" for warning in result['warnings'])
+    if result.get('strict_warnings'):
+        lines.append("严格门禁 warning:")
+        lines.extend(f"- {warning}" for warning in result['strict_warnings'])
     return "\n".join(lines)
 
 
