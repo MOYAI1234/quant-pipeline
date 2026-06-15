@@ -699,17 +699,51 @@ def _build_diagnostic_report(config: dict) -> dict:
     }
     data_summary = _diagnose_data_sources(config)
     state_summary = _diagnose_state(config)
+    blocking_reasons = _diagnostic_blocking_reasons(
+        config_summary,
+        data_summary,
+        state_summary,
+    )
     return {
-        'ready': (
-            config_result['valid']
-            and not strict_warnings
-            and data_summary['available']
-            and state_summary['ok']
-        ),
+        'ready': not blocking_reasons,
+        'blocking_reasons': blocking_reasons,
         'config': config_summary,
         'data': data_summary,
         'state': state_summary,
     }
+
+
+def _diagnostic_blocking_reasons(
+    config_summary: dict,
+    data_summary: dict,
+    state_summary: dict,
+) -> list[dict]:
+    reasons = []
+    if not config_summary['valid']:
+        reasons.append({
+            'section': 'config',
+            'code': 'invalid_config',
+            'message': '配置校验失败',
+        })
+    for warning in config_summary.get('strict_warnings', []):
+        reasons.append({
+            'section': 'config',
+            'code': 'strict_warning',
+            'message': warning,
+        })
+    if not data_summary['available']:
+        reasons.append({
+            'section': 'data',
+            'code': 'data_unavailable',
+            'message': data_summary.get('error') or '数据源不可用',
+        })
+    if not state_summary['ok']:
+        reasons.append({
+            'section': 'state',
+            'code': 'state_unavailable',
+            'message': state_summary.get('error') or '状态文件不可用',
+        })
+    return reasons
 
 
 def _diagnose_data_sources(config: dict) -> dict:
@@ -940,6 +974,13 @@ def _render_config_validation(result: dict) -> str:
 def _render_diagnostic_report(report: dict) -> str:
     overall = 'OK' if report['ready'] else 'FAIL'
     lines = [f"运行诊断: {overall}"]
+    if report.get('blocking_reasons'):
+        lines.append("阻断原因:")
+        for reason in report['blocking_reasons']:
+            lines.append(
+                f"- [{reason['section']}.{reason['code']}] "
+                f"{reason['message']}"
+            )
     lines.append(_render_config_validation(report['config']))
     lines.append(_render_health_summary(report['data']))
     lines.append(_render_state_summary(report['state']))
