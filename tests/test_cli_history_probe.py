@@ -179,12 +179,105 @@ print('not json')
 
     assert completed.returncode == 2
     assert completed.stderr == ''
-    assert result == {
-        'available': False,
-        'symbol': '510300',
-        'start_date': '2026-01-01',
-        'end_date': '2026-01-02',
-        'error_code': 'INVALID_PROVIDER_RESPONSE',
-        'source': 'MXDataAdapter',
-        'error': 'MXDataAdapter history provider output is not valid JSON',
+    assert result['available'] is False
+    assert result['symbol'] == '510300'
+    assert result['start_date'] == '2026-01-01'
+    assert result['end_date'] == '2026-01-02'
+    assert result['error_code'] == 'INVALID_PROVIDER_RESPONSE'
+    assert result['source'] == 'MXDataAdapter'
+    assert result['error'] == (
+        'MXDataAdapter history provider output is not valid JSON'
+    )
+    assert result['cache'] == {
+        'history_ttl_seconds': 3600,
+        'history_cache_hits': 0,
+        'history_cache_misses': 1,
+        'last_history_cache_key': 'history_510300_2026-01-01_2026-01-02',
+        'last_history_cache_hit': False,
     }
+    assert result['provider_status'] == {
+        'service': 'MXDataAdapter',
+        'mode': 'real',
+        'connected': True,
+        'available': False,
+        'mock': False,
+        'error': '',
+        'history_provider': 'command',
+        'history_provider_count': 1,
+        'history_provider_ready_count': 1,
+        'history_providers': [
+            {'name': 'default', 'ready': True, 'missing_env': []},
+        ],
+        'history_available': True,
+        'last_history_provider': None,
+        'last_history_attempts': 1,
+        'last_history_error': (
+            'default attempt 1: '
+            'MXDataAdapter history provider output is not valid JSON'
+        ),
+        'last_history_failures': [
+            {
+                'provider': 'default',
+                'attempt': 1,
+                'error_code': 'INVALID_PROVIDER_RESPONSE',
+                'error': (
+                    'MXDataAdapter history provider output is not valid JSON'
+                ),
+            },
+        ],
+    }
+
+
+def test_cli_history_probe_json_reports_contract_failure_diagnostics(tmp_path):
+    config_path = _write_provider_config(
+        tmp_path,
+        """
+import json
+
+print(json.dumps([
+    {
+        'date': '2025-12-31',
+        'open': 4.0,
+        'high': 4.2,
+        'low': 3.9,
+        'close': 4.1,
+        'volume': 1000,
+        'amount': 4100.0,
+    },
+]))
+""".strip(),
+    )
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / 'cli' / 'commands.py'),
+            'history',
+            'probe',
+            '--config',
+            str(config_path),
+            '--start-date',
+            '2026-01-01',
+            '--end-date',
+            '2026-01-02',
+            '--json',
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=PROJECT_ROOT,
+    )
+
+    result = json.loads(completed.stdout)
+
+    assert completed.returncode == 2
+    assert completed.stderr == ''
+    assert {
+        'available': False,
+        'error_code': 'HISTORY_PROBE_CONTRACT_FAILED',
+        'source': 'history_probe',
+        'error': '历史 provider 返回了请求区间外的数据',
+    }.items() <= result.items()
+    assert result['cache']['history_cache_misses'] == 1
+    assert result['provider_status']['last_history_provider'] == 'default'
+    assert result['provider_status']['last_history_failures'] == []

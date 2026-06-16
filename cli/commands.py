@@ -273,20 +273,24 @@ def _run_history_probe(args) -> dict:
     data_manager = DataManager(_load_history_data_config(args))
     try:
         data_manager.connect()
-        history = fetch_grid_history(
-            data_manager,
-            symbol,
-            args.start_date,
-            args.end_date,
-        )
+        try:
+            history = fetch_grid_history(
+                data_manager,
+                symbol,
+                args.start_date,
+                args.end_date,
+            )
+            validated_history = _validate_history_probe_range(
+                history,
+                args.start_date,
+                args.end_date,
+            )
+        except Exception as exc:
+            _attach_history_probe_diagnostics(exc, data_manager)
+            raise
         cache_policy = _data_cache_policy(data_manager)
     finally:
         data_manager.disconnect()
-    validated_history = _validate_history_probe_range(
-        history,
-        args.start_date,
-        args.end_date,
-    )
 
     return {
         'available': True,
@@ -301,7 +305,7 @@ def _run_history_probe(args) -> dict:
 
 
 def _history_probe_error_result(args, exc: Exception) -> dict:
-    return {
+    result = {
         'available': False,
         'symbol': getattr(args, 'symbol', None),
         'start_date': getattr(args, 'start_date', None),
@@ -313,12 +317,25 @@ def _history_probe_error_result(args, exc: Exception) -> dict:
         'source': getattr(exc, 'source', None) or 'history_probe',
         'error': str(exc),
     }
+    cache_policy = getattr(exc, '_history_probe_cache_policy', None)
+    if cache_policy is not None:
+        result['cache'] = cache_policy
+    provider_status = getattr(exc, '_history_probe_provider_status', None)
+    if provider_status is not None:
+        result['provider_status'] = provider_status
+    return result
 
 
 def _history_probe_error_code(exc: Exception) -> str:
     if isinstance(exc, TypeError):
         return 'HISTORY_PROBE_CONFIG_ERROR'
     return 'HISTORY_PROBE_CONTRACT_FAILED'
+
+
+def _attach_history_probe_diagnostics(exc: Exception, data_manager) -> None:
+    exc._history_probe_cache_policy = _data_cache_policy(data_manager)
+    health = data_manager.health_check()
+    exc._history_probe_provider_status = health.get('mx_data')
 
 
 def cmd_backtest(args):
