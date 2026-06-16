@@ -262,6 +262,7 @@ print(json.dumps([
     assert '历史缓存: history_ttl_seconds=3600' in completed.stdout
     assert 'history_misses=1' in completed.stdout
     assert 'last_history_hit=false' in completed.stdout
+    assert '历史 provider: last=default, attempts=1, failures=0' in completed.stdout
     rows = load_history_csv(str(output_file))
     assert rows[0]['close'] == pytest.approx(4.1)
     assert rows[1]['volume'] == 1100

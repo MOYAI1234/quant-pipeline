@@ -210,10 +210,13 @@ def cmd_diagnose(args):
 
 def cmd_history_export_grid(args):
     cache_policy = None
+    provider_status = None
     if args.input_json:
         history = _load_history_json_list(args.input_json)
     else:
-        history, cache_policy = _fetch_grid_history_from_data_manager(args)
+        history, cache_policy, provider_status = (
+            _fetch_grid_history_from_data_manager(args)
+        )
     output_path = write_grid_history_csv(
         str(_resolve_project_path(args.output)),
         history,
@@ -221,6 +224,8 @@ def cmd_history_export_grid(args):
     print(f"grid 历史 CSV: {output_path}")
     if cache_policy:
         print(_render_history_cache_policy(cache_policy))
+    if provider_status:
+        print(_render_history_provider_status(provider_status))
 
 
 def cmd_history_export_rotation(args):
@@ -229,15 +234,18 @@ def cmd_history_export_rotation(args):
         '--lookback',
     )
     cache_policy = None
+    provider_status = None
     if args.input_json:
         history = build_rotation_history(
             _load_history_json_object(args.input_json),
             lookback=lookback,
         )
     else:
-        history, cache_policy = _fetch_rotation_history_from_data_manager(
-            args,
-            lookback,
+        history, cache_policy, provider_status = (
+            _fetch_rotation_history_from_data_manager(
+                args,
+                lookback,
+            )
         )
     output_path = write_rotation_history_csv(
         str(_resolve_project_path(args.output)),
@@ -246,6 +254,8 @@ def cmd_history_export_rotation(args):
     print(f"rotation 历史 CSV: {output_path}")
     if cache_policy:
         print(_render_history_cache_policy(cache_policy))
+    if provider_status:
+        print(_render_history_provider_status(provider_status))
 
 
 def cmd_history_probe(args):
@@ -530,7 +540,7 @@ def _resolve_backtest_history(history: list, args) -> list:
     )
 
 
-def _fetch_grid_history_from_data_manager(args) -> tuple[list, dict]:
+def _fetch_grid_history_from_data_manager(args) -> tuple[list, dict, dict]:
     _require_date_range(args)
     data_manager = DataManager(_load_history_data_config(args))
     try:
@@ -541,7 +551,11 @@ def _fetch_grid_history_from_data_manager(args) -> tuple[list, dict]:
             args.start_date,
             args.end_date,
         )
-        return history, _data_cache_policy(data_manager)
+        return (
+            history,
+            _data_cache_policy(data_manager),
+            data_manager.health_check().get('mx_data', {}),
+        )
     finally:
         data_manager.disconnect()
 
@@ -549,7 +563,7 @@ def _fetch_grid_history_from_data_manager(args) -> tuple[list, dict]:
 def _fetch_rotation_history_from_data_manager(
     args,
     lookback: int,
-) -> tuple[list, dict]:
+) -> tuple[list, dict, dict]:
     _require_date_range(args)
     symbols = _resolve_etf_pool(args.etf_pool)
     data_manager = DataManager(_load_history_data_config(args))
@@ -562,7 +576,11 @@ def _fetch_rotation_history_from_data_manager(
             args.end_date,
             lookback=lookback,
         )
-        return history, _data_cache_policy(data_manager)
+        return (
+            history,
+            _data_cache_policy(data_manager),
+            data_manager.health_check().get('mx_data', {}),
+        )
     finally:
         data_manager.disconnect()
 
@@ -1097,6 +1115,17 @@ def _render_history_cache_policy(cache_policy: dict) -> str:
         f"history_hits={cache_policy.get('history_cache_hits', 0)}, "
         f"history_misses={cache_policy.get('history_cache_misses', 0)}, "
         f"last_history_hit={last_hit_text}"
+    )
+
+
+def _render_history_provider_status(status: dict) -> str:
+    provider = status.get('last_history_provider') or '-'
+    attempts = status.get('last_history_attempts', 0)
+    failures = status.get('last_history_failures') or []
+    failure_count = len(failures)
+    return (
+        f"历史 provider: last={provider}, attempts={attempts}, "
+        f"failures={failure_count}"
     )
 
 

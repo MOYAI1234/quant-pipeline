@@ -87,7 +87,7 @@ python -m pytest tests\test_backtest_runner.py tests\test_backtest_history_adapt
 - 回测必须校验历史日期/盘中时间严格递增、OHLC 合法性、价格、成交量和成交额。
 - `BacktestExecutionModel` 统一处理滑点、成交量参与率限制、同一 bar 成交量占用、可选整手部分成交和成交前拒单归因。
 - 导出文件包括权益曲线、组合快照、成交明细、持仓明细和拒单明细。
-- `history export-grid/export-rotation` 能把本地 JSON 或 `DataManager.get_etf_history()` 返回值转换为回测 CSV。
+- `history export-grid/export-rotation` 能把本地 JSON 或 `DataManager.get_etf_history()` 返回值转换为回测 CSV；通过 provider 拉取时必须输出本次缓存统计和 provider 状态。
 - `history probe` 能对真实命令 provider 执行不落盘的最小查询，并拒绝无数据、乱序或越界历史；`--json` 成功时应输出本次历史缓存统计，失败时也必须输出 `available=false`、错误码、来源、错误消息、缓存统计和 provider 状态，便于 CI/provider 接入脚本消费。
 - `examples/providers/akshare_history_provider.py` 作为可选 provider 示例，必须能把 AKShare 中文字段转换为 `date/open/high/low/close/volume/amount` 契约字段，并把 AKShare / Eastmoney 按“手”返回的成交量转换为按“股”输出；测试只验证转换逻辑，不访问真实网络。
 - `examples/providers/tushare_history_provider.py` 作为可选 provider 示例，必须从 `TUSHARE_TOKEN` 读取凭据、调用未复权 `fund_daily`、补齐 ETF 交易所后缀，并把成交量从手转换为股、成交额从千元转换为元。
