@@ -10,7 +10,7 @@
 
 1. **AKShare**：第一优先 POC 已完成，已有可选命令 provider 和 guarded live e2e。它仍是研究与本地验收入口，不等于生产 SLA。
 2. **a-stock-data**：不作为可直接安装的 provider。它是一个自包含 `SKILL.md`，通过内嵌 Python 代码整合多个上游，适合参考多源优先级、限流和降级设计。
-3. **TuShare**：作为下一轮可配置 provider 候选。社区规模大、BSD-3-Clause，但 token、积分、频率和服务条款必须显式配置。
+3. **TuShare**：可选命令 provider POC 已完成，使用 `required_env` 声明 `TUSHARE_TOKEN`，并提供默认跳过的 guarded live e2e。社区规模大、BSD-3-Clause，但 token、积分、频率和服务条款必须显式配置。
 4. **mootdx**：只保留为技术验证候选。虽然代码仓库声明 MIT，官方 README 同时写明“不得用于任何商业目的”，在获得明确授权前不能进入生产依赖。
 5. **qstock**：作为研究型备选。MIT，接口和投研功能较完整，但项目更新节奏低于 AKShare，适合参考，不建议先接入生产主路径。
 6. **BaoStock GitHub 镜像/脚本类仓库**：暂缓。GitHub star 低、维护形态更像示例脚本集合，不满足“高 star 整合数据源包”的主诉求。
@@ -94,6 +94,8 @@ ETF 投资助手的默认方向应是低频、可解释、成本可承受的组�
 
 前置能力：命名 provider 已支持 `required_env` 声明凭据环境变量。配置校验和启动诊断会把缺失变量列为严格门禁 warning，运行时会跳过缺凭据来源并继续降级，健康状态不会暴露变量值。
 
+状态：离线 POC 和 guarded live 测试入口已完成。示例脚本调用未复权 `fund_daily`，自动补齐 `.SH` / `.SZ` 后缀，并把 `vol` 从手转换为股、`amount` 从千元转换为元。真实账户验收仍需用户本地 token、可用积分和显式启用。
+
 验收：
 
 - config 中必须显式声明 token 来源和服务限制。
@@ -110,6 +112,6 @@ ETF 投资助手的默认方向应是低频、可解释、成本可承受的组�
 ## 后续 PR 建议
 
 1. 为 provider adapter 定义来源标识、重试、限流、缓存、降级顺序和可观测性，保持 `history_command` 输出契约不变。
-2. 评估 TuShare 的 ETF 日线覆盖、token/积分要求、频率限制和服务条款，决定是否做第二个可选 provider。
+2. 使用本地 TuShare 账户显式运行 guarded live e2e，记录 ETF 日线覆盖、积分权限、频率限制和长期可用性；不提交 token 或真实行情缓存。
 3. 对任何候选先完成商业使用许可、字段单位、复权语义和空数据错误语义检查，再做 guarded live POC。
 4. AKShare guarded live 验收继续保持显式启用，不把一次通过解释为长期可用性保证。

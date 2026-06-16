@@ -166,3 +166,9 @@ pip install akshare
 ~~~
 
 脚本使用 AKShare 的 fund_etf_hist_em 日级 ETF 历史行情接口，将 AKShare 的中文字段转换为本项目历史行情契约字段。AKShare / Eastmoney 的成交量字段按“手”返回，脚本会先转换为“股”再输出 volume，避免回测成交量参与率限制低估真实可成交量。它适合作为本地 POC 和 history probe 验收入口，不应绕过 DataManager 的契约校验。
+
+## TuShare 示例
+
+仓库还提供可选脚本 `examples/providers/tushare_history_provider.py`。脚本通过 `TUSHARE_TOKEN` 初始化 `pro_api`，调用未复权 `fund_daily` ETF 日线，并将六位 ETF 代码补齐为 TuShare 的 `.SH` / `.SZ` 代码。
+
+TuShare 的 `vol` 按“手”、`amount` 按“千元”返回，脚本分别转换为“股”和“元”后再输出。建议在 `history_providers` 项中配置 `"required_env": ["TUSHARE_TOKEN"]`，不要把 token 写入命令参数或 JSON 配置。

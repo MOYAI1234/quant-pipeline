@@ -1,6 +1,6 @@
 # 真实历史数据验收
 
-本文说明如何显式运行 AKShare 历史行情 guarded e2e。该测试默认跳过，不属于离线 CI 的强制依赖。
+本文说明如何显式运行 AKShare / TuShare 历史行情 guarded e2e。这些测试默认跳过，不属于离线 CI 的强制依赖。
 
 ## 验收范围
 
@@ -8,9 +8,9 @@
 
 1. CLI `history probe`
 2. `DataManager.get_etf_history()`
-3. `MXDataAdapter.history_command`
-4. `examples/providers/akshare_history_provider.py`
-5. AKShare `fund_etf_hist_em`
+3. `MXDataAdapter.history_command` / `history_providers`
+4. `examples/providers/akshare_history_provider.py` 或 `examples/providers/tushare_history_provider.py`
+5. AKShare `fund_etf_hist_em` 或 TuShare `fund_daily`
 
 测试只校验返回数据可用、日期位于请求区间内，并复用现有数据契约校验。它不会保存真实行情文件，也不会提交 token、cookie 或本地配置。
 
@@ -36,11 +36,24 @@ Remove-Item Env:RUN_AKSHARE_LIVE
 python -m pytest -q
 ```
 
+TuShare：
+
+```powershell
+python -m pip install tushare
+$env:TUSHARE_TOKEN = '<本地 token>'
+$env:RUN_TUSHARE_LIVE = '1'
+python -m pytest tests\test_tushare_history_provider_live.py -q
+Remove-Item Env:RUN_TUSHARE_LIVE
+Remove-Item Env:TUSHARE_TOKEN
+```
+
 ## 失败解释
 
 - 缺少 `RUN_AKSHARE_LIVE=1`：正常跳过，避免 CI 意外访问网络。
 - 缺少 `akshare`：启用 live test 后会失败，并提示安装可选依赖，避免把未执行误判为验收通过。
+- 缺少 `RUN_TUSHARE_LIVE=1`：正常跳过，避免 CI 意外访问网络。
+- 缺少 `tushare`、`TUSHARE_TOKEN`、账户积分或接口权限：启用 TuShare live test 后会明确失败，不回退为假成功。
 - provider 非零退出、超时或返回非法数据：测试失败，并展示 CLI/provider 的 stderr。
 - 上游网页源临时不可用：属于真实数据源可用性问题，不应通过放宽数据契约来掩盖。
 
-真实环境验收结果会受 AKShare 版本、上游 Eastmoney 页面和网络状态影响。生产接入仍需要重试、缓存、监控和备选 provider，不能把一次 live test 通过视为长期 SLA。
+真实环境验收结果会受 provider 包版本、上游服务、账户权限和网络状态影响。生产接入仍需要重试、缓存、监控和备选 provider，不能把一次 live test 通过视为长期 SLA。

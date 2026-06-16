@@ -252,7 +252,25 @@ python cli\commands.py history export-rotation --config path\to\config.json --et
 
 仓库提供可选 AKShare 示例脚本 `examples/providers/akshare_history_provider.py`。它不会把 AKShare 加入项目依赖；需要本地自行 `pip install akshare` 后，再通过 `history_command` 调用。完整 provider 契约见 [docs/history-provider-contract.md](docs/history-provider-contract.md)。
 
-如需验证真实 AKShare 网络链路，可按 [docs/live-data-validation.md](docs/live-data-validation.md) 显式设置 `RUN_AKSHARE_LIVE=1` 运行 guarded e2e。默认测试不会访问外部行情服务。
+仓库也提供可选 TuShare 示例脚本 `examples/providers/tushare_history_provider.py`。它使用未复权 `fund_daily` ETF 日线，将 `vol` 从手转换为股、`amount` 从千元转换为元，并从 `TUSHARE_TOKEN` 环境变量读取凭据。建议通过命名 provider 配置：
+
+```json
+{
+  "name": "tushare",
+  "command": [
+    "python",
+    "examples/providers/tushare_history_provider.py",
+    "--symbol", "{symbol}",
+    "--start-date", "{start_date}",
+    "--end-date", "{end_date}"
+  ],
+  "required_env": ["TUSHARE_TOKEN"]
+}
+```
+
+TuShare 不会加入默认依赖，也不会在仓库内保存 token。其接口积分、频率和服务条款由用户自己的 TuShare 账户决定，不应把 guarded live test 通过解释为生产 SLA。
+
+如需验证真实 AKShare 或 TuShare 网络链路，可按 [docs/live-data-validation.md](docs/live-data-validation.md) 显式启用对应 guarded e2e。默认测试不会访问外部行情服务。
 
 严格交易日历默认按周一至周五判断；`--holiday YYYY-MM-DD` 可重复指定额外休市日，`--trading-day YYYY-MM-DD` 可显式覆盖周末或休市日。未启用 `--strict-trading-calendar` 时保持原有行为，不额外拒绝历史日期。
 
@@ -314,6 +332,7 @@ python -m compileall -q .
 - `BacktestRunner` 的 grid 买卖周期、日期区间过滤、历史日期/盘中时间顺序与 OHLC 合法性校验、最大回撤区间、胜率/手续费统计、滑点执行价、权益曲线/组合快照/成交明细 CSV 导出、轮动样例回测、空历史保护、CSV 读取/错误处理和 CLI smoke
 - `history export-grid/export-rotation` 对 DataManager 历史数据、外部历史 provider 配置和本地 JSON 到回测 CSV 的转换
 - `history probe` 对真实历史 provider 的最小查询、数据契约校验和 JSON 失败输出
+- AKShare / TuShare 示例 provider 的字段、日期、代码和成交量/成交额单位转换
 - `GridStrategy` 多格买入、同格防重复、卖出、止损后 ledger 重置
 - `RotationStrategy` 首次调仓、卖旧买新、失败 pending 清理和重试
 - `JsonStateStore` 对账户、网格 ledger、轮动调仓状态、成交快照、订单状态、运行 metadata 和旧版状态迁移的保存/恢复
@@ -330,7 +349,7 @@ python -m compileall -q .
 1. 补强测试和主循环可测性。
 2. 明确 adapter 的 mock/real 模式和数据契约。
 3. 扩展历史行情驱动的回测引擎。
-4. 基于 provider 选型矩阵，继续设计多源重试、缓存、降级和监控；评估 TuShare 等具备明确调用边界的第二 provider。
+4. 显式验收 AKShare / TuShare guarded live 链路，并继续补 provider 长期健康、缓存命中和降级监控。
 5. 持久化账户、成交和策略状态。
 6. 完善监控报告和告警闭环。
 7. 在模拟和回测稳定后，再预研 QMT/实盘执行。

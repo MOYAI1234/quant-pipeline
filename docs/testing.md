@@ -33,7 +33,7 @@ python cli\commands.py history export-grid --help
 python cli\commands.py history export-rotation --help
 ```
 
-当前离线基线：`pytest` 应通过 375 个测试，并跳过 1 个显式启用的 AKShare live test。
+当前离线基线：`pytest` 应通过 388 个测试，并跳过 2 个显式启用的 AKShare / TuShare live test。
 
 ## 分层测试
 
@@ -77,7 +77,7 @@ python -m pytest tests\test_simulator.py tests\test_e2e_grid.py tests\test_rotat
 相关测试：
 
 ```powershell
-python -m pytest tests\test_backtest_runner.py tests\test_backtest_history_adapter.py tests\test_cli_history_probe.py tests\test_trading_calendar.py tests\test_akshare_history_provider_example.py -q
+python -m pytest tests\test_backtest_runner.py tests\test_backtest_history_adapter.py tests\test_cli_history_probe.py tests\test_trading_calendar.py tests\test_akshare_history_provider_example.py tests\test_tushare_history_provider_example.py -q
 ```
 
 验收重点：
@@ -90,7 +90,9 @@ python -m pytest tests\test_backtest_runner.py tests\test_backtest_history_adapt
 - `history export-grid/export-rotation` 能把本地 JSON 或 `DataManager.get_etf_history()` 返回值转换为回测 CSV。
 - `history probe` 能对真实命令 provider 执行不落盘的最小查询，并拒绝无数据、乱序或越界历史；`--json` 在失败时也必须输出 `available=false`、错误码、来源和错误消息，便于 CI/provider 接入脚本消费。
 - `examples/providers/akshare_history_provider.py` 作为可选 provider 示例，必须能把 AKShare 中文字段转换为 `date/open/high/low/close/volume/amount` 契约字段，并把 AKShare / Eastmoney 按“手”返回的成交量转换为按“股”输出；测试只验证转换逻辑，不访问真实网络。
+- `examples/providers/tushare_history_provider.py` 作为可选 provider 示例，必须从 `TUSHARE_TOKEN` 读取凭据、调用未复权 `fund_daily`、补齐 ETF 交易所后缀，并把成交量从手转换为股、成交额从千元转换为元。
 - `tests/test_akshare_history_provider_live.py` 默认跳过；只有显式设置 `RUN_AKSHARE_LIVE=1` 且安装 AKShare 后，才通过 CLI `history probe` 访问真实网络。
+- `tests/test_tushare_history_provider_live.py` 默认跳过；只有显式设置 `RUN_TUSHARE_LIVE=1`、`TUSHARE_TOKEN` 且安装 TuShare 后，才通过 CLI `history probe` 访问真实网络。
 
 ### 状态持久化与主循环
 
