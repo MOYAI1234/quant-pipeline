@@ -28,6 +28,9 @@ def test_cli_health_outputs_adapter_statuses():
 
     assert '数据源状态: OK (mock)' in completed.stdout
     assert '- 缓存: history_ttl_seconds=3600' in completed.stdout
+    assert 'history_hits=0' in completed.stdout
+    assert 'history_misses=0' in completed.stdout
+    assert 'last_history_hit=-' in completed.stdout
     assert '- mx_data: 可用, mode=mock' in completed.stdout
     assert '- mx_xuangu: 可用, mode=mock' in completed.stdout
     assert '- mx_search: 可用, mode=mock' in completed.stdout
@@ -53,6 +56,9 @@ def test_cli_health_json_outputs_structured_summary():
     assert summary['available'] is True
     assert summary['mock'] is True
     assert summary['cache']['history_ttl_seconds'] == 3600
+    assert summary['cache']['history_cache_hits'] == 0
+    assert summary['cache']['history_cache_misses'] == 0
+    assert summary['cache']['last_history_cache_hit'] is None
     assert summary['adapters']['mx_data']['service'] == 'MXDataAdapter'
 
 

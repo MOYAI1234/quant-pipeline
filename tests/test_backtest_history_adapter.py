@@ -259,6 +259,9 @@ print(json.dumps([
     )
 
     assert f'grid 历史 CSV: {output_file}' in completed.stdout
+    assert '历史缓存: history_ttl_seconds=3600' in completed.stdout
+    assert 'history_misses=1' in completed.stdout
+    assert 'last_history_hit=false' in completed.stdout
     rows = load_history_csv(str(output_file))
     assert rows[0]['close'] == pytest.approx(4.1)
     assert rows[1]['volume'] == 1100

@@ -93,6 +93,13 @@ print(json.dumps([
         'row_count': 2,
         'first_date': '2026-01-01',
         'last_date': '2026-01-02',
+        'cache': {
+            'history_ttl_seconds': 3600,
+            'history_cache_hits': 0,
+            'history_cache_misses': 1,
+            'last_history_cache_key': 'history_510300_2026-01-01_2026-01-02',
+            'last_history_cache_hit': False,
+        },
     }
 
 

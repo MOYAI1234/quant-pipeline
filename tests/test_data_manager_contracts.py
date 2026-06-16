@@ -620,7 +620,40 @@ def test_cache_policy_reports_history_cache_ttl():
         {'history_cache_ttl_seconds': 30},
     )
 
-    assert manager.cache_policy() == {'history_ttl_seconds': 30}
+    assert manager.cache_policy() == {
+        'history_ttl_seconds': 30,
+        'history_cache_hits': 0,
+        'history_cache_misses': 0,
+        'last_history_cache_key': None,
+        'last_history_cache_hit': None,
+    }
+
+
+def test_get_etf_history_reports_cache_hits_and_misses():
+    history = [{
+        'date': '2026-06-02',
+        'open': 4.0,
+        'high': 4.1,
+        'low': 3.9,
+        'close': 4.05,
+        'volume': 100,
+        'amount': 40500.0,
+    }]
+    adapter = CountingHistoryAdapter([history])
+    manager = _manager_with_adapter(adapter)
+
+    first = manager.get_etf_history('510300', '2026-06-01', '2026-06-02')
+    second = manager.get_etf_history('510300', '2026-06-01', '2026-06-02')
+
+    assert adapter.calls == 1
+    assert first == second
+    assert manager.cache_policy() == {
+        'history_ttl_seconds': 3600,
+        'history_cache_hits': 1,
+        'history_cache_misses': 1,
+        'last_history_cache_key': 'history_510300_2026-06-01_2026-06-02',
+        'last_history_cache_hit': True,
+    }
 
 
 def test_get_etf_history_can_disable_cache_with_zero_ttl():
@@ -654,6 +687,9 @@ def test_get_etf_history_can_disable_cache_with_zero_ttl():
     assert adapter.calls == 2
     assert first[0]['close'] == 4.05
     assert second[0]['close'] == 4.25
+    assert manager.cache_policy()['history_cache_hits'] == 0
+    assert manager.cache_policy()['history_cache_misses'] == 2
+    assert manager.cache_policy()['last_history_cache_hit'] is False
 
 
 def test_data_manager_wraps_unexpected_adapter_errors():

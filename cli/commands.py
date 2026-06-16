@@ -209,16 +209,18 @@ def cmd_diagnose(args):
 
 
 def cmd_history_export_grid(args):
-    history = (
-        _load_history_json_list(args.input_json)
-        if args.input_json
-        else _fetch_grid_history_from_data_manager(args)
-    )
+    cache_policy = None
+    if args.input_json:
+        history = _load_history_json_list(args.input_json)
+    else:
+        history, cache_policy = _fetch_grid_history_from_data_manager(args)
     output_path = write_grid_history_csv(
         str(_resolve_project_path(args.output)),
         history,
     )
     print(f"grid 历史 CSV: {output_path}")
+    if cache_policy:
+        print(_render_history_cache_policy(cache_policy))
 
 
 def cmd_history_export_rotation(args):
@@ -226,19 +228,24 @@ def cmd_history_export_rotation(args):
         _value_or_default(args.lookback, DEFAULT_BACKTEST_ROTATION_LOOKBACK),
         '--lookback',
     )
-    history = (
-        build_rotation_history(
+    cache_policy = None
+    if args.input_json:
+        history = build_rotation_history(
             _load_history_json_object(args.input_json),
             lookback=lookback,
         )
-        if args.input_json
-        else _fetch_rotation_history_from_data_manager(args, lookback)
-    )
+    else:
+        history, cache_policy = _fetch_rotation_history_from_data_manager(
+            args,
+            lookback,
+        )
     output_path = write_rotation_history_csv(
         str(_resolve_project_path(args.output)),
         history,
     )
     print(f"rotation 历史 CSV: {output_path}")
+    if cache_policy:
+        print(_render_history_cache_policy(cache_policy))
 
 
 def cmd_history_probe(args):
@@ -272,6 +279,7 @@ def _run_history_probe(args) -> dict:
             args.start_date,
             args.end_date,
         )
+        cache_policy = _data_cache_policy(data_manager)
     finally:
         data_manager.disconnect()
     validated_history = _validate_history_probe_range(
@@ -288,6 +296,7 @@ def _run_history_probe(args) -> dict:
         'row_count': len(validated_history),
         'first_date': validated_history[0]['date'],
         'last_date': validated_history[-1]['date'],
+        'cache': cache_policy,
     }
 
 
@@ -504,34 +513,39 @@ def _resolve_backtest_history(history: list, args) -> list:
     )
 
 
-def _fetch_grid_history_from_data_manager(args) -> list:
+def _fetch_grid_history_from_data_manager(args) -> tuple[list, dict]:
     _require_date_range(args)
     data_manager = DataManager(_load_history_data_config(args))
     try:
         data_manager.connect()
-        return fetch_grid_history(
+        history = fetch_grid_history(
             data_manager,
             _resolve_symbol(args.symbol),
             args.start_date,
             args.end_date,
         )
+        return history, _data_cache_policy(data_manager)
     finally:
         data_manager.disconnect()
 
 
-def _fetch_rotation_history_from_data_manager(args, lookback: int) -> list:
+def _fetch_rotation_history_from_data_manager(
+    args,
+    lookback: int,
+) -> tuple[list, dict]:
     _require_date_range(args)
     symbols = _resolve_etf_pool(args.etf_pool)
     data_manager = DataManager(_load_history_data_config(args))
     try:
         data_manager.connect()
-        return fetch_rotation_history(
+        history = fetch_rotation_history(
             data_manager,
             symbols,
             args.start_date,
             args.end_date,
             lookback=lookback,
         )
+        return history, _data_cache_policy(data_manager)
     finally:
         data_manager.disconnect()
 
@@ -908,7 +922,16 @@ def _render_health_summary(summary: dict) -> str:
         lines.append(f"- error: {summary['error']}")
     if summary.get('cache'):
         history_ttl = summary['cache'].get('history_ttl_seconds')
-        lines.append(f"- 缓存: history_ttl_seconds={history_ttl}")
+        history_hits = summary['cache'].get('history_cache_hits', 0)
+        history_misses = summary['cache'].get('history_cache_misses', 0)
+        last_hit = summary['cache'].get('last_history_cache_hit')
+        last_hit_text = '-' if last_hit is None else str(last_hit).lower()
+        lines.append(
+            f"- 缓存: history_ttl_seconds={history_ttl}, "
+            f"history_hits={history_hits}, "
+            f"history_misses={history_misses}, "
+            f"last_history_hit={last_hit_text}"
+        )
     for name, status in summary['adapters'].items():
         availability = '可用' if status.get('available') else '不可用'
         error = status.get('error') or '-'
@@ -1038,11 +1061,25 @@ def _render_state_summary(summary: dict) -> str:
 
 
 def _render_history_probe(result: dict) -> str:
-    return (
+    lines = [(
         f"历史 provider: OK, symbol={result['symbol']}, "
         f"request={result['start_date']}..{result['end_date']}, "
         f"rows={result['row_count']}, "
         f"data={result['first_date']}..{result['last_date']}"
+    )]
+    if result.get('cache'):
+        lines.append(_render_history_cache_policy(result['cache']))
+    return "\n".join(lines)
+
+
+def _render_history_cache_policy(cache_policy: dict) -> str:
+    last_hit = cache_policy.get('last_history_cache_hit')
+    last_hit_text = '-' if last_hit is None else str(last_hit).lower()
+    return (
+        f"历史缓存: history_ttl_seconds={cache_policy.get('history_ttl_seconds')}, "
+        f"history_hits={cache_policy.get('history_cache_hits', 0)}, "
+        f"history_misses={cache_policy.get('history_cache_misses', 0)}, "
+        f"last_history_hit={last_hit_text}"
     )
 
 

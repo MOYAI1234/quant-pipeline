@@ -48,6 +48,11 @@ class DataManager:
             'history_cache_ttl_seconds',
             3600,
         )
+        # 进程内观测指标；history probe/export 会在本次拉取后直接输出。
+        self.history_cache_hits = 0
+        self.history_cache_misses = 0
+        self.last_history_cache_key = None
+        self.last_history_cache_hit = None
         self.max_realtime_age_seconds = config.get('max_realtime_age_seconds')
         self.max_nav_age_seconds = config.get('max_nav_age_seconds')
         self.max_timestamp_future_skew_seconds = config.get(
@@ -101,7 +106,9 @@ class DataManager:
         cache_key = f"history_{symbol}_{start_date}_{end_date}"
         cached = self.cache.get(cache_key)
         if cached is not _SENTINEL:
+            self._record_history_cache_access(cache_key, hit=True)
             return cached
+        self._record_history_cache_access(cache_key, hit=False)
         raw_data = self._call_adapter(
             'mx_data.history',
             self.mx_data.get_etf_history,
@@ -184,6 +191,10 @@ class DataManager:
     def cache_policy(self) -> dict:
         return {
             'history_ttl_seconds': self.history_cache_ttl_seconds,
+            'history_cache_hits': self.history_cache_hits,
+            'history_cache_misses': self.history_cache_misses,
+            'last_history_cache_key': self.last_history_cache_key,
+            'last_history_cache_hit': self.last_history_cache_hit,
         }
 
     def is_mock_mode(self) -> bool:
@@ -203,6 +214,14 @@ class DataManager:
                 error_code='ADAPTER_ERROR',
                 source=source,
             ) from exc
+
+    def _record_history_cache_access(self, cache_key: str, *, hit: bool) -> None:
+        self.last_history_cache_key = cache_key
+        self.last_history_cache_hit = hit
+        if hit:
+            self.history_cache_hits += 1
+        else:
+            self.history_cache_misses += 1
 
     def _normalize_record(self, record: dict, required_fields: tuple, source: str) -> dict:
         if record is None:
