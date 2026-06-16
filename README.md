@@ -248,7 +248,7 @@ python cli\commands.py history export-rotation --config path\to\config.json --et
 
 同一 provider 的进程启动失败、非零退出或超时会按 `history_retry_attempts` 重试，然后再切换到下一个 provider。缺少 `required_env` 属于配置可用性问题，不会反复重试同一来源；非法 UTF-8、非法 JSON 或错误输出结构也不会重复请求同一来源，但仍会尝试备源。重试次数范围为 1-10，等待时间范围为 0-60 秒；等待使用当前同步 pipeline 的阻塞式 sleep。`health --json` 和报告会展示当前进程的 provider ready 状态、最近成功来源、总尝试次数、结构化失败链、历史缓存 TTL、命中/未命中次数和最近一次历史缓存是否命中；`history probe --json` 以及通过 provider 拉取的 `history export-*` 会在执行历史请求的同一进程输出本次缓存统计和 provider 状态，便于发现“凭据缺失”“备源成功但主源已退化”“缓存窗口过长”或“缓存未命中导致频繁请求上游”的情况。历史结果缓存仍由 `DataManager` 负责，默认 `data.history_cache_ttl_seconds=3600`；如需调试 provider 可设为 `0` 禁用缓存，真实历史 provider 启用时 `config validate` 会对该配置给出上游请求压力警告，生产环境应避免过低 TTL。
 
-`history probe` 会执行一次不落盘的最小查询，校验 provider 命令、JSON、历史字段、日期顺序和请求区间，并输出返回行数、实际首尾日期和本次历史缓存统计。使用 `--json` 时，失败也会输出 `available=false`、错误码、来源、错误消息、缓存统计和 provider 状态，便于 CI 或本地 provider 接入脚本判断失败原因。真实 API key、token 和私有 provider 脚本应保留在本地配置或环境变量中，不要提交到仓库。
+`history probe` 会执行一次不落盘的最小查询，校验 provider 命令、JSON、历史字段、日期顺序和请求区间，并输出返回行数、实际首尾日期、本次历史缓存统计和 provider 状态。使用 `--json` 时，成功和失败都会输出 provider 状态；失败还会输出 `available=false`、错误码、来源和错误消息，便于 CI 或本地 provider 接入脚本判断失败原因。真实 API key、token 和私有 provider 脚本应保留在本地配置或环境变量中，不要提交到仓库。
 
 仓库提供可选 AKShare 示例脚本 `examples/providers/akshare_history_provider.py`。它不会把 AKShare 加入项目依赖；需要本地自行 `pip install akshare` 后，再通过 `history_command` 调用。完整 provider 契约见 [docs/history-provider-contract.md](docs/history-provider-contract.md)。
 

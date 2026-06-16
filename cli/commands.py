@@ -298,6 +298,7 @@ def _run_history_probe(args) -> dict:
             _attach_history_probe_diagnostics(exc, data_manager)
             raise
         cache_policy = _data_cache_policy(data_manager)
+        provider_status = data_manager.health_check().get('mx_data', {})
     finally:
         data_manager.disconnect()
 
@@ -310,6 +311,7 @@ def _run_history_probe(args) -> dict:
         'first_date': validated_history[0]['date'],
         'last_date': validated_history[-1]['date'],
         'cache': cache_policy,
+        'provider_status': provider_status,
     }
 
 
@@ -1110,6 +1112,8 @@ def _render_history_probe(result: dict) -> str:
     )]
     if result.get('cache'):
         lines.append(_render_history_cache_policy(result['cache']))
+    if result.get('provider_status'):
+        lines.append(_render_history_provider_status(result['provider_status']))
     return "\n".join(lines)
 
 
