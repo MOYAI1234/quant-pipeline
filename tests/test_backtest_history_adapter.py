@@ -381,3 +381,127 @@ def test_cli_history_export_rotation_from_json(tmp_path):
     assert load_rotation_history_csv(str(output_file))[-1]['symbols']['510500'][
         'prices'
     ] == [8.5, 9.0]
+
+
+def test_cli_history_export_rotation_aggregates_provider_status(tmp_path):
+    primary_provider = tmp_path / 'primary_history_provider.py'
+    primary_provider.write_text(
+        """
+import json
+import sys
+
+symbol = sys.argv[1]
+if symbol == '510300':
+    print('primary unavailable', file=sys.stderr)
+    raise SystemExit(1)
+
+print(json.dumps([
+    {
+        'date': '2026-01-01',
+        'open': 8.0,
+        'high': 8.2,
+        'low': 7.9,
+        'close': 8.1,
+        'volume': 1000,
+        'amount': 8100.0,
+    },
+    {
+        'date': '2026-01-02',
+        'open': 8.1,
+        'high': 8.3,
+        'low': 8.0,
+        'close': 8.2,
+        'volume': 1100,
+        'amount': 9020.0,
+    },
+]))
+""".strip(),
+        encoding='utf-8',
+    )
+    backup_provider = tmp_path / 'backup_history_provider.py'
+    backup_provider.write_text(
+        """
+import json
+
+print(json.dumps([
+    {
+        'date': '2026-01-01',
+        'open': 10.0,
+        'high': 10.2,
+        'low': 9.9,
+        'close': 10.1,
+        'volume': 2000,
+        'amount': 20200.0,
+    },
+    {
+        'date': '2026-01-02',
+        'open': 10.1,
+        'high': 10.3,
+        'low': 10.0,
+        'close': 10.2,
+        'volume': 2100,
+        'amount': 21420.0,
+    },
+]))
+""".strip(),
+        encoding='utf-8',
+    )
+    config = json.loads(json.dumps(SYSTEM_CONFIG))
+    config['data']['mx_data'] = {
+        'mode': 'real',
+        'timeout': 10,
+        'history_providers': [
+            {
+                'name': 'primary',
+                'command': [
+                    sys.executable,
+                    str(primary_provider),
+                    '{symbol}',
+                    '{start_date}',
+                    '{end_date}',
+                ],
+            },
+            {
+                'name': 'backup',
+                'command': [
+                    sys.executable,
+                    str(backup_provider),
+                    '{symbol}',
+                    '{start_date}',
+                    '{end_date}',
+                ],
+            },
+        ],
+    }
+    config_path = tmp_path / 'config.json'
+    config_path.write_text(json.dumps(config), encoding='utf-8')
+    output_file = tmp_path / 'rotation-history.csv'
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(Path('cli') / 'commands.py'),
+            'history',
+            'export-rotation',
+            '--config',
+            str(config_path),
+            '--etf-pool',
+            '510300,510500',
+            '--start-date',
+            '2026-01-01',
+            '--end-date',
+            '2026-01-02',
+            '--lookback',
+            '2',
+            '--output',
+            str(output_file),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert f'rotation 历史 CSV: {output_file}' in completed.stdout
+    assert '历史 provider: last=primary, attempts=3, failures=1' in completed.stdout
+    rows = load_rotation_history_csv(str(output_file))
+    assert rows[-1]['symbols']['510500']['prices'] == [8.1, 8.2]
