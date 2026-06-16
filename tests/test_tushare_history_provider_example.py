@@ -176,6 +176,90 @@ def test_tushare_provider_calls_fund_daily_with_token_and_fields(monkeypatch):
     }
 
 
+def test_tushare_provider_pages_long_date_ranges(monkeypatch):
+    provider = _load_provider_module()
+    calls = []
+
+    class FakeFrame:
+        def __init__(self, records):
+            self._records = records
+
+        def to_dict(self, orient):
+            assert orient == 'records'
+            return self._records
+
+    class FakeClient:
+        def fund_daily(self, **kwargs):
+            calls.append(kwargs)
+            return FakeFrame([{
+                'trade_date': kwargs['start_date'],
+                'open': 4.0,
+                'high': 4.2,
+                'low': 3.9,
+                'close': 4.1,
+                'vol': 1,
+                'amount': 1,
+            }])
+
+    monkeypatch.setenv(provider.TUSHARE_TOKEN_ENV, 'local-secret')
+    monkeypatch.setattr(provider, 'TUSHARE_HISTORY_PAGE_DAYS', 2)
+    monkeypatch.setitem(
+        sys.modules,
+        'tushare',
+        SimpleNamespace(pro_api=lambda _token: FakeClient()),
+    )
+
+    rows = provider.fetch_tushare_history(
+        '510300',
+        '2026-01-01',
+        '2026-01-04',
+    )
+
+    assert [row['date'] for row in rows] == ['2026-01-01', '2026-01-03']
+    assert calls == [
+        {
+            'ts_code': '510300.SH',
+            'start_date': '20260101',
+            'end_date': '20260102',
+            'fields': provider.TUSHARE_HISTORY_FIELDS,
+        },
+        {
+            'ts_code': '510300.SH',
+            'start_date': '20260103',
+            'end_date': '20260104',
+            'fields': provider.TUSHARE_HISTORY_FIELDS,
+        },
+    ]
+
+
+def test_tushare_provider_rejects_page_at_row_limit(monkeypatch):
+    provider = _load_provider_module()
+
+    class FakeFrame:
+        def to_dict(self, orient):
+            assert orient == 'records'
+            return [{}, {}]
+
+    class FakeClient:
+        def fund_daily(self, **_kwargs):
+            return FakeFrame()
+
+    monkeypatch.setenv(provider.TUSHARE_TOKEN_ENV, 'local-secret')
+    monkeypatch.setattr(provider, 'TUSHARE_FUND_DAILY_ROW_LIMIT', 2)
+    monkeypatch.setitem(
+        sys.modules,
+        'tushare',
+        SimpleNamespace(pro_api=lambda _token: FakeClient()),
+    )
+
+    with pytest.raises(RuntimeError, match='5000-row limit'):
+        provider.fetch_tushare_history(
+            '510300',
+            '2026-01-01',
+            '2026-01-02',
+        )
+
+
 def test_tushare_provider_rows_pass_data_manager_history_contract():
     provider = _load_provider_module()
     rows = provider.normalize_tushare_records([{

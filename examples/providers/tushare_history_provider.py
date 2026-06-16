@@ -12,7 +12,7 @@ import json
 import math
 import os
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -20,6 +20,9 @@ from typing import Any
 TUSHARE_TOKEN_ENV = 'TUSHARE_TOKEN'
 TUSHARE_VOLUME_LOT_SIZE = 100
 TUSHARE_AMOUNT_UNIT_YUAN = 1000
+TUSHARE_FUND_DAILY_ROW_LIMIT = 5000
+TUSHARE_HISTORY_PAGE_DAYS = 3650
+TUSHARE_HISTORY_FIELDS = 'trade_date,open,high,low,close,vol,amount'
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -64,13 +67,23 @@ def fetch_tushare_history(
         ) from exc
 
     client = ts.pro_api(token)
-    frame = client.fund_daily(
-        ts_code=_to_ts_code(symbol),
-        start_date=_compact_date(start_date),
-        end_date=_compact_date(end_date),
-        fields='trade_date,open,high,low,close,vol,amount',
-    )
-    return normalize_tushare_records(frame.to_dict('records'))
+    records = []
+    ts_code = _to_ts_code(symbol)
+    for page_start, page_end in _date_windows(start_date, end_date):
+        frame = client.fund_daily(
+            ts_code=ts_code,
+            start_date=_compact_date(page_start.isoformat()),
+            end_date=_compact_date(page_end.isoformat()),
+            fields=TUSHARE_HISTORY_FIELDS,
+        )
+        page_records = frame.to_dict('records')
+        if len(page_records) >= TUSHARE_FUND_DAILY_ROW_LIMIT:
+            raise RuntimeError(
+                'TuShare fund_daily page reached the 5000-row limit; '
+                'reduce TUSHARE_HISTORY_PAGE_DAYS or request a narrower date range'
+            )
+        records.extend(page_records)
+    return normalize_tushare_records(records)
 
 
 def normalize_tushare_records(
@@ -127,6 +140,31 @@ def _compact_date(value: str) -> str:
         return datetime.strptime(value, '%Y-%m-%d').strftime('%Y%m%d')
     except ValueError as exc:
         raise ValueError(f'invalid date {value!r}; expected YYYY-MM-DD') from exc
+
+
+def _date_value(value: str) -> date:
+    try:
+        return datetime.strptime(value, '%Y-%m-%d').date()
+    except ValueError as exc:
+        raise ValueError(f'invalid date {value!r}; expected YYYY-MM-DD') from exc
+
+
+def _date_windows(start_date: str, end_date: str) -> list[tuple[date, date]]:
+    start = _date_value(start_date)
+    end = _date_value(end_date)
+    if end < start:
+        raise ValueError('end-date must not be before start-date')
+
+    windows = []
+    current = start
+    while current <= end:
+        page_end = min(
+            current + timedelta(days=TUSHARE_HISTORY_PAGE_DAYS - 1),
+            end,
+        )
+        windows.append((current, page_end))
+        current = page_end + timedelta(days=1)
+    return windows
 
 
 def _date_text(value: Any, index: int) -> str:
