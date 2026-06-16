@@ -48,6 +48,7 @@ class DataManager:
             'history_cache_ttl_seconds',
             3600,
         )
+        # 进程内观测指标；history probe/export 会在本次拉取后直接输出。
         self.history_cache_hits = 0
         self.history_cache_misses = 0
         self.last_history_cache_key = None
