@@ -41,6 +41,9 @@ def test_daily_report_includes_data_health_section():
     assert '## 数据源状态' in report
     assert '- 总体: FAIL (mixed/real)' in report
     assert '- 缓存: history_ttl_seconds=3600' in report
+    assert 'history_hits=0' in report
+    assert 'history_misses=0' in report
+    assert 'last_history_hit=-' in report
     assert '- mx_data: 可用, mode=mock' in report
     assert '- mx_search: 不可用, mode=real' in report
 
@@ -148,6 +151,8 @@ def test_generate_report_includes_cache_policy():
 
     assert '## 数据源状态' in report
     assert '- 缓存: history_ttl_seconds=3600' in report
+    assert 'history_hits=0' in report
+    assert 'history_misses=0' in report
 
 
 def test_cli_daily_report_includes_default_mock_data_health():
@@ -169,4 +174,6 @@ def test_cli_daily_report_includes_default_mock_data_health():
     assert '## 数据源状态' in completed.stdout
     assert '- 总体: OK (mock)' in completed.stdout
     assert '- 缓存: history_ttl_seconds=3600' in completed.stdout
+    assert 'history_hits=0' in completed.stdout
+    assert 'history_misses=0' in completed.stdout
     assert '- mx_data: 可用, mode=mock' in completed.stdout

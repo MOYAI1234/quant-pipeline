@@ -908,7 +908,16 @@ def _render_health_summary(summary: dict) -> str:
         lines.append(f"- error: {summary['error']}")
     if summary.get('cache'):
         history_ttl = summary['cache'].get('history_ttl_seconds')
-        lines.append(f"- 缓存: history_ttl_seconds={history_ttl}")
+        history_hits = summary['cache'].get('history_cache_hits', 0)
+        history_misses = summary['cache'].get('history_cache_misses', 0)
+        last_hit = summary['cache'].get('last_history_cache_hit')
+        last_hit_text = '-' if last_hit is None else str(last_hit).lower()
+        lines.append(
+            f"- 缓存: history_ttl_seconds={history_ttl}, "
+            f"history_hits={history_hits}, "
+            f"history_misses={history_misses}, "
+            f"last_history_hit={last_hit_text}"
+        )
     for name, status in summary['adapters'].items():
         availability = '可用' if status.get('available') else '不可用'
         error = status.get('error') or '-'

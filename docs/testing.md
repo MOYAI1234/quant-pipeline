@@ -33,7 +33,7 @@ python cli\commands.py history export-grid --help
 python cli\commands.py history export-rotation --help
 ```
 
-当前离线基线：`pytest` 应通过 388 个测试，并跳过 2 个显式启用的 AKShare / TuShare live test。
+当前离线基线：`pytest` 应通过 389 个测试，并跳过 2 个显式启用的 AKShare / TuShare live test。
 
 ## 分层测试
 
