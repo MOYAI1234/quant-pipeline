@@ -28,7 +28,6 @@ from backtest.runner import (
 from backtest.history_adapter import (
     build_rotation_history,
     fetch_grid_history,
-    fetch_rotation_history,
     write_grid_history_csv,
     write_rotation_history_csv,
 )
@@ -569,17 +568,24 @@ def _fetch_rotation_history_from_data_manager(
     data_manager = DataManager(_load_history_data_config(args))
     try:
         data_manager.connect()
-        history = fetch_rotation_history(
-            data_manager,
-            symbols,
-            args.start_date,
-            args.end_date,
-            lookback=lookback,
-        )
+        provider_status = _empty_history_provider_status()
+        symbol_histories = {}
+        for symbol in symbols:
+            symbol_histories[symbol] = data_manager.get_etf_history(
+                symbol,
+                args.start_date,
+                args.end_date,
+            )
+            provider_status = _merge_history_provider_status(
+                provider_status,
+                data_manager.health_check().get('mx_data', {}),
+                symbol=symbol,
+            )
+        history = build_rotation_history(symbol_histories, lookback=lookback)
         return (
             history,
             _data_cache_policy(data_manager),
-            data_manager.health_check().get('mx_data', {}),
+            provider_status,
         )
     finally:
         data_manager.disconnect()
@@ -1127,6 +1133,40 @@ def _render_history_provider_status(status: dict) -> str:
         f"历史 provider: last={provider}, attempts={attempts}, "
         f"failures={failure_count}"
     )
+
+
+def _empty_history_provider_status() -> dict:
+    return {
+        'last_history_provider': None,
+        'last_history_attempts': 0,
+        'last_history_failures': [],
+    }
+
+
+def _merge_history_provider_status(
+    aggregate: dict,
+    current: dict,
+    *,
+    symbol: str,
+) -> dict:
+    merged = {
+        'last_history_provider': (
+            current.get('last_history_provider')
+            or aggregate.get('last_history_provider')
+        ),
+        'last_history_attempts': (
+            aggregate.get('last_history_attempts', 0)
+            + current.get('last_history_attempts', 0)
+        ),
+        'last_history_failures': list(
+            aggregate.get('last_history_failures') or []
+        ),
+    }
+    for failure in current.get('last_history_failures') or []:
+        failure_with_symbol = dict(failure)
+        failure_with_symbol.setdefault('symbol', symbol)
+        merged['last_history_failures'].append(failure_with_symbol)
+    return merged
 
 
 def _add_state_options(parser):
