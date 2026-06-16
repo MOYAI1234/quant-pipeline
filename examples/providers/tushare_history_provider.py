@@ -13,6 +13,7 @@ import math
 import os
 import sys
 from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 
@@ -161,9 +162,19 @@ def _number(
 
 
 def _lots_to_shares(value: Any, index: int) -> int:
-    lots = _number(value, 'volume', index, non_negative=True)
+    if isinstance(value, bool):
+        raise ValueError(f'row {index} field volume must be numeric')
+    try:
+        lots = Decimal(str(value).replace(',', '').strip())
+    except (InvalidOperation, AttributeError) as exc:
+        raise ValueError(f'row {index} field volume must be numeric') from exc
+    if not lots.is_finite():
+        raise ValueError(f'row {index} field volume must be finite')
+    if lots < 0:
+        raise ValueError(f'row {index} field volume must be non-negative')
+
     shares = lots * TUSHARE_VOLUME_LOT_SIZE
-    if not shares.is_integer():
+    if shares != shares.to_integral_value():
         raise ValueError(
             f'row {index} field volume does not convert to whole shares'
         )

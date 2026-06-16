@@ -105,6 +105,22 @@ def test_tushare_provider_rejects_invalid_symbol_and_volume():
         }])
 
 
+def test_tushare_provider_converts_fractional_lots_without_float_artifacts():
+    provider = _load_provider_module()
+
+    rows = provider.normalize_tushare_records([{
+        'trade_date': '20260101',
+        'open': 4.0,
+        'high': 4.2,
+        'low': 3.9,
+        'close': 4.1,
+        'vol': 1.11,
+        'amount': 4100,
+    }])
+
+    assert rows[0]['volume'] == 111
+
+
 def test_tushare_provider_requires_token_before_import(monkeypatch):
     provider = _load_provider_module()
     monkeypatch.delenv(provider.TUSHARE_TOKEN_ENV, raising=False)
