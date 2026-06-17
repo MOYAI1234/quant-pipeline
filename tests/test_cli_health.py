@@ -32,6 +32,10 @@ def test_cli_health_outputs_adapter_statuses():
     assert 'history_misses=0' in completed.stdout
     assert 'last_history_hit=-' in completed.stdout
     assert '- mx_data: 可用, mode=mock' in completed.stdout
+    assert (
+        '- mx_data history: 不可用, provider=-, ready=0/0, '
+        'last=-, attempts=0, failures=0'
+    ) in completed.stdout
     assert '- mx_xuangu: 可用, mode=mock' in completed.stdout
     assert '- mx_search: 可用, mode=mock' in completed.stdout
 
@@ -89,6 +93,33 @@ def test_cli_health_summary_keeps_partial_real_adapter_unavailable():
     assert summary['available'] is False
     assert summary['mock'] is False
     assert summary['adapters']['mx_data']['history_available'] is True
+
+
+def test_cli_health_text_includes_history_provider_summary():
+    summary = cli_commands._build_health_summary({
+        'mx_data': {
+            'service': 'MXDataAdapter',
+            'mode': 'real',
+            'connected': True,
+            'available': False,
+            'history_available': True,
+            'history_provider': 'command',
+            'history_provider_count': 2,
+            'history_provider_ready_count': 2,
+            'last_history_provider': 'backup',
+            'last_history_attempts': 2,
+            'last_history_failures': [{'provider': 'primary'}],
+            'mock': False,
+            'error': '',
+        },
+    })
+
+    rendered = cli_commands._render_health_summary(summary)
+
+    assert (
+        '- mx_data history: 可用, provider=command, ready=2/2, '
+        'last=backup, attempts=2, failures=1'
+    ) in rendered
 
 
 def test_cli_health_strict_exits_when_adapter_is_unavailable(monkeypatch):

@@ -18,6 +18,13 @@ def _health_statuses():
             'available': True,
             'mock': True,
             'error': '',
+            'history_provider': None,
+            'history_provider_count': 0,
+            'history_provider_ready_count': 0,
+            'history_available': False,
+            'last_history_provider': None,
+            'last_history_attempts': 0,
+            'last_history_failures': [],
         },
         'mx_search': {
             'service': 'MX_SearchAdapter',
@@ -45,7 +52,38 @@ def test_daily_report_includes_data_health_section():
     assert 'history_misses=0' in report
     assert 'last_history_hit=-' in report
     assert '- mx_data: 可用, mode=mock' in report
+    assert (
+        '- mx_data history: 不可用, provider=-, ready=0/0, '
+        'last=-, attempts=0, failures=0'
+    ) in report
     assert '- mx_search: 不可用, mode=real' in report
+
+
+def test_daily_report_includes_history_provider_summary():
+    statuses = _health_statuses()
+    statuses['mx_data'].update({
+        'mode': 'real',
+        'available': False,
+        'mock': False,
+        'history_provider': 'command',
+        'history_provider_count': 2,
+        'history_provider_ready_count': 2,
+        'history_available': True,
+        'last_history_provider': 'backup',
+        'last_history_attempts': 2,
+        'last_history_failures': [{'provider': 'primary'}],
+    })
+
+    report = ReportGenerator({}).generate_daily_report(
+        {'capital': 100000, 'position_count': 0, 'total_value': 100000},
+        {},
+        statuses,
+    )
+
+    assert (
+        '- mx_data history: 可用, provider=command, ready=2/2, '
+        'last=backup, attempts=2, failures=1'
+    ) in report
 
 
 def test_daily_report_includes_alert_events_when_provided():
