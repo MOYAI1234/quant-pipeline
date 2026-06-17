@@ -195,7 +195,9 @@ python cli\commands.py history export-rotation --input-json path\to\rotation-his
 
 1. 文档和验收口径收口，形成研究/模拟交付版。
 2. 接入真实 `mx_data.history`，用 `history export-grid/export-rotation` 生成真实回测输入。
-3. 基于已有 AKShare / TuShare guarded e2e，增加真实 adapter health 最小查询、长期可用性和缓存命中监控。
-4. 扩展回测成交模型，支持更细失败归因和更完整的成交审计。
-5. 扩展状态迁移和真实订单状态机。
-6. 在数据、状态和 kill switch 都可靠后，再预研 QMT/实盘。
+3. 用内部回测引擎完成自验证，确保策略状态机、风控、执行模型、报告和导出产物可复现。
+4. 使用聚宽、优矿、米筐等公开回测平台做关键策略假设的交叉验证，并记录数据、复权、交易日历、手续费和滑点差异。
+5. 基于已有 AKShare / TuShare guarded e2e，增加真实 adapter health 最小查询、长期可用性和缓存命中监控。
+6. 扩展回测成交模型，支持更细失败归因和更完整的成交审计。
+7. 扩展状态迁移和真实订单状态机。
+8. 在内部自验证与公开平台交叉验证都通过，且数据、状态和 kill switch 都可靠后，再预研 QMT/实盘。
