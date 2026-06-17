@@ -108,7 +108,11 @@ def test_cli_health_text_includes_history_provider_summary():
             'history_provider_ready_count': 2,
             'last_history_provider': 'backup',
             'last_history_attempts': 2,
-            'last_history_failures': [{'provider': 'primary'}],
+            'last_history_failures': [{
+                'provider': 'primary',
+                'attempt': 1,
+                'error_code': 'REAL_HISTORY_PROVIDER_FAILED',
+            }],
             'mock': False,
             'error': '',
         },
@@ -119,6 +123,10 @@ def test_cli_health_text_includes_history_provider_summary():
     assert (
         '- mx_data history: 可用, provider=command, ready=2/2, '
         'last=backup, attempts=2, failures=1'
+    ) in rendered
+    assert (
+        '- mx_data history failures: '
+        'primary#1 REAL_HISTORY_PROVIDER_FAILED'
     ) in rendered
 
 
