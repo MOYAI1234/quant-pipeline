@@ -29,6 +29,7 @@ ETF 量化助手 Pipeline，目标是把数据适配、策略生成、风控检�
 - [PRD v3 差距审计与路线图](docs/prd-gap-audit-v3.md)
 - [数据源 provider 选型矩阵](docs/data-source-provider-evaluation.md)
 - [历史行情命令 provider 契约](docs/history-provider-contract.md)
+- [历史 provider 本地接入演练](docs/provider-local-drill.md)
 - [真实历史数据 guarded e2e 验收](docs/live-data-validation.md)
 
 ## 目录结构
