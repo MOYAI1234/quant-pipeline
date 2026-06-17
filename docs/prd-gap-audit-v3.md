@@ -276,6 +276,8 @@ PRD 将“可回测策略系统”列为阶段二交付物，但当前只有实�
 
 ## 下一轮优先任务建议
 
+研究/模拟版交付清单和剩余 PR 估算见 [release-readiness.md](release-readiness.md)。当前预计还需要 4-6 个小 PR 完成交付收口。
+
 建议下一轮继续做 M2，不碰实盘接口，先把回测输入和结果审计能力打牢：
 
 1. 显式运行 AKShare / TuShare guarded live e2e，持续验证 `history probe` 真实网络链路和账户权限。

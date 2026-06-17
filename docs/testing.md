@@ -181,3 +181,5 @@ python cli\commands.py history export-rotation --config path\to\config.json --et
 - 不提供真实行情、真实筛选、真实新闻、真实券商撮合或 QMT 报单。
 - 不把 mock 空结果解释为真实市场结论。
 - 实盘相关能力必须等真实数据、订单状态机、持久化迁移和 kill switch 都完成后再启用。
+
+研究/模拟版的剩余交付清单和 PR 估算见 [release-readiness.md](release-readiness.md)。
