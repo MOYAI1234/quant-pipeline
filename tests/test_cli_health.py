@@ -1,11 +1,13 @@
 import json
 import subprocess
 import sys
+from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
+from config.settings import SYSTEM_CONFIG
 from cli import commands as cli_commands
 
 
@@ -106,6 +108,10 @@ def test_cli_health_text_includes_history_provider_summary():
             'history_provider': 'command',
             'history_provider_count': 2,
             'history_provider_ready_count': 2,
+            'history_providers': [
+                {'name': 'primary', 'ready': True, 'missing_env': []},
+                {'name': 'backup', 'ready': True, 'missing_env': []},
+            ],
             'last_history_provider': 'backup',
             'last_history_attempts': 2,
             'last_history_failures': [{
@@ -128,6 +134,44 @@ def test_cli_health_text_includes_history_provider_summary():
         '- mx_data history failures: '
         'primary#1 REAL_HISTORY_PROVIDER_FAILED'
     ) in rendered
+    assert (
+        '- mx_data history providers: primary ready; backup ready'
+    ) in rendered
+
+
+def test_cli_health_uses_config_and_reports_missing_provider_env(tmp_path):
+    config = deepcopy(SYSTEM_CONFIG)
+    config['data']['mx_data']['mode'] = 'real'
+    config['data']['mx_data']['history_providers'] = [
+        {
+            'name': 'tushare',
+            'command': [sys.executable, 'tushare_provider.py'],
+            'required_env': ['QUANT_PIPELINE_TEST_MISSING_TOKEN'],
+        },
+    ]
+    config_path = tmp_path / 'missing-provider-env.json'
+    config_path.write_text(json.dumps(config), encoding='utf-8')
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / 'cli' / 'commands.py'),
+            'health',
+            '--config',
+            str(config_path),
+            '--no-state',
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=PROJECT_ROOT,
+    )
+
+    assert '- mx_data: 不可用, mode=real' in completed.stdout
+    assert (
+        '- mx_data history providers: '
+        'tushare missing_env=QUANT_PIPELINE_TEST_MISSING_TOKEN'
+    ) in completed.stdout
 
 
 def test_cli_health_strict_exits_when_adapter_is_unavailable(monkeypatch):

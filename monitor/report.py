@@ -96,6 +96,9 @@ class ReportGenerator:
             provider_summary = self._format_history_provider_summary(name, status)
             if provider_summary:
                 report.append(provider_summary)
+            readiness_summary = self._format_history_readiness_summary(name, status)
+            if readiness_summary:
+                report.append(readiness_summary)
             failure_summary = self._format_history_failure_summary(name, status)
             if failure_summary:
                 report.append(failure_summary)
@@ -145,6 +148,32 @@ class ReportGenerator:
             f"- {name} history failures: "
             f"{self._format_history_failures_brief(failures)}"
         )
+
+    def _format_history_readiness_summary(
+        self,
+        name: str,
+        status: dict,
+    ) -> str | None:
+        providers = status.get('history_providers') or []
+        if not providers:
+            return None
+        return (
+            f"- {name} history providers: "
+            f"{self._format_history_provider_readiness(providers)}"
+        )
+
+    def _format_history_provider_readiness(self, providers: list) -> str:
+        items = []
+        for provider in providers:
+            name = provider.get('name') or '-'
+            missing_env = provider.get('missing_env') or []
+            if missing_env:
+                items.append(f"{name} missing_env={','.join(missing_env)}")
+            elif provider.get('ready'):
+                items.append(f"{name} ready")
+            else:
+                items.append(f"{name} unavailable")
+        return '; '.join(items)
 
     def _format_history_failures_brief(
         self,
