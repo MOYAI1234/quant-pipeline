@@ -305,6 +305,12 @@ python cli\commands.py start --strategy grid --no-state
 
 ## 测试
 
+运行研究/模拟版离线验收：
+
+```powershell
+python scripts\verify_offline.py
+```
+
 运行全部测试：
 
 ```powershell

@@ -12,7 +12,7 @@
 - 外部命令式历史 provider 契约、AKShare / TuShare 示例 provider 和 guarded live e2e 入口。
 - provider 凭据门禁、重试、降级、缓存统计和文本/JSON 可观测性。
 - CLI health / diagnose / report / history probe / history export / backtest 基础入口。
-- 离线测试基线：`396 passed, 2 skipped`。
+- 离线测试基线：`397 passed, 2 skipped`。
 
 ## 剩余 PR 估算
 
@@ -21,7 +21,7 @@
 | 序号 | 目标 | 交付内容 | 预计 PR |
 |---|---|---|---:|
 | 1 | 交付口径收口 | 维护本清单，明确当前交付边界、验收命令和非目标 | 1 |
-| 2 | 离线验收脚本 | 增加一键本地验收命令或脚本，固定 compile / pytest / CLI smoke 顺序 | 1 |
+| 2 | 离线验收脚本 | 已增加 `scripts/verify_offline.py`，固定 compile / pytest / CLI smoke 顺序 | 1 |
 | 3 | provider 接入演练 | 增加不含凭据的 provider 配置模板和本地演练说明，覆盖 missing env / backup / cache 输出 | 1 |
 | 4 | 回测产物验收 | 增强回测导出文档或测试，确保报告、权益、组合、成交、拒单 CSV 可复现 | 1 |
 | 5 | 最终文档收口 | README、architecture、testing 和 PRD gap 状态同步到交付版 | 1 |
@@ -32,6 +32,12 @@
 ## 交付验收命令
 
 离线交付至少需要通过：
+
+```powershell
+python scripts\verify_offline.py
+```
+
+该脚本等价于顺序执行：
 
 ```powershell
 python -m compileall -q .
