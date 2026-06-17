@@ -48,7 +48,7 @@ python -m pip install akshare
 执行一次最小历史探测：
 
 ```powershell
-python cli\commands.py history probe --config examples\configs\history-providers.local.example.json --symbol 510300 --start-date 2026-01-01 --end-date 2026-01-02
+python cli\commands.py history probe --config examples\configs\history-providers.local.example.json --symbol 510300 --start-date 2026-01-05 --end-date 2026-01-06
 ```
 
 未设置 `TUSHARE_TOKEN` 时，运行时会跳过 `tushare` 并尝试 `akshare`。如果 AKShare 可用，文本输出应包含：
@@ -66,7 +66,7 @@ TuShare 需要本地 token：
 
 ```powershell
 $env:TUSHARE_TOKEN = '<本地 token>'
-python cli\commands.py history probe --config examples\configs\history-providers.local.example.json --symbol 510300 --start-date 2026-01-01 --end-date 2026-01-02
+python cli\commands.py history probe --config examples\configs\history-providers.local.example.json --symbol 510300 --start-date 2026-01-05 --end-date 2026-01-06
 Remove-Item Env:TUSHARE_TOKEN
 ```
 
