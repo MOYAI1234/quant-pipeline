@@ -1,0 +1,94 @@
+{
+  "data": {
+    "max_realtime_age_seconds": null,
+    "max_nav_age_seconds": null,
+    "history_cache_ttl_seconds": 3600,
+    "max_timestamp_future_skew_seconds": 60,
+    "timestamp_timezone_offset": "+08:00",
+    "mx_data": {
+      "mode": "real",
+      "timeout": 30,
+      "history_command": null,
+      "history_providers": [
+        {
+          "name": "tushare",
+          "command": [
+            "python",
+            "examples/providers/tushare_history_provider.py",
+            "--symbol",
+            "{symbol}",
+            "--start-date",
+            "{start_date}",
+            "--end-date",
+            "{end_date}"
+          ],
+          "required_env": [
+            "TUSHARE_TOKEN"
+          ]
+        },
+        {
+          "name": "akshare",
+          "command": [
+            "python",
+            "examples/providers/akshare_history_provider.py",
+            "--symbol",
+            "{symbol}",
+            "--start-date",
+            "{start_date}",
+            "--end-date",
+            "{end_date}"
+          ]
+        }
+      ],
+      "history_retry_attempts": 2,
+      "history_retry_delay_seconds": 0
+    },
+    "mx_xuangu": {
+      "mode": "mock",
+      "timeout": 10
+    },
+    "mx_search": {
+      "mode": "mock",
+      "timeout": 10
+    }
+  },
+  "strategy": {
+    "grid": {
+      "symbol": "510300"
+    },
+    "rotation": {
+      "etf_pool": [
+        "510300",
+        "510500",
+        "159915"
+      ]
+    }
+  },
+  "account": {
+    "initial_capital": 100000,
+    "commission_rate": 0.0003,
+    "buy_commission_rate": null,
+    "sell_commission_rate": null,
+    "min_commission": 0.0
+  },
+  "risk": {
+    "max_position": 5,
+    "stop_loss": 0.15,
+    "max_single_loss": 0.02,
+    "min_volume": 10000000,
+    "min_size": 1000000000,
+    "max_tracking_error": 0.005,
+    "max_premium": 0.05
+  },
+  "monitor": {
+    "check_interval": 60,
+    "alert_threshold": -10,
+    "alert_file_path": null
+  },
+  "state": {
+    "enabled": true,
+    "path": "data/state.json",
+    "restore_on_start": true,
+    "save_on_stop": true
+  }
+}

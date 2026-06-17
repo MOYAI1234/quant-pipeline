@@ -61,7 +61,7 @@ python cli\commands.py history probe --help
 | 监控告警 | 部分完成 | 状态指标、报告和结构化告警事件已存在，报告可展示最近告警摘要，并支持本地 JSONL 输出；外部通知通道尚未实现 |
 | CLI | 基础可用 | `start/status/report/health/diagnose/alerts/config show/config init/config validate/backtest/history probe/history export-grid/history export-rotation` 已有；配置初始化、查看、校验和运行诊断链路已具备 |
 | API/Web | 未完成 | PRD 中规划了 API 和 Web 界面，当前仓库没有对应模块 |
-| 测试体系 | 不足 | 现有 396 个离线测试和 2 个默认跳过的 AKShare / TuShare guarded live test，覆盖 simulator、买卖双边费率和最低佣金、轮动按卖出净所得调仓、部分调仓批次重试、grid e2e、网格部分成交 ledger、rotation、risk manager 边界、backtest runner、回测成交模型、成交量参与率下的可选整手部分成交、回测历史转换、真实历史 provider 探测、history probe JSON 失败输出和诊断、命令 provider 凭据门禁、重试/降级/失败链、缺失 executable 降级、非 UTF-8 响应隔离、重试参数上限、provider 命令占位符 CLI 校验、真实 provider 禁用缓存 warning 与 strict warning 风险门禁、JSON `strict_warnings` 输出、diagnose strict warning 门禁、文本渲染和阻断原因、AKShare / TuShare 示例 provider 字段、代码、成交量和成交额单位转换及 DataManager 契约集成、回测日期区间、历史日期/盘中时间顺序、OHLC 合法性、成交量参与率、组合快照一致性、拒单审计和可选交易日历校验、回测最大回撤区间、已平仓手续费侵蚀统计、整手网格生产可行性审计、权益曲线/组合快照/成交明细 CSV 导出、回测滑点、CLI smoke、配置模板生成、状态持久化、报告健康状态、报告缓存策略、历史 provider 状态摘要和历史缓存命中统计、启动前诊断、告警事件、配置校验、DataManager 可配置历史缓存和健康输出、数据契约和外部历史 provider 配置等；adapter、report 仍有缺口 |
+| 测试体系 | 不足 | 现有 399 个离线测试和 2 个默认跳过的 AKShare / TuShare guarded live test，覆盖 simulator、买卖双边费率和最低佣金、轮动按卖出净所得调仓、部分调仓批次重试、grid e2e、网格部分成交 ledger、rotation、risk manager 边界、backtest runner、回测成交模型、成交量参与率下的可选整手部分成交、回测历史转换、真实历史 provider 探测、history probe JSON 失败输出和诊断、命令 provider 凭据门禁、重试/降级/失败链、缺失 executable 降级、非 UTF-8 响应隔离、重试参数上限、provider 命令占位符 CLI 校验、真实 provider 禁用缓存 warning 与 strict warning 风险门禁、JSON `strict_warnings` 输出、diagnose strict warning 门禁、文本渲染和阻断原因、AKShare / TuShare 示例 provider 字段、代码、成交量和成交额单位转换及 DataManager 契约集成、回测日期区间、历史日期/盘中时间顺序、OHLC 合法性、成交量参与率、组合快照一致性、拒单审计和可选交易日历校验、回测最大回撤区间、已平仓手续费侵蚀统计、整手网格生产可行性审计、权益曲线/组合快照/成交明细 CSV 导出、回测滑点、CLI smoke、配置模板生成、状态持久化、报告健康状态、报告缓存策略、历史 provider 状态摘要、本地 provider 接入演练和历史缓存命中统计、启动前诊断、告警事件、配置校验、DataManager 可配置历史缓存和健康输出、数据契约和外部历史 provider 配置等；adapter、report 仍有缺口 |
 | 文档入口 | 基础可用 | `README.md` 已补充基础运行、测试和阶段边界；`docs/testing.md` 已说明测试分层和验收口径；`docs/architecture.md` 已说明模块职责、运行链路和当前 mock/simulator 边界 |
 
 回测能力细节：
@@ -93,22 +93,22 @@ python cli\commands.py history probe --help
 - health check 必须验证最小可用数据，而不只是 `connected=True`
 - 引入统一错误类型：服务不可用、空结果、数据过期、字段缺失、单位不一致
 
-### P0：缺少回测引擎，策略无法被历史数据验证
+### P0：内部回测已启动，但仍缺公开平台交叉验证
 
-PRD 将“可回测策略系统”列为阶段二交付物，但当前只有实时/模拟执行路径，没有历史行情驱动。
+PRD 将“可回测策略系统”列为阶段二交付物。当前仓库已经有内部回测 runner，用于验证本系统的策略状态机、风控、执行模型、报告和导出产物；但内部回测不能单独证明策略可生产，仍需要公开回测平台做外部结果交叉验证。
 
 风险：
 
-- 无法判断策略参数是否有效
-- 后续策略迭代只能依赖人工推演和少量单测
-- 实盘前缺少关键验收门槛
+- 内部回测可能与公开平台在数据源、复权、交易日历、手续费、滑点和撮合模型上存在差异
+- 只依赖内部回测，容易把工程链路跑通误判为策略可生产
+- 实盘前仍缺“内部自验证 → 公开平台交叉验证 → 模拟盘/小资金实盘预研”的分层门槛
 
 建议：
 
-- 新增 `backtest/` 或 `analysis/backtest.py`
-- 统一复用策略的 `generate_signal` 和执行器成交逻辑
-- 支持历史 K 线输入、手续费、滑点、交易日历、收益/回撤/胜率报告
-- CLI 增加 `backtest` 子命令
+- 保留项目内回测作为 CI 和工程回归验收入口
+- 在聚宽、优矿、米筐等公开回测平台中至少选择一个复现关键策略假设
+- 对收益、调仓、成交、复权、交易日历、手续费和滑点差异做记录
+- 只有内部自验证通过且公开平台差异可解释，才进入模拟盘或小资金实盘预研
 
 ### P1：状态持久化仍缺迁移策略和真实订单回报
 

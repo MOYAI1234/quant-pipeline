@@ -29,6 +29,7 @@ ETF 量化助手 Pipeline，目标是把数据适配、策略生成、风控检�
 - [PRD v3 差距审计与路线图](docs/prd-gap-audit-v3.md)
 - [数据源 provider 选型矩阵](docs/data-source-provider-evaluation.md)
 - [历史行情命令 provider 契约](docs/history-provider-contract.md)
+- [历史 provider 本地接入演练](docs/provider-local-drill.md)
 - [真实历史数据 guarded e2e 验收](docs/live-data-validation.md)
 
 ## 目录结构
@@ -177,7 +178,7 @@ python cli\commands.py backtest --strategy grid --history path\to\history.csv
 验证 provider 并导出回测历史 CSV：
 
 ```powershell
-python cli\commands.py history probe --config path\to\config.json --symbol 510300 --start-date 2026-01-01 --end-date 2026-01-02
+python cli\commands.py history probe --config path\to\config.json --symbol 510300 --start-date 2026-01-05 --end-date 2026-01-06
 python cli\commands.py history export-grid --input-json path\to\grid-history.json --output data\grid-history.csv
 python cli\commands.py history export-rotation --input-json path\to\rotation-histories.json --lookback 3 --output data\rotation-history.csv
 python cli\commands.py history export-grid --config path\to\config.json --symbol 510300 --start-date 2026-01-01 --end-date 2026-01-31 --output data\grid-history.csv
