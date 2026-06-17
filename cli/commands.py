@@ -985,6 +985,9 @@ def _render_health_summary(summary: dict) -> str:
         provider_summary = _render_adapter_history_provider_summary(name, status)
         if provider_summary:
             lines.append(provider_summary)
+        failure_summary = _render_adapter_history_failure_summary(name, status)
+        if failure_summary:
+            lines.append(failure_summary)
     return "\n".join(lines)
 
 
@@ -1017,6 +1020,27 @@ def _has_history_provider_status(status: dict) -> bool:
             'last_history_failures',
         )
     )
+
+
+def _render_adapter_history_failure_summary(name: str, status: dict) -> str | None:
+    failures = status.get('last_history_failures') or []
+    if not failures:
+        return None
+    return f"- {name} history failures: {_format_history_failures_brief(failures)}"
+
+
+def _format_history_failures_brief(failures: list, limit: int = 2) -> str:
+    visible = failures[:limit]
+    items = []
+    for failure in visible:
+        provider = failure.get('provider') or '-'
+        attempt = failure.get('attempt') or '-'
+        error_code = failure.get('error_code') or '-'
+        items.append(f"{provider}#{attempt} {error_code}")
+    remaining = len(failures) - len(visible)
+    if remaining > 0:
+        items.append(f"+{remaining} more")
+    return '; '.join(items)
 
 
 def _load_alert_events(alert_file: str | None, limit: int) -> list:

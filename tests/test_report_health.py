@@ -71,7 +71,11 @@ def test_daily_report_includes_history_provider_summary():
         'history_available': True,
         'last_history_provider': 'backup',
         'last_history_attempts': 2,
-        'last_history_failures': [{'provider': 'primary'}],
+        'last_history_failures': [{
+            'provider': 'primary',
+            'attempt': 1,
+            'error_code': 'REAL_HISTORY_PROVIDER_FAILED',
+        }],
     })
 
     report = ReportGenerator({}).generate_daily_report(
@@ -83,6 +87,10 @@ def test_daily_report_includes_history_provider_summary():
     assert (
         '- mx_data history: 可用, provider=command, ready=2/2, '
         'last=backup, attempts=2, failures=1'
+    ) in report
+    assert (
+        '- mx_data history failures: '
+        'primary#1 REAL_HISTORY_PROVIDER_FAILED'
     ) in report
 
 

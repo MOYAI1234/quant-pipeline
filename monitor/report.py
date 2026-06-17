@@ -96,6 +96,9 @@ class ReportGenerator:
             provider_summary = self._format_history_provider_summary(name, status)
             if provider_summary:
                 report.append(provider_summary)
+            failure_summary = self._format_history_failure_summary(name, status)
+            if failure_summary:
+                report.append(failure_summary)
 
     def _format_history_provider_summary(
         self,
@@ -129,6 +132,36 @@ class ReportGenerator:
                 'last_history_failures',
             )
         )
+
+    def _format_history_failure_summary(
+        self,
+        name: str,
+        status: dict,
+    ) -> str | None:
+        failures = status.get('last_history_failures') or []
+        if not failures:
+            return None
+        return (
+            f"- {name} history failures: "
+            f"{self._format_history_failures_brief(failures)}"
+        )
+
+    def _format_history_failures_brief(
+        self,
+        failures: list,
+        limit: int = 2,
+    ) -> str:
+        visible = failures[:limit]
+        items = []
+        for failure in visible:
+            provider = failure.get('provider') or '-'
+            attempt = failure.get('attempt') or '-'
+            error_code = failure.get('error_code') or '-'
+            items.append(f"{provider}#{attempt} {error_code}")
+        remaining = len(failures) - len(visible)
+        if remaining > 0:
+            items.append(f"+{remaining} more")
+        return '; '.join(items)
 
     def _append_alerts(self, report: list, alerts: list | None):
         if alerts is None:
