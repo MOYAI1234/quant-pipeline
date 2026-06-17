@@ -982,7 +982,41 @@ def _render_health_summary(summary: dict) -> str:
             f"- {name}: {availability}, mode={status.get('mode')}, "
             f"service={status.get('service')}, error={error}"
         )
+        provider_summary = _render_adapter_history_provider_summary(name, status)
+        if provider_summary:
+            lines.append(provider_summary)
     return "\n".join(lines)
+
+
+def _render_adapter_history_provider_summary(name: str, status: dict) -> str | None:
+    if not _has_history_provider_status(status):
+        return None
+    availability = '可用' if status.get('history_available') else '不可用'
+    provider = status.get('history_provider') or '-'
+    ready = status.get('history_provider_ready_count', 0)
+    count = status.get('history_provider_count', 0)
+    last = status.get('last_history_provider') or '-'
+    attempts = status.get('last_history_attempts', 0)
+    failures = len(status.get('last_history_failures') or [])
+    return (
+        f"- {name} history: {availability}, provider={provider}, "
+        f"ready={ready}/{count}, last={last}, attempts={attempts}, "
+        f"failures={failures}"
+    )
+
+
+def _has_history_provider_status(status: dict) -> bool:
+    return any(
+        key in status
+        for key in (
+            'history_provider',
+            'history_provider_count',
+            'history_available',
+            'last_history_provider',
+            'last_history_attempts',
+            'last_history_failures',
+        )
+    )
 
 
 def _load_alert_events(alert_file: str | None, limit: int) -> list:
