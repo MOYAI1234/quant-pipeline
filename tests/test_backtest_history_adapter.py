@@ -503,5 +503,9 @@ print(json.dumps([
 
     assert f'rotation 历史 CSV: {output_file}' in completed.stdout
     assert '历史 provider: last=primary, attempts=3, failures=1' in completed.stdout
+    assert (
+        '历史 provider failures: '
+        '510300:primary#1 REAL_HISTORY_PROVIDER_FAILED'
+    ) in completed.stdout
     rows = load_rotation_history_csv(str(output_file))
     assert rows[-1]['symbols']['510500']['prices'] == [8.1, 8.2]

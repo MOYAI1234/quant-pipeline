@@ -230,6 +230,93 @@ print(json.dumps([
     ]
 
 
+def test_cli_history_probe_text_reports_successful_fallback(tmp_path):
+    primary_provider = tmp_path / 'primary_history_provider.py'
+    primary_provider.write_text(
+        """
+import sys
+
+print('primary unavailable', file=sys.stderr)
+raise SystemExit(1)
+""".strip(),
+        encoding='utf-8',
+    )
+    backup_provider = tmp_path / 'backup_history_provider.py'
+    backup_provider.write_text(
+        """
+import json
+
+print(json.dumps([
+    {
+        'date': '2026-01-01',
+        'open': 4.0,
+        'high': 4.2,
+        'low': 3.9,
+        'close': 4.1,
+        'volume': 1000,
+        'amount': 4100.0,
+    },
+]))
+""".strip(),
+        encoding='utf-8',
+    )
+    config = deepcopy(SYSTEM_CONFIG)
+    config['data']['mx_data'] = {
+        'mode': 'real',
+        'timeout': 10,
+        'history_providers': [
+            {
+                'name': 'primary',
+                'command': [
+                    sys.executable,
+                    str(primary_provider),
+                    '{symbol}',
+                    '{start_date}',
+                    '{end_date}',
+                ],
+            },
+            {
+                'name': 'backup',
+                'command': [
+                    sys.executable,
+                    str(backup_provider),
+                    '{symbol}',
+                    '{start_date}',
+                    '{end_date}',
+                ],
+            },
+        ],
+    }
+    config_path = tmp_path / 'config.json'
+    config_path.write_text(json.dumps(config), encoding='utf-8')
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / 'cli' / 'commands.py'),
+            'history',
+            'probe',
+            '--config',
+            str(config_path),
+            '--symbol',
+            '510300',
+            '--start-date',
+            '2026-01-01',
+            '--end-date',
+            '2026-01-02',
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=PROJECT_ROOT,
+    )
+
+    assert '历史 provider: last=backup, attempts=2, failures=1' in completed.stdout
+    assert (
+        '历史 provider failures: primary#1 REAL_HISTORY_PROVIDER_FAILED'
+    ) in completed.stdout
+
+
 def test_cli_history_probe_rejects_rows_outside_requested_range(tmp_path):
     config_path = _write_provider_config(
         tmp_path,

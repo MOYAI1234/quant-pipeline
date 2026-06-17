@@ -1033,10 +1033,12 @@ def _format_history_failures_brief(failures: list, limit: int = 2) -> str:
     visible = failures[:limit]
     items = []
     for failure in visible:
+        symbol = failure.get('symbol')
         provider = failure.get('provider') or '-'
         attempt = failure.get('attempt') or '-'
         error_code = failure.get('error_code') or '-'
-        items.append(f"{provider}#{attempt} {error_code}")
+        prefix = f"{symbol}:" if symbol else ''
+        items.append(f"{prefix}{provider}#{attempt} {error_code}")
     remaining = len(failures) - len(visible)
     if remaining > 0:
         items.append(f"+{remaining} more")
@@ -1191,10 +1193,15 @@ def _render_history_provider_status(status: dict) -> str:
     attempts = status.get('last_history_attempts', 0)
     failures = status.get('last_history_failures') or []
     failure_count = len(failures)
-    return (
+    lines = [(
         f"历史 provider: last={provider}, attempts={attempts}, "
         f"failures={failure_count}"
-    )
+    )]
+    if failures:
+        lines.append(
+            f"历史 provider failures: {_format_history_failures_brief(failures)}"
+        )
+    return "\n".join(lines)
 
 
 def _empty_history_provider_status() -> dict:
