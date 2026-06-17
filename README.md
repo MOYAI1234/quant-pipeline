@@ -70,6 +70,7 @@ python cli\commands.py report --type daily
 
 ```powershell
 python cli\commands.py health
+python cli\commands.py health --config path\to\config.json
 python cli\commands.py health --json --strict
 ```
 

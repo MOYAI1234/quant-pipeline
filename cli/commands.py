@@ -759,7 +759,11 @@ def _volume_participation(
 
 
 def _build_runtime_config(args) -> dict:
-    config = deepcopy(SYSTEM_CONFIG)
+    config = (
+        _load_config_file(args.config)
+        if getattr(args, 'config', None)
+        else deepcopy(SYSTEM_CONFIG)
+    )
     state_config = config.setdefault('state', {})
     if getattr(args, 'no_state', False):
         state_config['enabled'] = False
@@ -985,6 +989,9 @@ def _render_health_summary(summary: dict) -> str:
         provider_summary = _render_adapter_history_provider_summary(name, status)
         if provider_summary:
             lines.append(provider_summary)
+        readiness_summary = _render_adapter_history_readiness_summary(name, status)
+        if readiness_summary:
+            lines.append(readiness_summary)
         failure_summary = _render_adapter_history_failure_summary(name, status)
         if failure_summary:
             lines.append(failure_summary)
@@ -1027,6 +1034,33 @@ def _render_adapter_history_failure_summary(name: str, status: dict) -> str | No
     if not failures:
         return None
     return f"- {name} history failures: {_format_history_failures_brief(failures)}"
+
+
+def _render_adapter_history_readiness_summary(
+    name: str,
+    status: dict,
+) -> str | None:
+    providers = status.get('history_providers') or []
+    if not providers:
+        return None
+    return (
+        f"- {name} history providers: "
+        f"{_format_history_provider_readiness(providers)}"
+    )
+
+
+def _format_history_provider_readiness(providers: list) -> str:
+    items = []
+    for provider in providers:
+        name = provider.get('name') or '-'
+        missing_env = provider.get('missing_env') or []
+        if missing_env:
+            items.append(f"{name} missing_env={','.join(missing_env)}")
+        elif provider.get('ready'):
+            items.append(f"{name} ready")
+        else:
+            items.append(f"{name} unavailable")
+    return '; '.join(items)
 
 
 def _format_history_failures_brief(failures: list, limit: int = 2) -> str:
@@ -1268,6 +1302,7 @@ def main():
     _add_state_options(report_parser)
 
     health_parser = subparsers.add_parser('health', help='检查数据源健康状态')
+    health_parser.add_argument('--config', type=str, help='JSON 配置文件路径，默认使用内置配置')
     health_parser.add_argument('--json', action='store_true', help='输出 JSON 格式')
     health_parser.add_argument(
         '--strict',

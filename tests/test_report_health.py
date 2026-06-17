@@ -18,10 +18,11 @@ def _health_statuses():
             'available': True,
             'mock': True,
             'error': '',
-            'history_provider': None,
-            'history_provider_count': 0,
-            'history_provider_ready_count': 0,
-            'history_available': False,
+        'history_provider': None,
+        'history_provider_count': 0,
+        'history_provider_ready_count': 0,
+        'history_providers': [],
+        'history_available': False,
             'last_history_provider': None,
             'last_history_attempts': 0,
             'last_history_failures': [],
@@ -68,6 +69,10 @@ def test_daily_report_includes_history_provider_summary():
         'history_provider': 'command',
         'history_provider_count': 2,
         'history_provider_ready_count': 2,
+        'history_providers': [
+            {'name': 'primary', 'ready': False, 'missing_env': ['TOKEN_A']},
+            {'name': 'backup', 'ready': True, 'missing_env': []},
+        ],
         'history_available': True,
         'last_history_provider': 'backup',
         'last_history_attempts': 2,
@@ -91,6 +96,9 @@ def test_daily_report_includes_history_provider_summary():
     assert (
         '- mx_data history failures: '
         'primary#1 REAL_HISTORY_PROVIDER_FAILED'
+    ) in report
+    assert (
+        '- mx_data history providers: primary missing_env=TOKEN_A; backup ready'
     ) in report
 
 
