@@ -6,7 +6,7 @@ ETF 量化助手 Pipeline，目标是把数据适配、策略生成、风控检�
 
 当前代码处于 **mock 数据 + simulator 模拟交易** 阶段，适合用于验证策略状态机、执行器、风控链路和后续回测框架，不是生产实盘系统。
 
-截至 2026-06-18，仓库已达到[研究/模拟验证版交付基线](docs/release-readiness.md)：完整离线验收为 `400 passed, 2 skipped`，并包含 provider 本地演练与确定性回测产物验收。该结论只说明工程链路可交付，不代表策略收益有效或具备实盘条件。
+截至 2026-06-18，仓库已达到[研究/模拟验证版交付基线](docs/release-readiness.md)：完整离线验收为 `405 passed, 2 skipped`，并包含 provider 本地演练与确定性回测产物验收。该结论只说明工程链路可交付，不代表策略收益有效或具备实盘条件。
 
 重要边界：
 
@@ -191,8 +191,10 @@ python cli\commands.py history probe --config path\to\config.json --symbol 51030
 python cli\commands.py history export-grid --input-json path\to\grid-history.json --output data\grid-history.csv
 python cli\commands.py history export-rotation --input-json path\to\rotation-histories.json --lookback 3 --output data\rotation-history.csv
 python cli\commands.py history export-grid --config path\to\config.json --symbol 510300 --start-date 2026-01-01 --end-date 2026-01-31 --output data\grid-history.csv
-python cli\commands.py history export-rotation --config path\to\config.json --etf-pool 510300,510500,159915 --start-date 2026-01-01 --end-date 2026-01-31 --lookback 3 --output data\rotation-history.csv
+python cli\commands.py history export-rotation --config path\to\config.json --etf-pool 510300,510500,159915 --start-date 2026-01-01 --end-date 2026-01-31 --lookback 3 --symbol-delay-seconds 30 --output data\rotation-history.csv
 ```
+
+`--symbol-delay-seconds` 仅用于通过 provider 导出 rotation 历史，在相邻标的请求之间等待 0-60 秒。AKShare 等公开网页源出现连续请求限流时可显式启用；默认 0 保持原有行为。
 
 `--input-json` 适合当前 mock/simulator 阶段导入本地历史数据；未提供 `--input-json` 时会通过 `DataManager.get_etf_history()` 拉取历史行情，当前 mock adapter 会返回空历史。真实历史行情 provider 需要通过 JSON 配置文件显式启用，例如：
 
@@ -264,7 +266,7 @@ python cli\commands.py history export-rotation --config path\to\config.json --et
 
 仓库提供可选 AKShare 示例脚本 `examples/providers/akshare_history_provider.py`。它不会把 AKShare 加入项目依赖；需要本地自行 `pip install akshare` 后，再通过 `history_command` 调用。完整 provider 契约见 [docs/history-provider-contract.md](docs/history-provider-contract.md)。
 
-仓库也提供可选 TuShare 示例脚本 `examples/providers/tushare_history_provider.py`。它使用未复权 `fund_daily` ETF 日线，将 `vol` 从手转换为股、`amount` 从千元转换为元，并从 `TUSHARE_TOKEN` 环境变量读取凭据。建议通过命名 provider 配置：
+仓库也提供可选 TuShare 示例脚本 `examples/providers/tushare_history_provider.py`。它使用未复权 `fund_daily` ETF 日线，将 `vol` 从手转换为股、`amount` 从千元转换为元，并从 `TUSHARE_TOKEN` 环境变量读取凭据。若使用 TuShare 反代，可设置 `TUSHARE_API_URL`，脚本会在创建 SDK client 后覆盖 `pro._DataApi__http_url`；token 和反代地址都不应写入仓库。建议通过命名 provider 配置：
 
 ```json
 {
@@ -280,7 +282,7 @@ python cli\commands.py history export-rotation --config path\to\config.json --et
 }
 ```
 
-TuShare 不会加入默认依赖，也不会在仓库内保存 token。其接口积分、频率和服务条款由用户自己的 TuShare 账户决定，不应把 guarded live test 通过解释为生产 SLA。
+TuShare 不会加入默认依赖，也不会在仓库内保存 token。其接口积分、频率、反代限速和服务条款由用户自己的 TuShare 账户或反代服务决定，不应把 guarded live test 通过解释为生产 SLA。若反代限速为每分钟 100 次，本地批量导出建议仍显式设置 1 秒左右的请求间隔；不要逐标的、逐日期高频循环请求。
 
 如需验证真实 AKShare 或 TuShare 网络链路，可按 [docs/live-data-validation.md](docs/live-data-validation.md) 显式启用对应 guarded e2e。默认测试不会访问外部行情服务。
 

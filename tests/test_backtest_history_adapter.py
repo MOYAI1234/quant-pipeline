@@ -3,6 +3,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -17,6 +18,7 @@ from backtest.history_adapter import (
     write_rotation_history_csv,
 )
 from backtest.runner import load_history_csv, load_rotation_history_csv
+from cli import commands as cli_commands
 
 
 def _history(close_values):
@@ -32,6 +34,88 @@ def _history(close_values):
         }
         for index, close in enumerate(close_values, start=1)
     ]
+
+
+def test_rotation_provider_export_can_throttle_between_symbols(monkeypatch):
+    class FakeDataManager:
+        def __init__(self):
+            self.requested_symbols = []
+
+        def connect(self):
+            return None
+
+        def disconnect(self):
+            return None
+
+        def get_etf_history(self, symbol, _start_date, _end_date):
+            self.requested_symbols.append(symbol)
+            return _history([10.0, 10.1])
+
+        def health_check(self):
+            return {'mx_data': {
+                'last_history_provider': 'fake',
+                'last_history_attempts': 1,
+                'last_history_failures': [],
+            }}
+
+    manager = FakeDataManager()
+    sleep_calls = []
+    monkeypatch.setattr(cli_commands, 'DataManager', lambda _config: manager)
+    monkeypatch.setattr(cli_commands.time, 'sleep', sleep_calls.append)
+
+    history, _, _ = cli_commands._fetch_rotation_history_from_data_manager(
+        SimpleNamespace(
+            start_date='2026-01-01',
+            end_date='2026-01-02',
+            etf_pool='510300,510500,159915',
+            config=None,
+        ),
+        lookback=2,
+        symbol_delay_seconds=30,
+    )
+
+    assert manager.requested_symbols == ['510300', '510500', '159915']
+    assert sleep_calls == [30, 30]
+    assert len(history) == 2
+
+
+def test_rotation_provider_symbol_delay_rejects_invalid_values():
+    for value, message in (
+        (-1, '--symbol-delay-seconds 不能小于 0'),
+        (61, '--symbol-delay-seconds 不能大于 60'),
+        (float('nan'), '--symbol-delay-seconds 不能小于 0'),
+    ):
+        with pytest.raises(ValueError, match=message):
+            cli_commands._history_symbol_delay(value)
+
+
+def test_rotation_json_export_rejects_provider_symbol_delay(tmp_path):
+    input_file = tmp_path / 'rotation.json'
+    input_file.write_text(
+        json.dumps({'510300': _history([10.0, 10.1])}),
+        encoding='utf-8',
+    )
+    completed = subprocess.run(
+        [
+            sys.executable,
+            'cli/commands.py',
+            'history',
+            'export-rotation',
+            '--input-json',
+            str(input_file),
+            '--lookback',
+            '2',
+            '--symbol-delay-seconds',
+            '1',
+            '--output',
+            str(tmp_path / 'rotation.csv'),
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 2
+    assert '--symbol-delay-seconds 仅适用于通过 provider 获取历史行情' in completed.stderr
 
 
 class FakeHistoryDataManager:

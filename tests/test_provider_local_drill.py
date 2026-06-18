@@ -24,6 +24,7 @@ def test_history_provider_example_config_validates_without_secrets(monkeypatch):
 
     assert result['valid'] is True
     assert result['errors'] == []
+    assert config['data']['mx_data']['history_retry_delay_seconds'] == 30
     assert (
         'data.mx_data.history_providers[0].required_env '
         '缺少环境变量: TUSHARE_TOKEN'

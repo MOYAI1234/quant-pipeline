@@ -176,6 +176,45 @@ def test_tushare_provider_calls_fund_daily_with_token_and_fields(monkeypatch):
     }
 
 
+def test_tushare_provider_applies_api_url_override(monkeypatch):
+    provider = _load_provider_module()
+    client = SimpleNamespace()
+    calls = {}
+
+    def fake_pro_api(token):
+        calls['token'] = token
+        return client
+
+    monkeypatch.setenv(provider.TUSHARE_TOKEN_ENV, 'local-secret')
+    monkeypatch.setenv(provider.TUSHARE_API_URL_ENV, 'https://example.test')
+    monkeypatch.setitem(
+        sys.modules,
+        'tushare',
+        SimpleNamespace(pro_api=fake_pro_api),
+    )
+
+    resolved = provider._build_tushare_client(
+        sys.modules['tushare'],
+        'local-secret',
+    )
+
+    assert resolved is client
+    assert calls == {'token': 'local-secret'}
+    assert getattr(client, '_DataApi__http_url') == 'https://example.test'
+
+
+def test_tushare_provider_rejects_invalid_api_url(monkeypatch):
+    provider = _load_provider_module()
+
+    monkeypatch.setenv(provider.TUSHARE_API_URL_ENV, 'fastapic.stockai888.top')
+
+    with pytest.raises(ValueError, match='TUSHARE_API_URL'):
+        provider._build_tushare_client(
+            SimpleNamespace(pro_api=lambda _token: SimpleNamespace()),
+            'local-secret',
+        )
+
+
 def test_tushare_provider_pages_long_date_ranges(monkeypatch):
     provider = _load_provider_module()
     calls = []

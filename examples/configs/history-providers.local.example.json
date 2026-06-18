@@ -41,7 +41,7 @@
         }
       ],
       "history_retry_attempts": 2,
-      "history_retry_delay_seconds": 0
+      "history_retry_delay_seconds": 30
     },
     "mx_xuangu": {
       "mode": "mock",

@@ -16,7 +16,7 @@
 - 外部命令式历史 provider 契约、AKShare / TuShare 示例 provider 和 guarded live e2e 入口。
 - provider 凭据门禁、重试、降级、缓存统计和文本/JSON 可观测性。
 - CLI health / diagnose / report / history probe / history export / backtest 基础入口。
-- 离线测试基线：`400 passed, 2 skipped`。
+- 离线测试基线：`405 passed, 2 skipped`。
 
 ## 交付项状态
 
