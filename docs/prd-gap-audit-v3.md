@@ -24,7 +24,7 @@ python scripts\verify_offline.py
 结果：
 
 - `compileall` 通过
-- 离线 `pytest` 通过，`405 passed, 2 skipped`
+- 离线 `pytest` 通过，`407 passed, 2 skipped`
 - CLI help 可用
 - CLI daily report 可生成包含数据源健康状态和缓存策略的空组合报告
 - CLI health 可输出数据源健康状态
@@ -51,7 +51,7 @@ python scripts\verify_offline.py
 | 监控告警 | 部分完成 | 状态指标、报告和结构化告警事件已存在，报告可展示最近告警摘要，并支持本地 JSONL 输出；外部通知通道尚未实现 |
 | CLI | 基础可用 | `start/status/report/health/diagnose/alerts/config show/config init/config validate/backtest/history probe/history export-grid/history export-rotation` 已有；配置初始化、查看、校验和运行诊断链路已具备 |
 | API/Web | 未完成 | PRD 中规划了 API 和 Web 界面，当前仓库没有对应模块 |
-| 测试体系 | 研究版可交付 | 现有 405 个离线测试和 2 个默认跳过的 AKShare / TuShare guarded live test，覆盖策略状态机、风控、模拟执行、回测成交模型、数据契约、provider 降级、状态恢复、监控报告、CLI、回测产物 schema 与确定性；生产阶段仍需真实订单状态机、长时间运行和故障注入测试 |
+| 测试体系 | 研究版可交付 | 现有 407 个离线测试和 2 个默认跳过的 AKShare / TuShare guarded live test，覆盖策略状态机、风控、模拟执行、回测成交模型、数据契约、provider 降级、状态恢复、监控报告、CLI、回测产物 schema 与确定性；生产阶段仍需真实订单状态机、长时间运行和故障注入测试 |
 | 文档入口 | 研究版可交付 | README、架构、测试、provider 契约与演练、真实数据验收、交付状态和公开平台交叉验证入口已经形成 |
 
 回测能力细节：

@@ -6,7 +6,7 @@ ETF 量化助手 Pipeline，目标是把数据适配、策略生成、风控检�
 
 当前代码处于 **mock 数据 + simulator 模拟交易** 阶段，适合用于验证策略状态机、执行器、风控链路和后续回测框架，不是生产实盘系统。
 
-截至 2026-06-18，仓库已达到[研究/模拟验证版交付基线](docs/release-readiness.md)：完整离线验收为 `405 passed, 2 skipped`，并包含 provider 本地演练与确定性回测产物验收。该结论只说明工程链路可交付，不代表策略收益有效或具备实盘条件。
+截至 2026-06-18，仓库已达到[研究/模拟验证版交付基线](docs/release-readiness.md)：完整离线验收为 `407 passed, 2 skipped`，并包含 provider 本地演练与确定性回测产物验收。该结论只说明工程链路可交付，不代表策略收益有效或具备实盘条件。
 
 重要边界：
 
@@ -284,7 +284,7 @@ python cli\commands.py history export-rotation --config path\to\config.json --et
 
 TuShare 不会加入默认依赖，也不会在仓库内保存 token。其接口积分、频率、反代限速和服务条款由用户自己的 TuShare 账户或反代服务决定，不应把 guarded live test 通过解释为生产 SLA。若反代限速为每分钟 100 次，本地批量导出建议仍显式设置 1 秒左右的请求间隔；不要逐标的、逐日期高频循环请求。
 
-如需验证真实 AKShare 或 TuShare 网络链路，可按 [docs/live-data-validation.md](docs/live-data-validation.md) 显式启用对应 guarded e2e。默认测试不会访问外部行情服务。
+如需验证真实 AKShare 或 TuShare 网络链路，可按 [docs/live-data-validation.md](docs/live-data-validation.md) 显式启用对应 guarded e2e。TuShare 反代可用 `python scripts\verify_tushare_proxy.py` 串起 live test、probe、真实 CSV 导出和回测加载；默认测试不会访问外部行情服务。
 
 严格交易日历默认按周一至周五判断；`--holiday YYYY-MM-DD` 可重复指定额外休市日，`--trading-day YYYY-MM-DD` 可显式覆盖周末或休市日。未启用 `--strict-trading-calendar` 时保持原有行为，不额外拒绝历史日期。
 
