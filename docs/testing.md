@@ -35,7 +35,7 @@ python cli\commands.py history export-rotation --help
 
 当前离线基线：`pytest` 应通过 400 个测试，并跳过 2 个显式启用的 AKShare / TuShare live test。
 
-研究/模拟版交付前可先运行一键离线验收：
+研究/模拟版可随时运行一键离线验收，确认当前工作树仍满足交付基线：
 
 ```powershell
 python scripts\verify_offline.py
@@ -195,4 +195,4 @@ python cli\commands.py history export-rotation --config path\to\config.json --et
 - 不把 mock 空结果解释为真实市场结论。
 - 实盘相关能力必须等真实数据、订单状态机、持久化迁移和 kill switch 都完成后再启用。
 
-研究/模拟版的剩余交付清单和 PR 估算见 [release-readiness.md](release-readiness.md)。
+研究/模拟验证版已达到 [交付基线](release-readiness.md)。下一阶段的策略外部验证使用[公开回测平台交叉验证模板](public-backtest-validation.md)，不能以项目内测试通过替代公开平台或真实市场验证。

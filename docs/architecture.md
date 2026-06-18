@@ -193,11 +193,11 @@ python cli\commands.py history export-rotation --input-json path\to\rotation-his
 
 建议顺序：
 
-1. 文档和验收口径收口，形成研究/模拟交付版。
-2. 接入真实 `mx_data.history`，用 `history export-grid/export-rotation` 生成真实回测输入。
-3. 用内部回测引擎完成自验证，确保策略状态机、风控、执行模型、报告和导出产物可复现。
-4. 使用聚宽、优矿、米筐等公开回测平台做关键策略假设的交叉验证，并记录数据、复权、交易日历、手续费和滑点差异。
-5. 基于已有 AKShare / TuShare guarded e2e，增加真实 adapter health 最小查询、长期可用性和缓存命中监控。
-6. 扩展回测成交模型，支持更细失败归因和更完整的成交审计。
-7. 扩展状态迁移和真实订单状态机。
-8. 在内部自验证与公开平台交叉验证都通过，且数据、状态和 kill switch 都可靠后，再预研 QMT/实盘。
+研究/模拟交付版的文档、离线验收、provider 演练和回测产物审计已经完成。下一阶段顺序为：
+
+1. 接入真实 `mx_data.history`，用 `history export-grid/export-rotation` 生成真实回测输入。
+2. 用内部回测引擎完成自验证并归档 manifest，确保策略状态机、风控、执行模型、报告和导出产物可复现。
+3. 按[公开回测平台交叉验证](public-backtest-validation.md)复现关键策略假设，记录数据、复权、交易日历、手续费、滑点和撮合差异。
+4. 基于 AKShare / TuShare guarded e2e，持续验证真实 adapter 最小查询、长期可用性和缓存命中。
+5. 扩展回测成交模型、状态迁移和真实订单状态机。
+6. 只有内部自验证与公开平台交叉验证均通过，且数据、状态、费用约束和 kill switch 可靠后，才预研 QMT/实盘。
