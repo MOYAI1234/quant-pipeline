@@ -32,6 +32,8 @@
 - `low_avg_money`：20 日日均成交额低于阈值。
 - `non_positive_60d_momentum` / `non_positive_20d_confirm`：动量过滤为负，策略按规则保持现金。
 
+如果聚宽日志持续出现 `not_in_current_data`，优先回到本地使用 `scripts/evaluate_etf_momentum_rotation.py` 调通因子和过滤条件，再回聚宽做公开平台复现。
+
 ## 关键假设
 
 - 调仓：每周第一个交易日开盘，使用当前交易日前的历史日线，不读取当天收盘价。
