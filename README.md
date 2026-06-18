@@ -199,6 +199,14 @@ python cli\commands.py history export-grid --config path\to\config.json --symbol
 python cli\commands.py history export-rotation --config path\to\config.json --etf-pool 510300,510500,159915 --start-date 2026-01-01 --end-date 2026-01-31 --lookback 3 --symbol-delay-seconds 30 --output data\rotation-history.csv
 ```
 
+本地评估首个 ETF 动量轮动候选策略的因子和过滤原因：
+
+```powershell
+python scripts\evaluate_etf_momentum_rotation.py --history data\rotation-history.csv --rebalance-step 5 --limit 12
+```
+
+真实候选策略需要至少导出 `121` 左右的 `lookback`，才能覆盖 60 日动量、20 日确认、20 日波动和 120 日最小历史要求。
+
 `--symbol-delay-seconds` 仅用于通过 provider 导出 rotation 历史，在相邻标的请求之间等待 0-60 秒。AKShare 等公开网页源出现连续请求限流时可显式启用；默认 0 保持原有行为。
 
 `--input-json` 适合当前 mock/simulator 阶段导入本地历史数据；未提供 `--input-json` 时会通过 `DataManager.get_etf_history()` 拉取历史行情，当前 mock adapter 会返回空历史。真实历史行情 provider 需要通过 JSON 配置文件显式启用，例如：
