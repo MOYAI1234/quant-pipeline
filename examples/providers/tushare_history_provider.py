@@ -1,8 +1,9 @@
 """TuShare ETF history provider for mx_data.history_providers.
 
 This script is optional. Install tushare locally and expose the token through
-TUSHARE_TOKEN before using it. Provider JSON is written to stdout and
-diagnostic errors are written to stderr.
+TUSHARE_TOKEN before using it. Set TUSHARE_API_URL when a local reverse proxy
+should replace the default TuShare API endpoint. Provider JSON is written to
+stdout and diagnostic errors are written to stderr.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from typing import Any
 
 
 TUSHARE_TOKEN_ENV = 'TUSHARE_TOKEN'
+TUSHARE_API_URL_ENV = 'TUSHARE_API_URL'
 TUSHARE_VOLUME_LOT_SIZE = 100
 TUSHARE_AMOUNT_UNIT_YUAN = 1000
 TUSHARE_FUND_DAILY_ROW_LIMIT = 5000
@@ -66,7 +68,7 @@ def fetch_tushare_history(
             'missing optional dependency: install tushare before using this provider'
         ) from exc
 
-    client = ts.pro_api(token)
+    client = _build_tushare_client(ts, token)
     records = []
     ts_code = _to_ts_code(symbol)
     for page_start, page_end in _date_windows(start_date, end_date):
@@ -84,6 +86,16 @@ def fetch_tushare_history(
             )
         records.extend(page_records)
     return normalize_tushare_records(records)
+
+
+def _build_tushare_client(ts_module: Any, token: str) -> Any:
+    client = ts_module.pro_api(token)
+    api_url = os.environ.get(TUSHARE_API_URL_ENV, '').strip()
+    if api_url:
+        if not api_url.startswith(('http://', 'https://')):
+            raise ValueError(f'{TUSHARE_API_URL_ENV} must start with http:// or https://')
+        setattr(client, '_DataApi__http_url', api_url)
+    return client
 
 
 def normalize_tushare_records(

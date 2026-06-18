@@ -169,6 +169,6 @@ pip install akshare
 
 ## TuShare 示例
 
-仓库还提供可选脚本 `examples/providers/tushare_history_provider.py`。脚本通过 `TUSHARE_TOKEN` 初始化 `pro_api`，调用未复权 `fund_daily` ETF 日线，并将六位 ETF 代码补齐为 TuShare 的 `.SH` / `.SZ` 代码。
+仓库还提供可选脚本 `examples/providers/tushare_history_provider.py`。脚本通过 `TUSHARE_TOKEN` 初始化 `pro_api`，调用未复权 `fund_daily` ETF 日线，并将六位 ETF 代码补齐为 TuShare 的 `.SH` / `.SZ` 代码。需要使用 TuShare 反代时，可设置可选环境变量 `TUSHARE_API_URL`；脚本会在创建 SDK client 后覆盖 `pro._DataApi__http_url`。
 
-TuShare 的 `vol` 按“手”、`amount` 按“千元”返回，脚本分别转换为“股”和“元”后再输出。建议在 `history_providers` 项中配置 `"required_env": ["TUSHARE_TOKEN"]`，不要把 token 写入命令参数或 JSON 配置。
+TuShare 的 `vol` 按“手”、`amount` 按“千元”返回，脚本分别转换为“股”和“元”后再输出。建议在 `history_providers` 项中配置 `"required_env": ["TUSHARE_TOKEN"]`，不要把 token 或私有反代地址写入命令参数或 JSON 配置。

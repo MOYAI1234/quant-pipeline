@@ -70,7 +70,17 @@ python cli\commands.py history probe --config examples\configs\history-providers
 Remove-Item Env:TUSHARE_TOKEN
 ```
 
-不要把 token 写入 JSON、命令参数、日志或提交记录。`health` / `diagnose` 只展示变量名和缺失状态，不读取或展示变量值。
+使用 TuShare 反代时，再设置本地反代地址：
+
+```powershell
+$env:TUSHARE_TOKEN = '<本地 token>'
+$env:TUSHARE_API_URL = 'https://example-proxy.invalid'
+python cli\commands.py history probe --config examples\configs\history-providers.local.example.json --symbol 510300 --start-date 2026-01-05 --end-date 2026-01-06
+Remove-Item Env:TUSHARE_API_URL
+Remove-Item Env:TUSHARE_TOKEN
+```
+
+不要把 token 或私有反代地址写入 JSON、命令参数、日志或提交记录。`health` / `diagnose` 只展示变量名和缺失状态，不读取或展示变量值。
 
 ## 导出回测输入
 
@@ -78,7 +88,9 @@ provider 探测通过后，可以导出回测 CSV：
 
 ```powershell
 python cli\commands.py history export-grid --config examples\configs\history-providers.local.example.json --symbol 510300 --start-date 2026-01-01 --end-date 2026-01-31 --output data\grid-history.csv
-python cli\commands.py history export-rotation --config examples\configs\history-providers.local.example.json --etf-pool 510300,510500,159915 --start-date 2026-01-01 --end-date 2026-01-31 --lookback 3 --output data\rotation-history.csv
+python cli\commands.py history export-rotation --config examples\configs\history-providers.local.example.json --etf-pool 510300,510500,159915 --start-date 2026-01-01 --end-date 2026-01-31 --lookback 3 --symbol-delay-seconds 30 --output data\rotation-history.csv
 ```
+
+AKShare 的公开网页源可能对连续请求限流。多标的导出可用 `--symbol-delay-seconds` 在相邻标的之间等待 0-60 秒；如果明确使用每分钟 100 次限速的 TuShare 反代，可从 1 秒开始；如果可能降级到 AKShare，本地真实验收建议从 30 秒开始。该参数只控制不同标的之间的节流；示例配置同时把单个 provider 失败后的 `history_retry_delay_seconds` 设为 30 秒，避免立即重试再次撞上短时限制。两种等待都只用于本地验收，不构成可用性 SLA。
 
 生成的真实行情 CSV 属于本地验收产物，默认不要提交到仓库。

@@ -4,6 +4,7 @@ import math
 import sys
 import os
 import tempfile
+import time
 from copy import deepcopy
 from pathlib import Path
 
@@ -232,9 +233,16 @@ def cmd_history_export_rotation(args):
         _value_or_default(args.lookback, DEFAULT_BACKTEST_ROTATION_LOOKBACK),
         '--lookback',
     )
+    symbol_delay_seconds = _history_symbol_delay(
+        args.symbol_delay_seconds,
+    )
     cache_policy = None
     provider_status = None
     if args.input_json:
+        if symbol_delay_seconds:
+            raise ValueError(
+                '--symbol-delay-seconds 仅适用于通过 provider 获取历史行情'
+            )
         history = build_rotation_history(
             _load_history_json_object(args.input_json),
             lookback=lookback,
@@ -244,6 +252,7 @@ def cmd_history_export_rotation(args):
             _fetch_rotation_history_from_data_manager(
                 args,
                 lookback,
+                symbol_delay_seconds,
             )
         )
     output_path = write_rotation_history_csv(
@@ -564,6 +573,7 @@ def _fetch_grid_history_from_data_manager(args) -> tuple[list, dict, dict]:
 def _fetch_rotation_history_from_data_manager(
     args,
     lookback: int,
+    symbol_delay_seconds: float = 0,
 ) -> tuple[list, dict, dict]:
     _require_date_range(args)
     symbols = _resolve_etf_pool(args.etf_pool)
@@ -572,7 +582,7 @@ def _fetch_rotation_history_from_data_manager(
         data_manager.connect()
         provider_status = _empty_history_provider_status()
         symbol_histories = {}
-        for symbol in symbols:
+        for index, symbol in enumerate(symbols):
             symbol_histories[symbol] = data_manager.get_etf_history(
                 symbol,
                 args.start_date,
@@ -583,6 +593,8 @@ def _fetch_rotation_history_from_data_manager(
                 data_manager.health_check().get('mx_data', {}),
                 symbol=symbol,
             )
+            if symbol_delay_seconds and index < len(symbols) - 1:
+                time.sleep(symbol_delay_seconds)
         history = build_rotation_history(symbol_histories, lookback=lookback)
         return (
             history,
@@ -733,6 +745,16 @@ def _non_negative_number(value: float, option_name: str) -> float:
     if not math.isfinite(value) or value < 0:
         raise ValueError(f"{option_name} 不能小于 0")
     return value
+
+
+def _history_symbol_delay(value: float | None) -> float:
+    delay = _non_negative_number(
+        _value_or_default(value, 0),
+        '--symbol-delay-seconds',
+    )
+    if delay > 60:
+        raise ValueError('--symbol-delay-seconds 不能大于 60')
+    return delay
 
 
 def _commission_rate(value: float, option_name: str) -> float:
@@ -1415,6 +1437,11 @@ def main():
     history_rotation_parser.add_argument('--lookback', type=int, help='prices 滚动窗口长度')
     history_rotation_parser.add_argument('--input-json', type=str, help='本地 symbol->history JSON 路径')
     history_rotation_parser.add_argument('--config', type=str, help='数据 provider JSON 配置文件路径')
+    history_rotation_parser.add_argument(
+        '--symbol-delay-seconds',
+        type=float,
+        help='多标的 provider 请求间隔秒数，范围 0-60，默认 0',
+    )
     history_rotation_parser.add_argument('--output', type=str, required=True, help='输出 CSV 路径')
 
     backtest_parser = subparsers.add_parser('backtest', help='运行回测')
