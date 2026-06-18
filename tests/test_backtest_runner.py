@@ -1495,6 +1495,19 @@ def test_load_rotation_history_csv_reads_long_table(tmp_path):
     ]
 
 
+def test_load_rotation_history_csv_preserves_optional_amount(tmp_path):
+    history_file = tmp_path / 'rotation-history.csv'
+    history_file.write_text(
+        'date,symbol,close,prices,volume,amount\n'
+        '2026-01-01,510300,12.0,10|11|12,1000000,12000000\n',
+        encoding='utf-8',
+    )
+
+    rows = load_rotation_history_csv(str(history_file))
+
+    assert rows[0]['symbols']['510300']['amount'] == 12000000.0
+
+
 def test_load_rotation_history_csv_rejects_duplicate_symbol_per_date(tmp_path):
     history_file = tmp_path / 'rotation-history.csv'
     history_file.write_text(

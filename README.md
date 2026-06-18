@@ -205,6 +205,12 @@ python cli\commands.py history export-rotation --config path\to\config.json --et
 python scripts\evaluate_etf_momentum_rotation.py --history data\rotation-history.csv --rebalance-step 5 --limit 12
 ```
 
+本地回测首个 ETF 动量轮动候选策略的收益、换手、费用和过滤摘要：
+
+```powershell
+python scripts\backtest_etf_momentum_rotation.py --history data\rotation-history.csv --initial-capital 100000 --min-avg-amount 20000000 --min-commission 5 --slippage-rate 0.001
+```
+
 真实候选策略需要至少导出 `121` 左右的 `lookback`，才能覆盖 60 日动量、20 日确认、20 日波动和 120 日最小历史要求。
 
 `--symbol-delay-seconds` 仅用于通过 provider 导出 rotation 历史，在相邻标的请求之间等待 0-60 秒。AKShare 等公开网页源出现连续请求限流时可显式启用；默认 0 保持原有行为。
