@@ -548,6 +548,8 @@ class RotationBacktestRunner:
                 'prices': list(bar.get('prices', [])),
                 'volume': self._snapshot_volume(symbol, bar),
             }
+            if 'amount' in bar:
+                market_data[symbol]['amount'] = bar['amount']
         return market_data
 
     def _validate_snapshot_symbols(self, history: list) -> None:
@@ -722,6 +724,14 @@ def load_rotation_history_csv(path: str) -> list:
                     non_negative=True,
                 )
                 bar['volume'] = volume
+            if 'amount' in reader.fieldnames and row.get('amount') not in (None, ''):
+                amount = _to_float(row.get('amount'), 'amount', line_number)
+                _validate_finite_number(
+                    amount,
+                    f'轮动历史 CSV 第 {line_number} 行字段 amount',
+                    non_negative=True,
+                )
+                bar['amount'] = amount
             symbols = snapshots.setdefault(snapshot_date, {})
             if symbol in symbols:
                 raise ValueError(
@@ -1056,6 +1066,13 @@ def _normalize_rotation_symbol_bar(symbol: str, bar: dict, index: int) -> dict:
             non_negative=True,
         )
         normalized['volume'] = bar['volume']
+    if 'amount' in bar:
+        _validate_finite_number(
+            bar['amount'],
+            f'轮动历史 JSON 第 {index} 条 {symbol} amount',
+            non_negative=True,
+        )
+        normalized['amount'] = bar['amount']
     return normalized
 
 
