@@ -53,6 +53,27 @@ Remove-Item Env:TUSHARE_TOKEN
 
 `TUSHARE_API_URL` 是可选项。设置后，示例 provider 会在创建 TuShare SDK client 后覆盖 `pro._DataApi__http_url`，用于本地反代验收。不要把 token 或私有反代地址写入配置文件、命令参数或提交记录。若反代限速为每分钟 100 次，批量导出仍建议显式设置请求间隔，例如 `history export-rotation --symbol-delay-seconds 1`；如果存在 AKShare 降级路径，可使用更保守的间隔。
 
+## TuShare 反代完整演练
+
+`scripts/verify_tushare_proxy.py` 会串起 TuShare guarded live test、`history probe`、grid / rotation 真实行情 CSV 导出，以及用导出的 CSV 跑一次回测加载。脚本只从环境变量读取凭据，不接受 token 命令行参数，默认把真实行情 CSV 写入临时目录并在结束后清理。
+
+```powershell
+python -m pip install tushare
+$env:TUSHARE_TOKEN = '<本地 token>'
+$env:TUSHARE_API_URL = '<TuShare 反代地址>'
+python scripts\verify_tushare_proxy.py
+Remove-Item Env:TUSHARE_API_URL
+Remove-Item Env:TUSHARE_TOKEN
+```
+
+需要保留本地验收 CSV 时，显式指定输出目录；这些文件属于本地真实行情验收产物，默认不要提交：
+
+```powershell
+python scripts\verify_tushare_proxy.py --output-dir data\tushare-live-drill
+```
+
+默认参数覆盖 `510300` 单标的、`510300,510500,159915` 三标的 rotation、`2026-01-05` 至 `2026-03-31`，并使用 `--symbol-delay-seconds 1`。可通过脚本参数调整标的池、日期、lookback 和节流间隔。`--list` 可查看将要执行的命令，输出不会包含 token 值。
+
 ## 失败解释
 
 - 缺少 `RUN_AKSHARE_LIVE=1`：正常跳过，避免 CI 意外访问网络。
