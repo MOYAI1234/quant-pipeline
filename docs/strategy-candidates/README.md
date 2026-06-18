@@ -21,7 +21,7 @@
 
 | 策略 ID | 策略名称 | 状态 | 方向 | 当前下一步 |
 |---|---|---|---|---|
-| `ETF-MOM-ROT-001` | ETF 动量质量轮动 v1 | `researching` | 中低频 ETF 轮动 | 准备聚宽/优矿/米筐复现脚本与本地真实 provider sanity check |
+| `ETF-MOM-ROT-001` | ETF 动量质量轮动 v1 | `researching` | 中低频 ETF 轮动 | 已准备 [聚宽复现脚本](../../examples/joinquant/etf_momentum_rotation_v1.py)，等待公开平台回测结果 |
 
 ## 维护规则
 

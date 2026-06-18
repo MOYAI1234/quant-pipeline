@@ -32,6 +32,7 @@ ETF 量化助手 Pipeline，目标是把数据适配、策略生成、风控检�
 - [策略研究工作流](docs/strategy-research-workflow.md)
 - [策略候选索引](docs/strategy-candidates/README.md)
 - [策略候选模板](docs/strategy-candidate-template.md)
+- [聚宽复现脚本](examples/joinquant/README.md)
 - [公开回测平台交叉验证](docs/public-backtest-validation.md)
 - [PRD v3 差距审计与路线图](docs/prd-gap-audit-v3.md)
 - [数据源 provider 选型矩阵](docs/data-source-provider-evaluation.md)
@@ -372,7 +373,7 @@ python -m compileall -q .
 
 1. 按[策略研究工作流](docs/strategy-research-workflow.md)维护[策略候选索引](docs/strategy-candidates/README.md)，让每个策略想法都有来源、因子、成本、风险和验证计划。
 2. 当前首个候选是 [ETF 动量质量轮动 v1](docs/strategy-candidates/etf-momentum-rotation-v1.md)，状态为 `researching`，尚未通过公开平台验证。
-3. 在聚宽、优矿或米筐至少复现一次关键策略假设，并按[公开回测平台交叉验证](docs/public-backtest-validation.md)归档平台脚本、参数和结果。
+3. 先在聚宽运行 [ETF 动量质量轮动 v1 复现脚本](examples/joinquant/etf_momentum_rotation_v1.py)，再按[公开回测平台交叉验证](docs/public-backtest-validation.md)归档平台参数和结果。
 4. 使用项目内真实 provider 和 backtest 做工程 sanity check，重点验证数据契约、费用、滑点、成交量参与率、止损和风控是否会推翻策略。
 5. 只有公开平台验证通过、差异可解释、保守成本下结论不反转，才进入模拟盘或小资金实盘预研，并另行补齐真实订单状态机、kill switch 和运行审计。
 
