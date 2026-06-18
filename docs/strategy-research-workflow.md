@@ -18,6 +18,7 @@
 
 2. **登记候选策略**
    - 使用 [策略候选模板](strategy-candidate-template.md) 记录策略 ID、状态、标的池、因子定义、信号规则、调仓规则、费用假设、风险点和验证计划。
+   - 所有候选统一登记到 [策略候选索引](strategy-candidates/README.md)，当前首个候选为 [ETF 动量质量轮动 v1](strategy-candidates/etf-momentum-rotation-v1.md)。
    - 记录时不保存 token、账号、私有行情文件或不可分发数据。
 
 3. **本地快速检查**
@@ -53,7 +54,7 @@
 
 ## 下一步
 
-1. 建立策略候选登记表或目录索引。
-2. 为第一个 ETF 因子轮动策略填写候选策略记录。
-3. 准备聚宽/优矿/米筐其中一个平台的复现脚本或手工复现说明。
-4. 将公开平台验证结果回填到候选策略记录和 [公开回测平台交叉验证](public-backtest-validation.md) 模板。
+1. 为 [ETF 动量质量轮动 v1](strategy-candidates/etf-momentum-rotation-v1.md) 准备聚宽/优矿/米筐其中一个平台的复现脚本或手工复现说明。
+2. 使用真实历史 provider 做本地 sanity check，记录复权、费用、滑点、成交量参与率和拒单差异。
+3. 将公开平台验证结果回填到候选策略记录和 [公开回测平台交叉验证](public-backtest-validation.md) 模板。
+4. 继续从 GitHub、论文、研报、公开平台示例和 AI 生成中补充新的候选策略，但必须先登记再验证。
