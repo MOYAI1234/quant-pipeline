@@ -195,10 +195,8 @@ def check_stop_loss(context):
             continue
         drawdown = last_price / avg_cost - 1.0
         if drawdown <= -g.stop_loss:
-            log.info(
-                "stop loss %s: last=%.4f avg_cost=%.4f drawdown=%.2f%%"
-                % (security, last_price, avg_cost, drawdown * 100)
-            )
+            message = "stop loss %s: last=%.4f avg_cost=%.4f drawdown=%.2f%%"
+            log.info(message % (security, last_price, avg_cost, drawdown * 100))
             order_target_value(security, 0)
 
 

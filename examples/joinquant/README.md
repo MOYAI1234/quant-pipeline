@@ -12,6 +12,8 @@
 
 1. 登录聚宽，创建新的股票/基金策略回测。
 2. 将 [etf_momentum_rotation_v1.py](etf_momentum_rotation_v1.py) 内容完整粘贴到策略编辑器。
+   - 必须从文件第一行复制到最后一行，最后一行应是 `return True`。
+   - 若出现 `SyntaxError: unexpected EOF while parsing`，通常表示代码没有粘完整，请重新全选复制。
 3. 建议先使用以下基础参数：
    - 初始资金：`100000`
    - 回测频率：日级别
