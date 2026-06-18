@@ -139,6 +139,12 @@ python cli\commands.py backtest --strategy rotation --positions-output data\rota
 python cli\commands.py backtest --strategy rotation --rejections-output data\rotation-rejections.csv
 ```
 
+一次生成并验证两种策略的完整交付产物；省略 `--output-dir` 时使用临时目录：
+
+```powershell
+python scripts\verify_backtest_artifacts.py --output-dir data\backtest-acceptance
+```
+
 rotation 历史 JSON 使用 snapshot 数组，单条结构如下：
 
 ```json
@@ -165,7 +171,7 @@ date,symbol,close,prices,volume
 grid 回测会按模拟器相同的 100 股整手规则，额外估算最近一档买卖网格完成一轮后的毛收益、手续费、滑点和净收益；不足一手、成本吞掉至少 50% 毛收益，或扣除成本后净收益不为正时，Markdown 报告会输出生产可行性警告。警告不会修改策略成交，只用于阻止把密集网格的毛收益误当成可落地收益。
 权益曲线 CSV 字段：`date,total_value,pnl,pnl_percent,period_return,drawdown`。
 组合快照 CSV 字段：`date,cash,position_count,positions_market_value,total_value,pnl,pnl_percent,realized_pnl,unrealized_pnl,total_value_delta`。其中 `total_value_delta` 用于校验 `cash + positions_market_value` 与 `total_value` 的差异。
-成交明细 CSV 字段：`timestamp,action,symbol,price,shares,amount,commission,entry_commission,profit,net_profit`。
+成交明细 CSV 字段：`timestamp,action,symbol,price,shares,requested_shares,partial_fill,amount,commission,entry_commission,profit,net_profit`。
 持仓明细 CSV 字段：`date,symbol,shares,avg_price,cost,commission,current_price,market_value,unrealized_pnl`。
 拒单明细 CSV 字段：`timestamp,action,symbol,price,shares,amount,reason,signal_reason`。
 

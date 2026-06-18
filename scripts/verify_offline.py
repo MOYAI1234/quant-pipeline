@@ -25,6 +25,10 @@ CHECKS = [
         'rotation-backtest',
         [sys.executable, 'cli/commands.py', 'backtest', '--strategy', 'rotation'],
     ),
+    (
+        'backtest-artifacts',
+        [sys.executable, 'scripts/verify_backtest_artifacts.py'],
+    ),
     ('history-probe-help', [sys.executable, 'cli/commands.py', 'history', 'probe', '--help']),
     (
         'history-export-grid-help',
