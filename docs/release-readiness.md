@@ -16,6 +16,7 @@
 - 外部命令式历史 provider 契约、AKShare / TuShare 示例 provider 和 guarded live e2e 入口。
 - provider 凭据门禁、重试、降级、缓存统计和文本/JSON 可观测性。
 - CLI health / diagnose / report / history probe / history export / backtest 基础入口。
+- 策略研究工作流与候选策略模板，用于把后续迭代从继续堆工程能力转向策略/因子发现、记录和公开平台验证。
 - 离线测试基线：`407 passed, 2 skipped`。
 
 ## 交付项状态
@@ -26,17 +27,17 @@
 | 离线验收 | `scripts/verify_offline.py` 固定 compile / pytest / CLI smoke 顺序 | 完成 |
 | provider 演练 | 无凭据配置模板与 missing env / backup / cache 演练 | 完成 |
 | 回测产物 | 完整产物生成、schema、组合一致性和确定性复验 | 完成 |
-| 文档收口 | README、architecture、testing 和 PRD gap 状态同步 | 完成 |
+| 文档收口 | README、architecture、testing、策略研究工作流和 PRD gap 状态同步 | 完成 |
 
 ## 验证分层
 
-当前内部回测引擎用于工程自验证，不应被单独解释为策略可生产。进入实盘预研前，应按三段式推进：
+当前内部回测引擎用于工程自验证，不应被单独解释为策略可生产。下一阶段以策略/因子研究为核心，公开平台验证是策略有效性的主要证据。进入实盘预研前，应按三段式推进：
 
-1. **内部自验证**：`scripts/verify_offline.py`、项目内 backtest、provider 契约、报告导出和状态恢复必须通过，用于验证本仓库的策略状态机、风控、执行模型和可观测性。
+1. **候选策略登记与本地 sanity check**：先按[策略研究工作流](strategy-research-workflow.md)和[策略候选模板](strategy-candidate-template.md)记录来源、因子、信号、费用、风险和验证计划；`scripts/verify_offline.py`、项目内 backtest、provider 契约、报告导出和状态恢复用于验证本仓库的策略状态机、风控、执行模型和可观测性。
 2. **公开回测平台交叉验证**：在聚宽、优矿、米筐等公开回测平台中至少选择一个复现关键策略假设，记录收益、调仓、成交、复权、交易日历、手续费和滑点模型差异。
 3. **模拟盘 / 小资金实盘预研**：只有内部自验证通过，且公开平台差异可解释，才进入模拟盘或小资金实盘预研；该阶段还必须另行补齐真实订单状态机、kill switch 和运行审计。
 
-公开回测平台用于验证策略结果和市场假设，内部回测用于验证本系统的工程链路。两者不能互相替代。
+公开回测平台用于验证策略结果和市场假设，内部回测用于验证本系统的工程链路和成本约束。两者不能互相替代；当两者结论冲突时，优先调查数据、复权、交易日历、信号时点、费用和撮合模型差异，而不是直接扩大自研回测范围。
 
 公开平台验证时使用 [公开回测平台交叉验证模板](public-backtest-validation.md)，必须显式记录复权、交易日历、费用、滑点、成交约束和差异解释。网格参数还需要证明扣除真实费用后仍有正期望，不接受依靠密集成交堆出的毛收益。
 
@@ -101,6 +102,8 @@ Remove-Item Env:TUSHARE_TOKEN
 - Web / API 控制台。
 - 外部通知通道。
 - 真实行情服务 SLA。
+- 自研完整公开回测平台替代品。
+- 策略收益有效性保证。
 - 高频或密集网格生产策略。
 
 这些能力需要在真实数据源、状态恢复、风控门禁和 kill switch 都稳定后，单独进入实盘预研阶段。

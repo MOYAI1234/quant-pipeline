@@ -10,6 +10,7 @@ ETF 量化助手 Pipeline，目标是把数据适配、策略生成、风控检�
 
 重要边界：
 
+- 策略/因子研究是下一阶段核心，项目内回测只作为工程自验证和快速 sanity check；策略有效性需要通过聚宽、优矿、米筐等公开平台交叉验证后才能继续推进。
 - `adapters/` 中的 `mx-data`、`mx-xuangu`、`mx-search`、`jason-kb` 适配器多数仍是占位实现；`mx-data` 仅先支持通过 `history_command` 接入外部命令式历史行情 provider。
 - adapter 支持 `mode=mock|real`。默认 `mock` 会返回占位数据；未配置 provider 的 `real` 会明确标记为不可用并抛出 `ServiceUnavailableError`，避免把 0 或空列表误认为真实行情。
 - `DataManager` 会校验实时行情、净值和历史行情的基础字段、数值类型和可选时效契约；字段缺失、返回 shape 错误或启用时效校验后的过期数据会抛出 `DataFetchError`，避免脏数据继续进入策略链路。
@@ -28,6 +29,8 @@ ETF 量化助手 Pipeline，目标是把数据适配、策略生成、风控检�
 - [架构说明](docs/architecture.md)
 - [测试与验收指南](docs/testing.md)
 - [研究/模拟版交付状态](docs/release-readiness.md)
+- [策略研究工作流](docs/strategy-research-workflow.md)
+- [策略候选模板](docs/strategy-candidate-template.md)
 - [公开回测平台交叉验证](docs/public-backtest-validation.md)
 - [PRD v3 差距审计与路线图](docs/prd-gap-audit-v3.md)
 - [数据源 provider 选型矩阵](docs/data-source-provider-evaluation.md)
@@ -364,12 +367,12 @@ python -m compileall -q .
 
 ## 下一步路线
 
-研究/模拟验证版已经收口，后续按以下门槛推进：
+研究/模拟验证版已经收口，后续研发重心转向策略/因子研究闭环：
 
-1. 显式验收 AKShare / TuShare guarded live 链路，持续观察 provider 可用性、缓存命中和降级状态。
-2. 使用真实历史 provider 生成可追溯回测输入，完成项目内回测和产物归档。
-3. 按[公开回测平台交叉验证](docs/public-backtest-validation.md)在聚宽、优矿或米筐至少复现一次关键策略假设。
-4. 使用真实费用、最低佣金、滑点和成交约束筛除依赖高密度网格交易的参数。
-5. 内部与公开平台差异可解释后，再进入模拟盘或小资金实盘预研，并另行补齐真实订单状态机、kill switch 和运行审计。
+1. 按[策略研究工作流](docs/strategy-research-workflow.md)建立候选策略记录和因子假设模板。
+2. 为第一个 ETF 因子轮动策略填写[策略候选模板](docs/strategy-candidate-template.md)，明确来源、因子、调仓、成本、风险和验证计划。
+3. 在聚宽、优矿或米筐至少复现一次关键策略假设，并按[公开回测平台交叉验证](docs/public-backtest-validation.md)归档平台脚本、参数和结果。
+4. 使用项目内真实 provider 和 backtest 做工程 sanity check，重点验证数据契约、费用、滑点、成交量参与率、止损和风控是否会推翻策略。
+5. 只有公开平台验证通过、差异可解释、保守成本下结论不反转，才进入模拟盘或小资金实盘预研，并另行补齐真实订单状态机、kill switch 和运行审计。
 
 实盘相关能力必须在显式配置、充分测试和状态可恢复后再启用。
