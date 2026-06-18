@@ -37,6 +37,9 @@ def initialize(context):
     g.max_weight_per_etf = 0.50
     g.stop_loss = 0.10
     g.slippage_rate = 0.001
+    g.debug_rejections = True
+    g.debug_rebalance_count = 0
+    g.debug_rebalance_limit = 8
 
     # ETF/fund style costs: no stamp tax, bilateral commission, pressure-test
     # minimum commission. Adjust this to match the broker account under review.
@@ -87,13 +90,17 @@ def rebalance(context):
 def select_targets(context):
     """Score ETF candidates by momentum, confirmation and volatility."""
     scores = []
+    rejections = []
     for security in g.etf_pool:
-        factor = calculate_factor(security)
+        factor, reason = calculate_factor(security)
         if factor is None:
+            rejections.append((security, reason))
             continue
         scores.append(factor)
 
     if not scores:
+        log_rejection_diagnostics([], [], rejections)
+        g.debug_rebalance_count += 1
         return []
 
     # Higher momentum and confirmation are better; lower volatility is better.
@@ -113,56 +120,88 @@ def select_targets(context):
 
     ranked.sort(key=lambda row: row[0])
     selected = []
+    final_rejections = []
     for _, security, item in ranked:
-        if item["momentum"] <= 0 or item["confirm"] <= 0:
+        if item["momentum"] <= 0:
+            final_rejections.append(
+                (security, "non_positive_60d_momentum " + format_factor(item))
+            )
             continue
-        if can_trade(security):
-            selected.append(security)
+        if item["confirm"] <= 0:
+            final_rejections.append(
+                (security, "non_positive_20d_confirm " + format_factor(item))
+            )
+            continue
+        tradable, reason = can_trade_detail(security)
+        if not tradable:
+            final_rejections.append((security, reason + " " + format_factor(item)))
+            continue
+        selected.append(security)
         if len(selected) >= g.max_holdings:
             break
+    log_rejection_diagnostics(ranked, final_rejections, rejections)
+    g.debug_rebalance_count += 1
     return selected
 
 
 def calculate_factor(security):
-    """Return factor dict or None if the ETF fails history/liquidity filters."""
-    if not can_trade(security):
-        return None
+    """Return (factor, reason) for diagnostics."""
+    tradable, reason = can_trade_detail(security)
+    if not tradable:
+        return None, reason
 
-    hist = attribute_history(
-        security,
-        g.lookback_days + 1,
-        unit="1d",
-        fields=["close", "money"],
-        skip_paused=True,
-        df=True,
-        fq="pre",
-    )
+    try:
+        hist = attribute_history(
+            security,
+            g.lookback_days + 1,
+            unit="1d",
+            fields=["close", "money"],
+            skip_paused=True,
+            df=True,
+            fq="pre",
+        )
+    except Exception as exc:
+        return None, "history_error=%s" % exc
     if hist is None or len(hist) < g.min_history_days:
-        return None
+        hist_len = 0 if hist is None else len(hist)
+        return None, "insufficient_history len=%s need=%s" % (
+            hist_len,
+            g.min_history_days,
+        )
     if "close" not in hist or "money" not in hist:
-        return None
+        return None, "missing_history_columns"
 
     close = hist["close"].dropna()
     money = hist["money"].dropna()
     if len(close) < g.min_history_days or len(money) < g.confirm_window:
-        return None
+        return None, "insufficient_clean_data close=%s money=%s" % (
+            len(close),
+            len(money),
+        )
 
     avg_money = float(money.iloc[-g.confirm_window :].mean())
     if avg_money < g.min_avg_money:
-        return None
+        return None, "low_avg_money avg=%.2f need=%.2f" % (
+            avg_money,
+            g.min_avg_money,
+        )
 
     latest = float(close.iloc[-1])
     momentum_base = float(close.iloc[-g.momentum_window - 1])
     confirm_base = float(close.iloc[-g.confirm_window - 1])
     if latest <= 0 or momentum_base <= 0 or confirm_base <= 0:
-        return None
+        return None, "invalid_price latest=%.4f momentum_base=%.4f confirm_base=%.4f" % (
+            latest,
+            momentum_base,
+            confirm_base,
+        )
 
     momentum = latest / momentum_base - 1.0
     confirm = latest / confirm_base - 1.0
     returns = close.pct_change().dropna()
     volatility = float(returns.iloc[-g.vol_window :].std())
     if math.isnan(volatility):
-        return None
+        return None, "nan_volatility"
 
     return {
         "security": security,
@@ -170,7 +209,7 @@ def calculate_factor(security):
         "confirm": confirm,
         "volatility": volatility,
         "avg_money": avg_money,
-    }
+    }, None
 
 
 def rank_values(items, key, reverse):
@@ -202,17 +241,57 @@ def check_stop_loss(context):
             order_target_value(security, 0)
 
 
+def log_rejection_diagnostics(ranked, final_rejections, data_rejections):
+    if not g.debug_rejections:
+        return
+    if g.debug_rebalance_count >= g.debug_rebalance_limit:
+        return
+    if ranked:
+        log.info("factor diagnostics begin")
+        for score, security, item in ranked:
+            log.info(
+                "factor %s score=%s %s"
+                % (security, score, format_factor(item))
+            )
+    if final_rejections or data_rejections:
+        log.info("rejection diagnostics begin")
+    for security, reason in final_rejections:
+        log.info("reject %s: %s" % (security, reason))
+    for security, reason in data_rejections:
+        log.info("reject %s: %s" % (security, reason))
+
+
+def format_factor(item):
+    return "momentum=%.4f confirm=%.4f volatility=%.4f avg_money=%.2f" % (
+        item["momentum"],
+        item["confirm"],
+        item["volatility"],
+        item["avg_money"],
+    )
+
+
 def can_trade(security):
+    tradable, _ = can_trade_detail(security)
+    return tradable
+
+
+def can_trade_detail(security):
     current_data = get_current_data()
     if security not in current_data:
-        return False
+        return False, "not_in_current_data"
     data = current_data[security]
     if data.paused:
-        return False
+        return False, "paused"
     if data.last_price is None or data.last_price <= 0:
-        return False
+        return False, "invalid_last_price=%s" % data.last_price
     if data.high_limit is not None and data.last_price >= data.high_limit:
-        return False
+        return False, "at_high_limit last=%s high_limit=%s" % (
+            data.last_price,
+            data.high_limit,
+        )
     if data.low_limit is not None and data.last_price <= data.low_limit:
-        return False
-    return True
+        return False, "at_low_limit last=%s low_limit=%s" % (
+            data.last_price,
+            data.low_limit,
+        )
+    return True, "tradable"

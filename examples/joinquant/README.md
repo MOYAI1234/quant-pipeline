@@ -21,6 +21,17 @@
 4. 跑完后记录总收益、年化、最大回撤、夏普、成交次数、换手、期末持仓和关键调仓日志。
 5. 将结果回填到 [候选策略记录](../../docs/strategy-candidates/etf-momentum-rotation-v1.md) 的“结果记录”表。
 
+## 诊断日志
+
+脚本默认开启前 8 次调仓的过滤诊断日志，用于排查“编译成功但一直空仓”的原因。建议先跑一个较短区间，例如 `2016-01-01` 至 `2016-03-31`，查看日志中的 `factor diagnostics begin` 和 `reject ...`。
+
+常见原因：
+
+- `not_in_current_data` / `invalid_last_price`：开盘时点的当前行情字段不可用，可能需要调整可交易判断位置。
+- `insufficient_history`：标的上市时间不够长或聚宽该 ETF 历史不足。
+- `low_avg_money`：20 日日均成交额低于阈值。
+- `non_positive_60d_momentum` / `non_positive_20d_confirm`：动量过滤为负，策略按规则保持现金。
+
 ## 关键假设
 
 - 调仓：每周第一个交易日开盘，使用当前交易日前的历史日线，不读取当天收盘价。
