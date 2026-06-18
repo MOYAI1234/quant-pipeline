@@ -6,6 +6,8 @@ ETF 量化助手 Pipeline，目标是把数据适配、策略生成、风控检�
 
 当前代码处于 **mock 数据 + simulator 模拟交易** 阶段，适合用于验证策略状态机、执行器、风控链路和后续回测框架，不是生产实盘系统。
 
+截至 2026-06-18，仓库已达到[研究/模拟验证版交付基线](docs/release-readiness.md)：完整离线验收为 `400 passed, 2 skipped`，并包含 provider 本地演练与确定性回测产物验收。该结论只说明工程链路可交付，不代表策略收益有效或具备实盘条件。
+
 重要边界：
 
 - `adapters/` 中的 `mx-data`、`mx-xuangu`、`mx-search`、`jason-kb` 适配器多数仍是占位实现；`mx-data` 仅先支持通过 `history_command` 接入外部命令式历史行情 provider。
@@ -25,7 +27,8 @@ ETF 量化助手 Pipeline，目标是把数据适配、策略生成、风控检�
 
 - [架构说明](docs/architecture.md)
 - [测试与验收指南](docs/testing.md)
-- [研究/模拟版交付清单](docs/release-readiness.md)
+- [研究/模拟版交付状态](docs/release-readiness.md)
+- [公开回测平台交叉验证](docs/public-backtest-validation.md)
 - [PRD v3 差距审计与路线图](docs/prd-gap-audit-v3.md)
 - [数据源 provider 选型矩阵](docs/data-source-provider-evaluation.md)
 - [历史行情命令 provider 契约](docs/history-provider-contract.md)
@@ -359,14 +362,12 @@ python -m compileall -q .
 
 ## 下一步路线
 
-优先级从高到低：
+研究/模拟验证版已经收口，后续按以下门槛推进：
 
-1. 补强测试和主循环可测性。
-2. 明确 adapter 的 mock/real 模式和数据契约。
-3. 扩展历史行情驱动的回测引擎。
-4. 显式验收 AKShare / TuShare guarded live 链路，并继续补 provider 长期健康、缓存命中和降级监控。
-5. 持久化账户、成交和策略状态。
-6. 完善监控报告和告警闭环。
-7. 在模拟和回测稳定后，再预研 QMT/实盘执行。
+1. 显式验收 AKShare / TuShare guarded live 链路，持续观察 provider 可用性、缓存命中和降级状态。
+2. 使用真实历史 provider 生成可追溯回测输入，完成项目内回测和产物归档。
+3. 按[公开回测平台交叉验证](docs/public-backtest-validation.md)在聚宽、优矿或米筐至少复现一次关键策略假设。
+4. 使用真实费用、最低佣金、滑点和成交约束筛除依赖高密度网格交易的参数。
+5. 内部与公开平台差异可解释后，再进入模拟盘或小资金实盘预研，并另行补齐真实订单状态机、kill switch 和运行审计。
 
 实盘相关能力必须在显式配置、充分测试和状态可恢复后再启用。
