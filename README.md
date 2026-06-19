@@ -32,6 +32,7 @@ ETF 量化助手 Pipeline，目标是把数据适配、策略生成、风控检�
 - [策略研究工作流](docs/strategy-research-workflow.md)
 - [策略候选索引](docs/strategy-candidates/README.md)
 - [策略候选模板](docs/strategy-candidate-template.md)
+- [策略因子来源扫描](docs/strategy-factor-source-scan-2026-06-19.md)
 - [聚宽复现脚本](examples/joinquant/README.md)
 - [公开回测平台交叉验证](docs/public-backtest-validation.md)
 - [PRD v3 差距审计与路线图](docs/prd-gap-audit-v3.md)
