@@ -44,17 +44,8 @@ def build_rotation_history(
     *,
     lookback: int | None = None,
 ) -> list:
-    if lookback is not None and lookback <= 0:
-        raise ValueError('lookback 必须大于 0')
-    if not isinstance(symbol_histories, dict) or not symbol_histories:
-        raise ValueError('轮动历史必须是非空 symbol->history 映射')
-
-    normalized = {}
-    for symbol, history in symbol_histories.items():
-        normalized_symbol = _normalize_symbol(symbol)
-        if normalized_symbol in normalized:
-            raise ValueError(f'轮动历史 symbol 重复: {normalized_symbol}')
-        normalized[normalized_symbol] = normalize_grid_history(history)
+    _validate_lookback(lookback)
+    normalized = _normalize_symbol_histories(symbol_histories)
     symbols = list(normalized)
     dates = [row['date'] for row in normalized[symbols[0]]]
     for symbol in symbols[1:]:
@@ -62,11 +53,51 @@ def build_rotation_history(
         if symbol_dates != dates:
             raise ValueError(f'轮动历史日期序列不一致: {symbol}')
 
+    return _build_rotation_snapshots(normalized, dates, lookback=lookback)
+
+
+def build_rotation_history_intersection(
+    symbol_histories: dict,
+    *,
+    lookback: int | None = None,
+) -> list:
+    _validate_lookback(lookback)
+    normalized = _normalize_symbol_histories(symbol_histories)
+    common_dates = None
+    for symbol, rows in normalized.items():
+        dates = [row['date'] for row in rows]
+        if len(dates) != len(set(dates)):
+            raise ValueError(f'轮动历史日期重复: {symbol}')
+        symbol_dates = set(dates)
+        common_dates = (
+            symbol_dates
+            if common_dates is None
+            else common_dates & symbol_dates
+        )
+    dates = sorted(common_dates or [])
+    if not dates:
+        raise ValueError('轮动历史没有共同日期')
+
+    return _build_rotation_snapshots(normalized, dates, lookback=lookback)
+
+
+def _build_rotation_snapshots(
+    normalized: dict,
+    dates: list[str],
+    *,
+    lookback: int | None,
+) -> list:
+    symbols = list(normalized)
+    index_by_symbol = {
+        symbol: {row['date']: index for index, row in enumerate(rows)}
+        for symbol, rows in normalized.items()
+    }
     snapshots = []
-    for index, snapshot_date in enumerate(dates):
+    for snapshot_date in dates:
         snapshot_symbols = {}
         for symbol in symbols:
             rows = normalized[symbol]
+            index = index_by_symbol[symbol][snapshot_date]
             bar = rows[index]
             start_index = 0 if lookback is None else max(0, index + 1 - lookback)
             snapshot_symbols[symbol] = {
@@ -129,6 +160,24 @@ def _normalize_symbol(symbol) -> str:
     normalized = str(symbol).strip()
     if not normalized:
         raise ValueError('轮动历史 symbol 不能为空')
+    return normalized
+
+
+def _validate_lookback(lookback: int | None) -> None:
+    if lookback is not None and lookback <= 0:
+        raise ValueError('lookback 必须大于 0')
+
+
+def _normalize_symbol_histories(symbol_histories: dict) -> dict:
+    if not isinstance(symbol_histories, dict) or not symbol_histories:
+        raise ValueError('轮动历史必须是非空 symbol->history 映射')
+
+    normalized = {}
+    for symbol, history in symbol_histories.items():
+        normalized_symbol = _normalize_symbol(symbol)
+        if normalized_symbol in normalized:
+            raise ValueError(f'轮动历史 symbol 重复: {normalized_symbol}')
+        normalized[normalized_symbol] = normalize_grid_history(history)
     return normalized
 
 

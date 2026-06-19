@@ -15,6 +15,7 @@ from .runner import (
 )
 from .history_adapter import (
     build_rotation_history,
+    build_rotation_history_intersection,
     fetch_grid_history,
     fetch_rotation_history,
     normalize_grid_history,
@@ -31,6 +32,7 @@ __all__ = [
     'RotationBacktestRunner',
     'filter_history_by_date',
     'build_rotation_history',
+    'build_rotation_history_intersection',
     'fetch_grid_history',
     'fetch_rotation_history',
     'load_history_csv',

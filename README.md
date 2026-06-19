@@ -200,6 +200,12 @@ python cli\commands.py history export-grid --config path\to\config.json --symbol
 python cli\commands.py history export-rotation --config path\to\config.json --etf-pool 510300,510500,159915 --start-date 2026-01-01 --end-date 2026-01-31 --lookback 3 --symbol-delay-seconds 30 --output data\rotation-history.csv
 ```
 
+`history export-rotation` 默认要求所有 ETF 历史日期严格一致。真实 provider 返回的 ETF 日期序列不齐时，可用研究脚本按共同交易日导出临时验证 CSV：
+
+```powershell
+python scripts\export_rotation_history_intersection.py --config path\to\config.json --etf-pool 510300,510500,159915,510880,518880 --start-date 2015-07-01 --end-date 2021-12-31 --lookback 253 --symbol-delay-seconds 1 --output data\rotation-history-intersection.csv
+```
+
 本地评估首个 ETF 动量轮动候选策略的因子和过滤原因：
 
 ```powershell
