@@ -219,6 +219,12 @@ python scripts\evaluate_etf_dual_momentum.py --history data\rotation-history.csv
 python scripts\backtest_etf_dual_momentum.py --history data\rotation-history.csv --risk-assets 510300,510500,159915,510880 --defensive-assets 518880 --lookback-days 120 --min-history-days 121 --initial-capital 100000 --min-amount 20000000 --min-commission 5 --slippage-rate 0.001
 ```
 
+可选叠加组合回撤暂停 overlay，用于测试月内快速下跌时的清仓和下次月末信号释放：
+
+```powershell
+python scripts\backtest_etf_dual_momentum.py --history data\rotation-history.csv --risk-assets 510300,510500,159915,510880 --defensive-assets 518880 --lookback-days 120 --min-history-days 121 --initial-capital 100000 --min-amount 20000000 --min-commission 5 --slippage-rate 0.001 --drawdown-pause 0.15
+```
+
 本地评估和回测 `ETF-DAA-003` 防御型资产配置候选策略：
 
 ```powershell
