@@ -22,6 +22,8 @@
 | 策略 ID | 策略名称 | 状态 | 方向 | 当前下一步 |
 |---|---|---|---|---|
 | `ETF-MOM-ROT-001` | ETF 动量质量轮动 v1 | `researching` | 中低频 ETF 轮动 | 已准备 [聚宽复现脚本](../../examples/joinquant/etf_momentum_rotation_v1.py)，等待公开平台回测结果 |
+| `ETF-DUAL-MOM-002` | [全球/跨资产双动量 ETF v1](etf-dual-momentum-v1.md) | `researching` | 月频 ETF 双动量 | 准备本地月频信号诊断和收益回测 |
+| `ETF-DAA-003` | [防御型资产配置 DAA v1](etf-defensive-asset-allocation-v1.md) | `researching` | 月频战术资产配置 | 准备 canary/breadth 风险开关信号诊断 |
 
 ## 维护规则
 
