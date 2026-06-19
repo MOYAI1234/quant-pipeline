@@ -212,7 +212,15 @@ python scripts\evaluate_etf_momentum_rotation.py --history data\rotation-history
 python scripts\backtest_etf_momentum_rotation.py --history data\rotation-history.csv --initial-capital 100000 --min-avg-amount 20000000 --min-commission 5 --slippage-rate 0.001
 ```
 
+本地评估和回测 `ETF-DUAL-MOM-002` 月频双动量候选策略：
+
+```powershell
+python scripts\evaluate_etf_dual_momentum.py --history data\rotation-history.csv --risk-assets 510300,510500,159915,510880 --defensive-assets 518880 --lookback-days 120 --min-history-days 121 --limit 12
+python scripts\backtest_etf_dual_momentum.py --history data\rotation-history.csv --risk-assets 510300,510500,159915,510880 --defensive-assets 518880 --lookback-days 120 --min-history-days 121 --initial-capital 100000 --min-amount 20000000 --min-commission 5 --slippage-rate 0.001
+```
+
 真实候选策略需要至少导出 `121` 左右的 `lookback`，才能覆盖 60 日动量、20 日确认、20 日波动和 120 日最小历史要求。
+`ETF-DUAL-MOM-002` 标准 12 个月版本需要至少 `253` 左右的 `lookback`；若只导出 121 日窗口，只能做 120 日动量的临时 sanity check。
 
 `--symbol-delay-seconds` 仅用于通过 provider 导出 rotation 历史，在相邻标的请求之间等待 0-60 秒。AKShare 等公开网页源出现连续请求限流时可显式启用；默认 0 保持原有行为。
 
