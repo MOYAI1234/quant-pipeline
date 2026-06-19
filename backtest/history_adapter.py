@@ -46,6 +46,7 @@ def build_rotation_history(
 ) -> list:
     _validate_lookback(lookback)
     normalized = _normalize_symbol_histories(symbol_histories)
+    _reject_duplicate_dates(normalized)
     symbols = list(normalized)
     dates = [row['date'] for row in normalized[symbols[0]]]
     for symbol in symbols[1:]:
@@ -63,11 +64,10 @@ def build_rotation_history_intersection(
 ) -> list:
     _validate_lookback(lookback)
     normalized = _normalize_symbol_histories(symbol_histories)
+    _reject_duplicate_dates(normalized)
     common_dates = None
-    for symbol, rows in normalized.items():
+    for rows in normalized.values():
         dates = [row['date'] for row in rows]
-        if len(dates) != len(set(dates)):
-            raise ValueError(f'轮动历史日期重复: {symbol}')
         symbol_dates = set(dates)
         common_dates = (
             symbol_dates
@@ -179,6 +179,13 @@ def _normalize_symbol_histories(symbol_histories: dict) -> dict:
             raise ValueError(f'轮动历史 symbol 重复: {normalized_symbol}')
         normalized[normalized_symbol] = normalize_grid_history(history)
     return normalized
+
+
+def _reject_duplicate_dates(normalized: dict) -> None:
+    for symbol, rows in normalized.items():
+        dates = [row['date'] for row in rows]
+        if len(dates) != len(set(dates)):
+            raise ValueError(f'轮动历史日期重复: {symbol}')
 
 
 def _required_text(record: dict, field: str, index: int) -> str:

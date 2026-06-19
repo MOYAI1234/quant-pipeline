@@ -192,6 +192,17 @@ def test_build_rotation_history_rejects_misaligned_dates():
         })
 
 
+def test_build_rotation_history_rejects_duplicate_dates_before_indexing():
+    duplicate_history = _history([10.0, 11.0])
+    duplicate_history[1]['date'] = '2026-01-01'
+
+    with pytest.raises(ValueError, match='轮动历史日期重复: 510300'):
+        build_rotation_history({
+            '510300': duplicate_history,
+            '510500': _history([8.0, 8.5]),
+        })
+
+
 def test_build_rotation_history_intersection_uses_common_dates_and_own_lookback():
     first_history = _history([10.0, 11.0, 12.0])
     second_history = _history([8.0, 9.0])
@@ -222,6 +233,17 @@ def test_build_rotation_history_intersection_rejects_no_common_dates():
         build_rotation_history_intersection({
             '510300': first_history,
             '510500': second_history,
+        })
+
+
+def test_build_rotation_history_intersection_rejects_duplicate_dates():
+    duplicate_history = _history([10.0, 11.0])
+    duplicate_history[1]['date'] = '2026-01-01'
+
+    with pytest.raises(ValueError, match='轮动历史日期重复: 510300'):
+        build_rotation_history_intersection({
+            '510300': duplicate_history,
+            '510500': _history([8.0, 8.5]),
         })
 
 
