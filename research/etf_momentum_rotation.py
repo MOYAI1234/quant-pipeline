@@ -1,8 +1,11 @@
 import csv
 import json
 import math
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
+
+from strategy.base import BaseStrategy
 
 
 @dataclass(frozen=True)
@@ -22,6 +25,183 @@ class MomentumRotationConfig:
             self.volatility_window + 1,
             self.min_history_days,
         )
+
+
+class ETFMomentumRotationBacktestStrategy(BaseStrategy):
+    """ETF-MOM-ROT-001 的本地回测适配层。"""
+
+    def __init__(
+        self,
+        etf_pool: list[str],
+        factor_config: MomentumRotationConfig | None = None,
+        *,
+        rebalance_step: int = 5,
+        name: str = 'ETF-MOM-ROT-001 本地回测',
+    ):
+        if rebalance_step <= 0:
+            raise ValueError('rebalance_step 必须大于 0')
+        normalized_pool = [symbol.strip() for symbol in etf_pool if symbol.strip()]
+        if not normalized_pool:
+            raise ValueError('etf_pool 不能为空')
+
+        super().__init__({
+            'name': name,
+            'symbol': normalized_pool[0],
+            'etf_pool': normalized_pool,
+        })
+        self.etf_pool = normalized_pool
+        self.factor_config = factor_config or MomentumRotationConfig()
+        self.rebalance_step = rebalance_step
+        self.selected_etfs = []
+        self.evaluation_count = 0
+        self.selected_history = []
+        self.rejection_reasons = Counter()
+        self.last_evaluation = None
+        self._snapshot_count = 0
+
+    def generate_signal(self, data: dict, portfolio: dict = None) -> list:
+        self._snapshot_count += 1
+        if (self._snapshot_count - 1) % self.rebalance_step != 0:
+            return []
+
+        snapshot = _market_data_to_snapshot(data, self.etf_pool)
+        evaluation = evaluate_snapshot(snapshot, self.factor_config)
+        self.evaluation_count += 1
+        self.last_evaluation = evaluation
+        self.selected_etfs = list(evaluation['selected'])
+        self.selected_history.append({
+            'date': evaluation['date'],
+            'selected': list(evaluation['selected']),
+        })
+        self.rejection_reasons.update(
+            _base_rejection_reason(rejection['reason'])
+            for rejection in evaluation['rejections']
+        )
+        return self._rebalance_signals(data, portfolio, self.selected_etfs)
+
+    def calc_position_size(self, capital: float, price: float) -> int:
+        if price <= 0 or not self.selected_etfs:
+            return 0
+        return int((capital / len(self.selected_etfs)) / price / 100) * 100
+
+    def _rebalance_signals(
+        self,
+        data: dict,
+        portfolio: dict | None,
+        selected: list[str],
+    ) -> list:
+        signals = []
+        positions = (portfolio or {}).get('positions', {})
+        signal_time = data.get('_date') if isinstance(data, dict) else None
+        costs = self._trading_costs(portfolio)
+
+        for symbol, position in positions.items():
+            if symbol in selected or position.get('shares', 0) <= 0:
+                continue
+            price = self._price_for(symbol, data, position)
+            if price <= 0:
+                continue
+            shares = int(position['shares'] // 100) * 100
+            if shares <= 0:
+                continue
+            signals.append({
+                'action': 'sell',
+                'symbol': symbol,
+                'price': price,
+                'shares': shares,
+                'amount': shares * price,
+                'reason': 'ETF-MOM-ROT-001 调仓卖出',
+                'timestamp': signal_time,
+            })
+
+        if not selected:
+            return signals
+
+        total_value = (portfolio or {}).get('total_value', 0)
+        target_value = total_value / len(selected) if total_value > 0 else 0
+        available_capital = (portfolio or {}).get('capital', 0) + sum(
+            self._net_sell_proceeds(signal['amount'], costs)
+            for signal in signals
+            if signal.get('action') == 'sell'
+        )
+
+        for symbol in selected:
+            if symbol not in data:
+                continue
+            price = data[symbol].get('price', 0)
+            if price <= 0:
+                continue
+            current_value = (
+                positions.get(symbol, {}).get('market_value')
+                or positions.get(symbol, {}).get('shares', 0) * price
+            )
+            budget = target_value - current_value
+            if budget <= 0:
+                continue
+            budget = min(budget, available_capital)
+            shares = self._affordable_buy_shares(budget, price, costs)
+            if shares <= 0:
+                continue
+            amount = shares * price
+            signals.append({
+                'action': 'buy',
+                'symbol': symbol,
+                'price': price,
+                'shares': shares,
+                'amount': amount,
+                'reason': 'ETF-MOM-ROT-001 调仓买入',
+                'timestamp': signal_time,
+            })
+            available_capital = max(
+                available_capital - self._gross_buy_cost(amount, costs),
+                0,
+            )
+
+        return signals
+
+    def _price_for(self, symbol: str, data: dict, position: dict) -> float:
+        if isinstance(data.get(symbol), dict):
+            price = data[symbol].get('price', 0)
+            if price > 0:
+                return price
+        return position.get('current_price', position.get('avg_price', 0))
+
+    def _trading_costs(self, portfolio: dict | None) -> dict:
+        costs = (portfolio or {}).get('trading_costs', {})
+        return {
+            'buy_commission_rate': costs.get('buy_commission_rate', 0),
+            'sell_commission_rate': costs.get('sell_commission_rate', 0),
+            'min_commission': costs.get('min_commission', 0),
+        }
+
+    def _net_sell_proceeds(self, amount: float, costs: dict) -> float:
+        commission = max(
+            amount * costs['sell_commission_rate'],
+            costs['min_commission'],
+        )
+        return max(amount - commission, 0)
+
+    def _gross_buy_cost(self, amount: float, costs: dict) -> float:
+        return amount + max(
+            amount * costs['buy_commission_rate'],
+            costs['min_commission'],
+        )
+
+    def _affordable_buy_shares(
+        self,
+        budget: float,
+        price: float,
+        costs: dict,
+    ) -> int:
+        if budget <= 0 or price <= 0:
+            return 0
+        max_notional = min(
+            budget / (1 + costs['buy_commission_rate']),
+            budget - costs['min_commission'],
+        )
+        if max_notional <= 0:
+            return 0
+        return int(max_notional / price / 100) * 100
 
 
 def load_rotation_csv(path: str) -> list:
@@ -136,6 +316,23 @@ def evaluate_snapshot(snapshot: dict, config: MomentumRotationConfig) -> dict:
     }
 
 
+def backtest_diagnostics(strategy: ETFMomentumRotationBacktestStrategy) -> dict:
+    selected_count = sum(
+        1 for item in strategy.selected_history
+        if item['selected']
+    )
+    return {
+        'evaluation_count': strategy.evaluation_count,
+        'selected_count': selected_count,
+        'empty_count': strategy.evaluation_count - selected_count,
+        'last_selected': (
+            strategy.selected_history[-1]['selected']
+            if strategy.selected_history else []
+        ),
+        'rejection_reasons': dict(strategy.rejection_reasons),
+    }
+
+
 def calculate_factor(
     symbol: str,
     bar: dict,
@@ -246,6 +443,33 @@ def _rank(factors: list, key: str, *, reverse: bool) -> dict:
         item['symbol']: index + 1
         for index, item in enumerate(ordered)
     }
+
+
+def _market_data_to_snapshot(data: dict, etf_pool: list[str]) -> dict:
+    return {
+        'date': data.get('_date', data.get('date', data.get('timestamp', ''))),
+        'symbols': {
+            symbol: _market_data_symbol_bar(data[symbol])
+            for symbol in etf_pool
+            if isinstance(data.get(symbol), dict)
+        },
+    }
+
+
+def _market_data_symbol_bar(bar: dict) -> dict:
+    snapshot_bar = {
+        'close': bar.get('close', bar.get('price')),
+        'prices': list(bar.get('prices', [])),
+    }
+    if 'volume' in bar:
+        snapshot_bar['volume'] = bar['volume']
+    if 'amount' in bar:
+        snapshot_bar['amount'] = bar['amount']
+    return snapshot_bar
+
+
+def _base_rejection_reason(reason: str) -> str:
+    return reason.split()[0] if reason else 'unknown'
 
 
 def _pct_returns(prices: list) -> list:
