@@ -180,6 +180,25 @@ def test_build_rotation_history_uses_rolling_prices_and_aligned_dates():
     assert history[2]['symbols']['510500']['volume'] == 1000003
 
 
+def test_build_rotation_history_sorts_symbol_histories_before_slicing_lookback():
+    history = build_rotation_history(
+        {
+            '510300': list(reversed(_history([10.0, 11.0, 12.0]))),
+            '510500': list(reversed(_history([8.0, 8.5, 9.0]))),
+        },
+        lookback=2,
+    )
+
+    assert [snapshot['date'] for snapshot in history] == [
+        '2026-01-01',
+        '2026-01-02',
+        '2026-01-03',
+    ]
+    assert history[0]['symbols']['510300']['prices'] == [10.0]
+    assert history[1]['symbols']['510300']['prices'] == [10.0, 11.0]
+    assert history[2]['symbols']['510300']['prices'] == [11.0, 12.0]
+
+
 def test_build_rotation_history_rejects_misaligned_dates():
     symbol_history = _history([10.0, 11.0])
     misaligned_history = _history([8.0, 8.5])
@@ -222,6 +241,25 @@ def test_build_rotation_history_intersection_uses_common_dates_and_own_lookback(
     ]
     assert history[1]['symbols']['510300']['prices'] == [11.0, 12.0]
     assert history[1]['symbols']['510500']['prices'] == [8.0, 9.0]
+
+
+def test_build_rotation_history_intersection_sorts_before_slicing_lookback():
+    history = build_rotation_history_intersection(
+        {
+            '510300': list(reversed(_history([10.0, 11.0, 12.0]))),
+            '510500': list(reversed(_history([8.0, 8.5, 9.0]))),
+        },
+        lookback=2,
+    )
+
+    assert [snapshot['date'] for snapshot in history] == [
+        '2026-01-01',
+        '2026-01-02',
+        '2026-01-03',
+    ]
+    assert history[0]['symbols']['510500']['prices'] == [8.0]
+    assert history[1]['symbols']['510500']['prices'] == [8.0, 8.5]
+    assert history[2]['symbols']['510500']['prices'] == [8.5, 9.0]
 
 
 def test_build_rotation_history_intersection_rejects_no_common_dates():

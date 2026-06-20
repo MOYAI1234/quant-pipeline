@@ -177,7 +177,10 @@ def _normalize_symbol_histories(symbol_histories: dict) -> dict:
         normalized_symbol = _normalize_symbol(symbol)
         if normalized_symbol in normalized:
             raise ValueError(f'轮动历史 symbol 重复: {normalized_symbol}')
-        normalized[normalized_symbol] = normalize_grid_history(history)
+        normalized[normalized_symbol] = sorted(
+            normalize_grid_history(history),
+            key=lambda row: row['date'],
+        )
     return normalized
 
 
