@@ -16,7 +16,7 @@
 - 外部命令式历史 provider 契约、AKShare / TuShare 示例 provider 和 guarded live e2e 入口。
 - provider 凭据门禁、重试、降级、缓存统计和文本/JSON 可观测性。
 - CLI health / diagnose / report / history probe / history export / backtest 基础入口。
-- 策略研究工作流、候选策略模板、候选索引和首个 ETF 动量质量轮动候选记录，用于把后续迭代从继续堆工程能力转向策略/因子发现、记录和公开平台验证。
+- 策略研究工作流、候选策略模板、候选索引和稳健 ETF 策略研究台账，用于把后续迭代从继续堆工程能力转向低回撤策略/因子发现、记录和公开平台验证。
 - 离线测试基线：`407 passed, 2 skipped`。
 
 ## 交付项状态

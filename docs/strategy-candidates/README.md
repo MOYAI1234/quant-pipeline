@@ -4,6 +4,8 @@
 
 新增候选时应复制 [策略候选模板](../strategy-candidate-template.md)，并至少补齐来源、核心假设、标的池、因子定义、调仓规则、成本约束、风险和验证计划。
 
+稳健 ETF 研究的总入口在 [策略研究台账](../strategy-lab/README.md)。该台账记录策略/因子矩阵、回测流水、推进门槛和未来模拟盘日志。当前策略候选档案保留细节，台账负责跨策略横向比较。
+
 ## 状态定义
 
 | 状态 | 含义 |
@@ -21,14 +23,15 @@
 
 | 策略 ID | 策略名称 | 状态 | 方向 | 当前下一步 |
 |---|---|---|---|---|
-| `ETF-MOM-ROT-001` | ETF 动量质量轮动 v1 | `researching` | 中低频 ETF 轮动 | 已准备 [聚宽复现脚本](../../examples/joinquant/etf_momentum_rotation_v1.py)，等待公开平台回测结果 |
-| `ETF-DUAL-MOM-002` | [全球/跨资产双动量 ETF v1](etf-dual-momentum-v1.md) | `researching` | 月频 ETF 双动量 | 已完成 120 日和 252 日本地 sanity check，下一步公开平台复验 |
-| `ETF-DAA-003` | [防御型资产配置 DAA v1](etf-defensive-asset-allocation-v1.md) | `researching` | 月频战术资产配置 | 准备 canary/breadth 风险开关信号诊断 |
+| `ETF-MOM-ROT-001` | ETF 动量质量轮动 v1 | `watchlist` | 中低频 ETF 轮动 | 高换手/成本敏感基线，暂不作为稳健主线 |
+| `ETF-DUAL-MOM-002` | [全球/跨资产双动量 ETF v1](etf-dual-momentum-v1.md) | `watchlist` | 月频 ETF 双动量 | 低换手但最大回撤偏高，作为月频动量对照 |
+| `ETF-DAA-003` | [防御型资产配置 DAA v1](etf-defensive-asset-allocation-v1.md) | `watchlist` | 月频战术资产配置 | 风险开关实验观察项，需更换防御资产或风险开关后再测 |
 
 ## 维护规则
 
 - 记录策略来源、引用限制和改写痕迹；来自 GitHub、论文或文章的候选必须保留链接和许可证判断。
 - 所有收益、回撤、换手和费用结论必须写明平台、区间、参数版本、复权口径和成本假设。
 - 项目内回测只作为工程 sanity check；公开平台验证是策略假设是否值得继续推进的主要证据。
+- 稳健 ETF 目标优先控制最大回撤；最大回撤超过 15% 的策略默认只能进入 `watchlist`、`baseline` 或 `rejected` 类记录，不能直接进入模拟盘设计。
 - 依赖高密度网格、低于真实成本的交易频率、无限流动性或未来函数的候选应标记为 `rejected` 或 `watchlist`。
 - 不保存 token、账号、私有行情 dump 或受许可限制的数据文件。
