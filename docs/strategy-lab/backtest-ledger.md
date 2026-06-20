@@ -34,8 +34,10 @@
 
 | 优先级 | 策略/因子 | 平台 | 目标 |
 |---|---|---|---|
-| P0 | 股债黄金现金配置 | 本地 + 聚宽 | 建立低回撤基准 |
-| P0 | 风险平价 | 本地 + 聚宽 | 验证风险预算是否能压低最大回撤 |
-| P0 | 目标波动率 | 本地 | 验证降仓规则和回撤控制 |
+| P0 | ETF 趋势防守 | 本地 + 聚宽 | 验证 ETF 主线下的降仓/空仓风控能否压低最大回撤 |
+| P0 | ETF 核心池轮动 | 本地 + 聚宽 | 验证宽基/行业 ETF 池内轮动能否兼顾收益和回撤 |
+| P0 | 目标仓位控制 | 本地 + 聚宽 | 验证降仓规则和回撤控制 |
+| P0 | `ETF-TREND-GUARD-004` | 聚宽 | 复制 [etf_trend_guard_v1.py](../../examples/joinquant/etf_trend_guard_v1.py) 跑公开平台回测 |
+| P0 | `ETF-CORE-ROT-GUARD-005` | 聚宽 | 复制 [etf_core_rotation_guard_v1.py](../../examples/joinquant/etf_core_rotation_guard_v1.py) 跑公开平台回测 |
 | P1 | `ETF-DUAL-MOM-002` | 聚宽 | 作为月频动量对照，而不是稳健候选 |
 | P1 | `ETF-MOM-ROT-001` | 聚宽 | 作为周频成本敏感对照 |
