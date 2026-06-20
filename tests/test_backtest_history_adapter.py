@@ -222,7 +222,7 @@ def test_build_rotation_history_rejects_duplicate_dates_before_indexing():
         })
 
 
-def test_build_rotation_history_intersection_uses_common_dates_and_own_lookback():
+def test_build_rotation_history_intersection_slices_lookback_on_common_dates():
     first_history = _history([10.0, 11.0, 12.0])
     second_history = _history([8.0, 9.0])
     second_history[1]['date'] = '2026-01-03'
@@ -239,7 +239,7 @@ def test_build_rotation_history_intersection_uses_common_dates_and_own_lookback(
         '2026-01-01',
         '2026-01-03',
     ]
-    assert history[1]['symbols']['510300']['prices'] == [11.0, 12.0]
+    assert history[1]['symbols']['510300']['prices'] == [10.0, 12.0]
     assert history[1]['symbols']['510500']['prices'] == [8.0, 9.0]
 
 
@@ -351,7 +351,7 @@ def test_export_rotation_history_intersection_script_writes_loadable_csv(tmp_pat
     rows = load_rotation_history_csv(str(output_file))
     assert 'snapshots=2' in completed.stdout
     assert [row['date'] for row in rows] == ['2026-01-01', '2026-01-03']
-    assert rows[1]['symbols']['510300']['prices'] == [11.0, 12.0]
+    assert rows[1]['symbols']['510300']['prices'] == [10.0, 12.0]
     assert rows[1]['symbols']['510500']['prices'] == [8.0, 9.0]
 
 
