@@ -30,6 +30,7 @@ ETF 量化助手 Pipeline，目标是把数据适配、策略生成、风控检�
 - [测试与验收指南](docs/testing.md)
 - [研究/模拟版交付状态](docs/release-readiness.md)
 - [策略研究工作流](docs/strategy-research-workflow.md)
+- [稳健 ETF 策略研究台账](docs/strategy-lab/README.md)
 - [策略候选索引](docs/strategy-candidates/README.md)
 - [策略候选模板](docs/strategy-candidate-template.md)
 - [策略因子来源扫描](docs/strategy-factor-source-scan-2026-06-19.md)
@@ -412,12 +413,12 @@ python -m compileall -q .
 
 ## 下一步路线
 
-研究/模拟验证版已经收口，后续研发重心转向策略/因子研究闭环：
+研究/模拟验证版已经收口，后续研发重心转向稳健 ETF 策略/因子研究闭环：
 
-1. 按[策略研究工作流](docs/strategy-research-workflow.md)维护[策略候选索引](docs/strategy-candidates/README.md)，让每个策略想法都有来源、因子、成本、风险和验证计划。
-2. 当前首个候选是 [ETF 动量质量轮动 v1](docs/strategy-candidates/etf-momentum-rotation-v1.md)，状态为 `researching`，尚未通过公开平台验证。
-3. 先在聚宽运行 [ETF 动量质量轮动 v1 复现脚本](examples/joinquant/etf_momentum_rotation_v1.py)，再按[公开回测平台交叉验证](docs/public-backtest-validation.md)归档平台参数和结果。
-4. 使用项目内真实 provider 和 backtest 做工程 sanity check，重点验证数据契约、费用、滑点、成交量参与率、止损和风控是否会推翻策略。
-5. 只有公开平台验证通过、差异可解释、保守成本下结论不反转，才进入模拟盘或小资金实盘预研，并另行补齐真实订单状态机、kill switch 和运行审计。
+1. 按[稳健 ETF 策略研究台账](docs/strategy-lab/README.md)维护策略矩阵、验证流水账、推进门槛和未来模拟盘记录。
+2. 当前已有三个策略都暂定为高回撤基线或观察项，不直接作为稳健候选进入模拟盘。
+3. 下一轮优先寻找股债黄金现金配置、风险平价、目标波动率、全天候和绝对动量降仓等低回撤方向。
+4. 使用项目内真实 provider 和 backtest 做工程 sanity check，重点验证数据契约、费用、滑点、成交量参与率和风控是否会推翻策略。
+5. 只有公开平台验证通过、差异可解释、保守成本下结论不反转，且最大回撤符合稳健目标，才进入模拟盘或小资金实盘预研，并另行补齐真实订单状态机、kill switch 和运行审计。
 
 实盘相关能力必须在显式配置、充分测试和状态可恢复后再启用。

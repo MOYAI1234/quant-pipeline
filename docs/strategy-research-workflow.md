@@ -9,6 +9,7 @@
 - 聚宽、优矿、米筐等公开平台用于验证策略假设、行情口径、复权、交易日历、费用、滑点和成交差异。
 - TuShare / AKShare / mxdata 等数据源用于本地研究、输入复核和 provider 可用性验证，不单独作为策略收益有效的最终证据。
 - ETF 投资助手定位偏中低频配置和轮动，不接受依靠高密度网格或不现实成交假设才能盈利的方案。
+- 稳健 ETF 主线优先追求低回撤和可长期执行的稳定年化；当前最大回撤明显超过 15% 的策略只作为 baseline/watchlist，不直接进入模拟盘。
 
 ## 标准流程
 
@@ -18,7 +19,7 @@
 
 2. **登记候选策略**
    - 使用 [策略候选模板](strategy-candidate-template.md) 记录策略 ID、状态、标的池、因子定义、信号规则、调仓规则、费用假设、风险点和验证计划。
-   - 所有候选统一登记到 [策略候选索引](strategy-candidates/README.md)，当前首个候选为 [ETF 动量质量轮动 v1](strategy-candidates/etf-momentum-rotation-v1.md)。
+   - 所有候选统一登记到 [策略候选索引](strategy-candidates/README.md)，横向比较、回测台账和准入门槛统一维护在 [稳健 ETF 策略研究台账](strategy-lab/README.md)。
    - 记录时不保存 token、账号、私有行情文件或不可分发数据。
 
 3. **本地快速检查**
@@ -54,7 +55,7 @@
 
 ## 下一步
 
-1. 为 [ETF 动量质量轮动 v1](strategy-candidates/etf-momentum-rotation-v1.md) 准备聚宽/优矿/米筐其中一个平台的复现脚本或手工复现说明。
-2. 使用真实历史 provider 做本地 sanity check，记录复权、费用、滑点、成交量参与率和拒单差异。
-3. 将公开平台验证结果回填到候选策略记录和 [公开回测平台交叉验证](public-backtest-validation.md) 模板。
-4. 继续从 GitHub、论文、研报、公开平台示例和 AI 生成中补充新的候选策略，但必须先登记再验证。
+1. 先维护 [稳健 ETF 策略研究台账](strategy-lab/README.md)，把策略矩阵、回测台账、准入门槛和未来模拟盘记录分开管理。
+2. 将 `ETF-MOM-ROT-001`、`ETF-DUAL-MOM-002`、`ETF-DAA-003` 暂作为 baseline/watchlist，用于对照动量、双动量和 DAA 风险开关，而不是直接进入模拟盘。
+3. 下一批优先研究股债黄金现金配置、风险平价、目标波动率、全天候/永久组合、绝对动量降仓等低回撤方向。
+4. 对接近稳健门槛的策略再准备聚宽/优矿/米筐复现脚本，并将结果回填到候选策略记录、[公开回测平台交叉验证](public-backtest-validation.md) 和 [回测验证台账](strategy-lab/backtest-ledger.md)。

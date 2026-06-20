@@ -4,6 +4,8 @@
 
 公开平台验证是策略有效性的主要证据之一；项目内回测是工程 sanity check，用于发现数据契约、费用、滑点、成交约束、止损和风控实现问题。内部回测收益不能单独作为进入模拟盘或实盘预研的理由。
 
+稳健 ETF 策略的横向比较、准入门槛和验证流水账统一维护在 [稳健 ETF 策略研究台账](strategy-lab/README.md)。公开平台结果应同时回填到本文件要求的对照记录、对应策略候选档案和 [回测与验证流水账](strategy-lab/backtest-ledger.md)。
+
 ## 进入条件
 
 - `python scripts\verify_offline.py` 通过。
