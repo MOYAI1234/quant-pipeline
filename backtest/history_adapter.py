@@ -78,7 +78,16 @@ def build_rotation_history_intersection(
     if not dates:
         raise ValueError('轮动历史没有共同日期')
 
-    return _build_rotation_snapshots(normalized, dates, lookback=lookback)
+    common_date_set = set(dates)
+    aligned = {
+        symbol: [
+            row
+            for row in rows
+            if row['date'] in common_date_set
+        ]
+        for symbol, rows in normalized.items()
+    }
+    return _build_rotation_snapshots(aligned, dates, lookback=lookback)
 
 
 def _build_rotation_snapshots(
