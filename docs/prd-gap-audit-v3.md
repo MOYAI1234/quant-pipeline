@@ -217,7 +217,7 @@ README、testing、architecture、provider 契约与演练、live 验收、交�
 
 ### M2R：策略/因子研究闭环
 
-状态：下一阶段重点。已新增策略研究工作流、候选策略模板、候选索引和 [稳健 ETF 策略研究台账](strategy-lab/README.md)。首批 ETF 动量、双动量和 DAA 策略已作为 baseline/watchlist 归档，当前主线转向低回撤多资产配置和风险预算类因子。
+状态：下一阶段重点。已新增策略研究工作流、候选策略模板、候选索引和 [稳健 ETF 策略研究台账](strategy-lab/README.md)。首批 ETF 动量、双动量和 DAA 策略已作为 baseline/watchlist 归档，当前主线转向 ETF 趋势防守、核心池轮动、目标仓位控制和绝对动量降仓。
 
 目标：把策略/因子变成可追溯、可比较、可验证的核心资产，而不是只积累回测命令和工程能力。
 
@@ -295,6 +295,6 @@ README、testing、architecture、provider 契约与演练、live 验收、交�
 
 1. 维护 [稳健 ETF 策略研究台账](strategy-lab/README.md)，把当前策略矩阵、回测台账、准入门槛和未来模拟盘记录分开归档。
 2. 将 [ETF 动量质量轮动 v1](strategy-candidates/etf-momentum-rotation-v1.md)、[全球/跨资产双动量 ETF v1](strategy-candidates/etf-dual-momentum-v1.md) 和 [防御型资产配置 DAA v1](strategy-candidates/etf-defensive-asset-allocation-v1.md) 保留为 baseline/watchlist，不直接进入模拟盘。
-3. 下一批优先研究股债黄金现金配置、风险平价、目标波动率、全天候/永久组合、绝对动量降仓等低回撤方向。
+3. 下一批优先研究 ETF 趋势防守、宽基/行业 ETF 核心池轮动、目标仓位控制和绝对动量降仓等低回撤方向。
 4. 使用项目内真实 provider 和 backtest 做工程 sanity check，验证数据契约、费用、滑点、成交量参与率、止损和风控是否会推翻策略。
 5. 只有本地结果接近稳健门槛，且公开平台差异可解释、保守成本下结论不反转，才规划模拟盘或小资金实盘预研。
