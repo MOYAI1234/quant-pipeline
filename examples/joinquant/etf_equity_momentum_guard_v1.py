@@ -93,7 +93,6 @@ def rebalance(context):
 
     if (
         g.days_since_rebalance < g.min_rebalance_gap_days
-        and actual_positions == g.current_targets
         and target_positions_complete(context, g.current_targets)
     ):
         return
@@ -105,7 +104,6 @@ def rebalance(context):
     actual_positions = current_position_symbols(context)
     if (
         selected == g.current_targets
-        and actual_positions == selected
         and target_positions_complete(context, selected)
     ):
         g.days_since_rebalance = 0
