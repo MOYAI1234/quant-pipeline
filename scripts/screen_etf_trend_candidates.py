@@ -17,6 +17,7 @@ from strategy.base import BaseStrategy
 @dataclass(frozen=True)
 class TrendCandidateConfig:
     name: str
+    family: str
     market_proxy: str
     rebalance_interval: int
     max_holdings: int
@@ -25,24 +26,31 @@ class TrendCandidateConfig:
     slow_window: int
     trend_window: int
     market_trend_window: int
+    breadth_window: int
+    breadth_threshold: float
     vol_window: int
     drawdown_window: int
     max_recent_drawdown: float
     require_own_trend: bool
     use_market_filter: bool
+    use_breadth_filter: bool
     weight_mode: str
     target_exposure: float
+    min_switch_score_gap: float
 
     @property
     def required_prices(self) -> int:
-        return max(
+        windows = [
             self.fast_window + 1,
             self.slow_window + 1,
             self.trend_window,
             self.market_trend_window,
             self.vol_window + 1,
             self.drawdown_window,
-        )
+        ]
+        if self.use_breadth_filter:
+            windows.append(self.breadth_window)
+        return max(windows)
 
 
 class ETFTrendCandidateStrategy(BaseStrategy):
@@ -97,9 +105,19 @@ class ETFTrendCandidateStrategy(BaseStrategy):
             return []
 
         ranked = self._rank_candidates(data)
-        selected = [item['symbol'] for item in ranked[: self.candidate_config.max_holdings]]
+        selected = _stabilized_selection(
+            ranked,
+            actual_positions,
+            self.candidate_config.max_holdings,
+            self.candidate_config.min_switch_score_gap,
+        )
+        ranked_by_symbol = {item['symbol']: item for item in ranked}
         weights = _weights(
-            [item for item in ranked if item['symbol'] in selected],
+            [
+                ranked_by_symbol[symbol]
+                for symbol in selected
+                if symbol in ranked_by_symbol
+            ],
             self.candidate_config,
         )
 
@@ -166,15 +184,26 @@ class ETFTrendCandidateStrategy(BaseStrategy):
         return int(capital / price / 100) * 100
 
     def _market_ok(self, data: dict) -> bool:
-        if not self.candidate_config.use_market_filter:
-            return True
-        bar = data.get(self.candidate_config.market_proxy) or {}
-        prices = _prices(bar)
-        window = self.candidate_config.market_trend_window
-        if len(prices) < window:
-            self.rejection_reasons.update(['market_insufficient_history'])
-            return False
-        return prices[-1] >= sum(prices[-window:]) / window
+        config = self.candidate_config
+        if config.use_market_filter:
+            bar = data.get(config.market_proxy) or {}
+            prices = _prices(bar)
+            window = config.market_trend_window
+            if len(prices) < window:
+                self.rejection_reasons.update(['market_insufficient_history'])
+                return False
+            if prices[-1] < sum(prices[-window:]) / window:
+                self.rejection_reasons.update(['market_trend_weak'])
+                return False
+        if config.use_breadth_filter:
+            breadth = _trend_breadth(data, self.etf_pool, config.breadth_window)
+            if breadth is None:
+                self.rejection_reasons.update(['breadth_insufficient_history'])
+                return False
+            if breadth < config.breadth_threshold:
+                self.rejection_reasons.update(['breadth_weak'])
+                return False
+        return True
 
     def _rank_candidates(self, data: dict) -> list[dict]:
         ranked = []
@@ -244,6 +273,12 @@ def main() -> int:
         default='all',
         help='按自动准入结论过滤输出',
     )
+    parser.add_argument(
+        '--factor-family',
+        choices=['all', 'daily_core_guard', 'swing_trend_guard'],
+        default='all',
+        help='只运行指定 ETF 因子族，默认运行全部',
+    )
     parser.add_argument('--gate-min-annual-return', type=float, default=0.06)
     parser.add_argument('--gate-max-drawdown', type=float, default=0.15)
     parser.add_argument('--gate-max-annual-turnover', type=float, default=8.0)
@@ -268,7 +303,7 @@ def main() -> int:
     etf_pool = _parse_symbols(args.etf_pool)
     gate_config = _gate_config(args)
     results = []
-    for candidate_config in _candidate_configs(etf_pool[0]):
+    for candidate_config in _candidate_configs(etf_pool[0], args.factor_family):
         strategy = ETFTrendCandidateStrategy(etf_pool, candidate_config)
         runner = RotationBacktestRunner(strategy, _account_config(args))
         result = runner.run(history)
@@ -302,7 +337,56 @@ def main() -> int:
     return 0
 
 
-def _candidate_configs(market_proxy: str) -> list[TrendCandidateConfig]:
+def _candidate_configs(
+    market_proxy: str,
+    factor_family: str = 'all',
+) -> list[TrendCandidateConfig]:
+    configs = []
+    profiles = [
+        {
+            'family': 'daily_core_guard',
+            'rebalance_intervals': [1, 5],
+            'max_holdings': [1, 2],
+            'fast_windows': [20, 40],
+            'slow_windows': [60, 90],
+            'trend_windows': [80],
+            'market_trend_windows': [120],
+            'breadth_windows': [80],
+            'breadth_thresholds': [0.50, 0.60],
+            'max_recent_drawdowns': [0.12],
+            'require_own_trends': [True],
+            'weight_modes': ['equal', 'inverse_vol'],
+            'target_exposures': [0.50, 0.70],
+            'min_switch_score_gaps': [0.01, 0.02],
+        },
+        {
+            'family': 'swing_trend_guard',
+            'rebalance_intervals': [10, 20],
+            'max_holdings': [1, 2],
+            'fast_windows': [40, 60],
+            'slow_windows': [120, 180],
+            'trend_windows': [120, 200],
+            'market_trend_windows': [160, 200],
+            'breadth_windows': [120],
+            'breadth_thresholds': [0.50],
+            'max_recent_drawdowns': [0.16],
+            'require_own_trends': [True, False],
+            'weight_modes': ['equal', 'inverse_vol'],
+            'target_exposures': [0.70, 0.90],
+            'min_switch_score_gaps': [0.01],
+        },
+    ]
+    for profile in profiles:
+        if factor_family != 'all' and profile['family'] != factor_family:
+            continue
+        configs.extend(_profile_candidate_configs(market_proxy, profile))
+    return configs
+
+
+def _profile_candidate_configs(
+    market_proxy: str,
+    profile: dict,
+) -> list[TrendCandidateConfig]:
     configs = []
     for (
         rebalance_interval,
@@ -311,32 +395,42 @@ def _candidate_configs(market_proxy: str) -> list[TrendCandidateConfig]:
         slow_window,
         trend_window,
         market_trend_window,
+        breadth_window,
+        breadth_threshold,
+        max_recent_drawdown,
         require_own_trend,
-        use_market_filter,
         weight_mode,
         target_exposure,
+        min_switch_score_gap,
     ) in itertools.product(
-        [20, 40, 60],
-        [1, 2],
-        [60, 90],
-        [120, 180],
-        [120, 200],
-        [160, 200],
-        [True, False],
-        [True],
-        ['equal', 'inverse_vol'],
-        [0.8, 1.0],
+        profile['rebalance_intervals'],
+        profile['max_holdings'],
+        profile['fast_windows'],
+        profile['slow_windows'],
+        profile['trend_windows'],
+        profile['market_trend_windows'],
+        profile['breadth_windows'],
+        profile['breadth_thresholds'],
+        profile['max_recent_drawdowns'],
+        profile['require_own_trends'],
+        profile['weight_modes'],
+        profile['target_exposures'],
+        profile['min_switch_score_gaps'],
     ):
         if slow_window <= fast_window:
             continue
         name = (
-            f"ETF-SCREEN interval={rebalance_interval} holdings={max_holdings} "
+            f"ETF-SCREEN family={profile['family']} "
+            f"interval={rebalance_interval} holdings={max_holdings} "
             f"fast={fast_window} slow={slow_window} trend={trend_window} "
-            f"market={market_trend_window} ownTrend={require_own_trend} "
-            f"weight={weight_mode} exposure={target_exposure}"
+            f"market={market_trend_window} breadth={breadth_window}/"
+            f"{breadth_threshold:.0%} ownTrend={require_own_trend} "
+            f"weight={weight_mode} exposure={target_exposure} "
+            f"switchGap={min_switch_score_gap}"
         )
         configs.append(TrendCandidateConfig(
             name=name,
+            family=profile['family'],
             market_proxy=market_proxy,
             rebalance_interval=rebalance_interval,
             max_holdings=max_holdings,
@@ -345,13 +439,17 @@ def _candidate_configs(market_proxy: str) -> list[TrendCandidateConfig]:
             slow_window=slow_window,
             trend_window=trend_window,
             market_trend_window=market_trend_window,
+            breadth_window=breadth_window,
+            breadth_threshold=breadth_threshold,
             vol_window=60,
             drawdown_window=60,
-            max_recent_drawdown=0.18,
+            max_recent_drawdown=max_recent_drawdown,
             require_own_trend=require_own_trend,
-            use_market_filter=use_market_filter,
+            use_market_filter=True,
+            use_breadth_filter=True,
             weight_mode=weight_mode,
             target_exposure=target_exposure,
+            min_switch_score_gap=min_switch_score_gap,
         ))
     return configs
 
@@ -408,6 +506,7 @@ def _summary(
     }, gate_config)
     return {
         'name': strategy.candidate_config.name,
+        'family': strategy.candidate_config.family,
         'annual_return': annual_return,
         'total_return': total_return,
         'max_drawdown': result['max_drawdown'],
@@ -428,16 +527,17 @@ def _summary(
 
 def _render_table(results: list[dict]) -> str:
     lines = [
-        '| 排名 | 准入 | 年化 | 最大回撤 | 年化换手 | 年化费用 | 单日最多成交 | 纯现金日 | 候选 |',
-        '|---:|---|---:|---:|---:|---:|---:|---:|---|',
+        '| 排名 | 准入 | 因子族 | 年化 | 最大回撤 | 年化换手 | 年化费用 | 单日最多成交 | 纯现金日 | 候选 |',
+        '|---:|---|---|---:|---:|---:|---:|---:|---:|---|',
     ]
     for index, item in enumerate(results, start=1):
         lines.append(
-            '| {rank} | {status} | {annual:.2%} | {drawdown:.2%} | '
+            '| {rank} | {status} | {family} | {annual:.2%} | {drawdown:.2%} | '
             '{annual_turnover:.2%} | {annual_fee:.4%} | {daily_trades} | '
             '{cash_days:.2%} | `{name}` |'.format(
                 rank=index,
                 status=item['gate_status'],
+                family=item['family'],
                 annual=item['annual_return'],
                 drawdown=item['max_drawdown'],
                 annual_turnover=item['annual_turnover'],
@@ -449,7 +549,7 @@ def _render_table(results: list[dict]) -> str:
         )
         if item['gate_status'] != 'PASS':
             lines.append(
-                f"|  | 原因 |  |  |  |  |  |  | {'；'.join(item['gate_reasons'])} |"
+                f"|  | 原因 |  |  |  |  |  |  |  | {'；'.join(item['gate_reasons'])} |"
             )
     return '\n'.join(lines)
 
@@ -615,6 +715,60 @@ def _weights(items: list[dict], config: TrendCandidateConfig) -> dict[str, float
         symbol: min(weight * config.target_exposure, config.max_weight_per_etf)
         for symbol, weight in raw.items()
     }
+
+
+def _stabilized_selection(
+    ranked: list[dict],
+    actual_positions: list[str],
+    max_holdings: int,
+    min_switch_score_gap: float,
+) -> list[str]:
+    default = [item['symbol'] for item in ranked[:max_holdings]]
+    if min_switch_score_gap <= 0 or not actual_positions:
+        return default
+    ranked_by_symbol = {item['symbol']: item for item in ranked}
+    current = [
+        symbol
+        for symbol in actual_positions
+        if symbol in ranked_by_symbol
+    ][:max_holdings]
+    if len(current) != len(default):
+        return default
+    default_score = _average_score(
+        ranked_by_symbol[symbol]
+        for symbol in default
+    )
+    current_score = _average_score(
+        ranked_by_symbol[symbol]
+        for symbol in current
+    )
+    if default_score - current_score < min_switch_score_gap:
+        return current
+    return default
+
+
+def _average_score(items) -> float:
+    values = [item['score'] for item in items]
+    return sum(values) / len(values) if values else float('-inf')
+
+
+def _trend_breadth(
+    data: dict,
+    symbols: list[str],
+    window: int,
+) -> float | None:
+    valid_count = 0
+    above_count = 0
+    for symbol in symbols:
+        prices = _prices(data.get(symbol) or {})
+        if len(prices) < window:
+            continue
+        valid_count += 1
+        if prices[-1] >= sum(prices[-window:]) / window:
+            above_count += 1
+    if valid_count == 0:
+        return None
+    return above_count / valid_count
 
 
 def _prices(bar: dict) -> list[float]:
