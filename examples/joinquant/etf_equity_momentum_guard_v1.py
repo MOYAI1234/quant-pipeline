@@ -46,6 +46,7 @@ def initialize(context):
     g.min_rebalance_gap_days = 20
     g.max_holdings = 1
     g.target_exposure = 1.0
+    g.target_completion_tolerance = 0.02
     g.min_avg_money = 0
     g.slippage_rate = 0.001
 
@@ -93,6 +94,7 @@ def rebalance(context):
     if (
         g.days_since_rebalance < g.min_rebalance_gap_days
         and actual_positions == g.current_targets
+        and target_positions_complete(context, g.current_targets)
     ):
         return
 
@@ -101,7 +103,11 @@ def rebalance(context):
     log.info("%s selected targets: %s" % (g.strategy_id, selected))
 
     actual_positions = current_position_symbols(context)
-    if selected == g.current_targets and actual_positions == selected:
+    if (
+        selected == g.current_targets
+        and actual_positions == selected
+        and target_positions_complete(context, selected)
+    ):
         g.days_since_rebalance = 0
         log.info("%s targets unchanged, skip rebalance" % g.strategy_id)
         return
@@ -220,6 +226,42 @@ def current_position_symbols(context):
         if position.total_amount > 0:
             positions.append(security)
     return sorted(positions)
+
+
+def target_positions_complete(context, selected):
+    actual_positions = current_position_symbols(context)
+    if actual_positions != sorted(selected):
+        return False
+    if not selected:
+        return True
+
+    total_value = context.portfolio.total_value
+    if total_value <= 0:
+        return False
+    target_value = total_value * g.target_exposure / len(selected)
+    tolerance = max(target_value * g.target_completion_tolerance, 100)
+    for security in selected:
+        position = context.portfolio.positions.get(security)
+        if position is None or position.total_amount <= 0:
+            return False
+        current_value = position_value(position)
+        if abs(current_value - target_value) > tolerance:
+            return False
+    return True
+
+
+def position_value(position):
+    for attr in ["value", "market_value"]:
+        value = getattr(position, attr, None)
+        if value is not None:
+            return float(value)
+    price = 0
+    for attr in ["price", "current_price", "last_price", "avg_cost"]:
+        value = getattr(position, attr, None)
+        if value is not None and value > 0:
+            price = float(value)
+            break
+    return float(position.total_amount) * price
 
 
 def history_frame(security, count):

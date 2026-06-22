@@ -6,13 +6,13 @@
 
 | 策略 ID | 脚本 | 状态 | 说明 |
 |---|---|---|---|
-| `ETF-EQ-MOM-GUARD-006` | [etf_equity_momentum_guard_v1.py](etf_equity_momentum_guard_v1.py) | 优先在聚宽执行 | 权益 ETF 动量防守：20 个交易日最小调仓间隔，60/120 日动量，200 日市场过滤 |
+| `ETF-EQ-MOM-GUARD-006` | [etf_equity_momentum_guard_v1.py](etf_equity_momentum_guard_v1.py) | 已撤回，保留复现材料 | 权益 ETF 动量防守：修复成交状态后本地结果失效，暂不优先跑聚宽 |
 | `ETF-MOM-ROT-001` | [etf_momentum_rotation_v1.py](etf_momentum_rotation_v1.py) | baseline 对照 | ETF 动量质量轮动 v1，当前作为高回撤/成本敏感对照组 |
 
 ## 聚宽运行步骤
 
 1. 登录聚宽，创建新的股票/基金策略回测。
-2. 优先将 [etf_equity_momentum_guard_v1.py](etf_equity_momentum_guard_v1.py) 内容完整粘贴到策略编辑器。
+2. 仅在需要复现实验记录时，将 [etf_equity_momentum_guard_v1.py](etf_equity_momentum_guard_v1.py) 内容完整粘贴到策略编辑器；当前不再优先验证该候选。
 3. 建议先使用以下基础参数：
    - 初始资金：`100000`
    - 回测频率：日级别
@@ -20,9 +20,9 @@
    - 样本外区间：`2022-01-01` 至最近可用交易日
    - 基准：沪深 300，脚本内设置为 `000300.XSHG`
 4. 跑完后记录总收益、年化、最大回撤、夏普、成交次数、换手、期末持仓和关键调仓日志。
-5. 将结果回填到 [ETF 权益动量防守 v1](../../docs/strategy-candidates/etf-equity-momentum-guard-v1.md) 和 [稳健 ETF 策略研究台账](../../docs/strategy-lab/backtest-ledger.md)。
+5. 如果仍需复现该观察项，将结果回填到 [ETF 权益动量防守 v1](../../docs/strategy-candidates/etf-equity-momentum-guard-v1.md) 和 [稳健 ETF 策略研究台账](../../docs/strategy-lab/backtest-ledger.md)。
 
-## 优先验证脚本
+## 观察项脚本
 
 ### `ETF-EQ-MOM-GUARD-006`
 
@@ -31,7 +31,7 @@
 - 市场过滤：沪深 300 ETF 跌破 200 日均线时清仓。
 - 标的过滤：60 日和 120 日动量都为正，且标的站上 200 日均线。
 - 持仓：只持有评分最高的 1 只 ETF，目标仓位 100%；弱市保持现金。
-- 本地筛选参考：2017-08-03 至 2021-12-31 年化约 6.39%、最大回撤约 6.97%；2022-01-01 至 2026-06-19 年化约 5.89%、最大回撤约 12.04%。聚宽结果需单独验证。
+- 本地筛选参考：修复未成交/部分成交状态后，2017-08-03 至 2021-12-31 年化约 -0.82%、最大回撤约 23.31%；2022-01-01 至 2026-06-19 年化约 -1.36%、最大回撤约 30.68%。该版本已撤回公开平台优先验证，只保留为趋势防守观察项。
 
 ## 诊断日志
 
