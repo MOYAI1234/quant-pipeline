@@ -26,6 +26,7 @@
 | `ETF-MOM-ROT-001` | ETF 动量质量轮动 v1 | `watchlist` | 中低频 ETF 轮动 | 高换手/成本敏感基线，暂不作为稳健主线 |
 | `ETF-DUAL-MOM-002` | [全球/跨资产双动量 ETF v1](etf-dual-momentum-v1.md) | `watchlist` | 月频 ETF 双动量 | 低换手但最大回撤偏高，作为月频动量对照 |
 | `ETF-DAA-003` | [防御型资产配置 DAA v1](etf-defensive-asset-allocation-v1.md) | `watchlist` | 月频战术资产配置 | 风险开关实验观察项，需更换防御资产或风险开关后再测 |
+| `ETF-EQ-MOM-GUARD-006` | [ETF 权益动量防守 v1](etf-equity-momentum-guard-v1.md) | `public_validation` | 权益 ETF 动量防守 | 本地筛选通过，下一步跑聚宽公开平台验证 |
 
 ## 维护规则
 
