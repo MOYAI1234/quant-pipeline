@@ -9,6 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from backtest.runner import RotationBacktestRunner
+from research.candidate_gates import CandidateGateConfig, evaluate_candidate
 from research.etf_dual_momentum import load_rotation_csv
 from strategy.base import BaseStrategy
 
@@ -237,6 +238,19 @@ def main() -> int:
         help='排序口径：drawdown=低回撤优先，annual=高年化优先',
     )
     parser.add_argument('--max-drawdown', type=float, help='只输出最大回撤不超过该比例的候选')
+    parser.add_argument(
+        '--gate-status',
+        choices=['all', 'pass', 'watchlist', 'reject'],
+        default='all',
+        help='按自动准入结论过滤输出',
+    )
+    parser.add_argument('--gate-min-annual-return', type=float, default=0.06)
+    parser.add_argument('--gate-max-drawdown', type=float, default=0.15)
+    parser.add_argument('--gate-max-annual-turnover', type=float, default=8.0)
+    parser.add_argument('--gate-max-annual-fee', type=float, default=0.005)
+    parser.add_argument('--gate-max-trades-per-day', type=int, default=2)
+    parser.add_argument('--gate-min-trades', type=int, default=4)
+    parser.add_argument('--gate-max-cash-days', type=float, default=0.80)
     parser.add_argument('--eval-start-date', help='只从该日期开始评估，格式 YYYY-MM-DD')
     parser.add_argument('--eval-end-date', help='只评估到该日期，格式 YYYY-MM-DD')
     parser.add_argument('--initial-capital', type=float, default=100000)
@@ -252,22 +266,38 @@ def main() -> int:
         args.eval_end_date,
     )
     etf_pool = _parse_symbols(args.etf_pool)
+    gate_config = _gate_config(args)
     results = []
     for candidate_config in _candidate_configs(etf_pool[0]):
         strategy = ETFTrendCandidateStrategy(etf_pool, candidate_config)
         runner = RotationBacktestRunner(strategy, _account_config(args))
         result = runner.run(history)
-        results.append(_summary(result, runner.strategy))
+        results.append(_summary(result, runner.strategy, gate_config))
 
     if args.max_drawdown is not None:
         results = [
             item for item in results
             if item['max_drawdown'] <= args.max_drawdown
         ]
+    if args.gate_status != 'all':
+        expected_status = args.gate_status.upper()
+        results = [
+            item for item in results
+            if item['gate_status'] == expected_status
+        ]
+    status_rank = {'PASS': 0, 'WATCHLIST': 1, 'REJECT': 2}
     if args.sort_by == 'annual':
-        results.sort(key=lambda item: (-item['annual_return'], item['max_drawdown']))
+        results.sort(key=lambda item: (
+            status_rank[item['gate_status']],
+            -item['annual_return'],
+            item['max_drawdown'],
+        ))
     else:
-        results.sort(key=lambda item: (item['max_drawdown'], -item['annual_return']))
+        results.sort(key=lambda item: (
+            status_rank[item['gate_status']],
+            item['max_drawdown'],
+            -item['annual_return'],
+        ))
     print(_render_table(results[: args.top]))
     return 0
 
@@ -337,6 +367,18 @@ def _account_config(args) -> dict:
     }
 
 
+def _gate_config(args) -> CandidateGateConfig:
+    return CandidateGateConfig(
+        min_annual_return=args.gate_min_annual_return,
+        max_drawdown=args.gate_max_drawdown,
+        max_annual_turnover=args.gate_max_annual_turnover,
+        max_annual_commission_ratio=args.gate_max_annual_fee,
+        max_trades_per_day=args.gate_max_trades_per_day,
+        min_trade_count=args.gate_min_trades,
+        max_cash_day_ratio=args.gate_max_cash_days,
+    )
+
+
 def _filter_history(history: list, start_date: str | None, end_date: str | None) -> list:
     filtered = []
     for snapshot in history:
@@ -351,10 +393,19 @@ def _filter_history(history: list, start_date: str | None, end_date: str | None)
     return filtered
 
 
-def _summary(result: dict, strategy: ETFTrendCandidateStrategy) -> dict:
+def _summary(
+    result: dict,
+    strategy: ETFTrendCandidateStrategy,
+    gate_config: CandidateGateConfig | None = None,
+) -> dict:
     years = _years(result['start_date'], result['end_date'])
     total_return = result['total_return']
     annual_return = (1 + total_return) ** (1 / years) - 1 if years > 0 else 0
+    decision = evaluate_candidate({
+        **result,
+        'years': years,
+        'annual_return': annual_return,
+    }, gate_config)
     return {
         'name': strategy.candidate_config.name,
         'annual_return': annual_return,
@@ -363,6 +414,12 @@ def _summary(result: dict, strategy: ETFTrendCandidateStrategy) -> dict:
         'trade_count': result['trade_count'],
         'turnover_ratio': result['turnover_ratio'],
         'commission_ratio': result['commission_ratio'],
+        'annual_turnover': decision.annual_turnover,
+        'annual_commission_ratio': decision.annual_commission_ratio,
+        'max_daily_trades': decision.max_daily_trades,
+        'cash_day_ratio': decision.cash_day_ratio,
+        'gate_status': decision.status,
+        'gate_reasons': list(decision.reasons),
         'final_value': result['final_value'],
         'regime_counts': dict(strategy.regime_counts),
         'rejection_reasons': dict(strategy.rejection_reasons),
@@ -371,23 +428,29 @@ def _summary(result: dict, strategy: ETFTrendCandidateStrategy) -> dict:
 
 def _render_table(results: list[dict]) -> str:
     lines = [
-        '| 排名 | 年化 | 总收益 | 最大回撤 | 交易次数 | 成交额/初始资金 | 费用/初始资金 | 候选 |',
-        '|---:|---:|---:|---:|---:|---:|---:|---|',
+        '| 排名 | 准入 | 年化 | 最大回撤 | 年化换手 | 年化费用 | 单日最多成交 | 纯现金日 | 候选 |',
+        '|---:|---|---:|---:|---:|---:|---:|---:|---|',
     ]
     for index, item in enumerate(results, start=1):
         lines.append(
-            '| {rank} | {annual:.2%} | {total:.2%} | {drawdown:.2%} | '
-            '{trades} | {turnover:.2%} | {commission:.4%} | `{name}` |'.format(
+            '| {rank} | {status} | {annual:.2%} | {drawdown:.2%} | '
+            '{annual_turnover:.2%} | {annual_fee:.4%} | {daily_trades} | '
+            '{cash_days:.2%} | `{name}` |'.format(
                 rank=index,
+                status=item['gate_status'],
                 annual=item['annual_return'],
-                total=item['total_return'],
                 drawdown=item['max_drawdown'],
-                trades=item['trade_count'],
-                turnover=item['turnover_ratio'],
-                commission=item['commission_ratio'],
+                annual_turnover=item['annual_turnover'],
+                annual_fee=item['annual_commission_ratio'],
+                daily_trades=item['max_daily_trades'],
+                cash_days=item['cash_day_ratio'],
                 name=item['name'],
             )
         )
+        if item['gate_status'] != 'PASS':
+            lines.append(
+                f"|  | 原因 |  |  |  |  |  |  | {'；'.join(item['gate_reasons'])} |"
+            )
     return '\n'.join(lines)
 
 

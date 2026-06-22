@@ -2,6 +2,7 @@ from scripts.screen_etf_trend_candidates import (
     ETFTrendCandidateStrategy,
     TrendCandidateConfig,
     _target_weight_signals,
+    _summary,
 )
 
 
@@ -128,3 +129,30 @@ def test_target_weight_signals_reuses_selected_leg_reduction_proceeds():
     assert signals[0]['shares'] == 300
     assert signals[1]['symbol'] == '510500'
     assert signals[1]['shares'] == 300
+
+
+def test_summary_includes_automatic_gate_decision():
+    strategy = ETFTrendCandidateStrategy(['510300'], _config())
+    result = {
+        'start_date': '2020-01-01',
+        'end_date': '2025-01-01',
+        'total_return': 0.5,
+        'max_drawdown': 0.1,
+        'trade_count': 5,
+        'turnover_ratio': 5.0,
+        'commission_ratio': 0.005,
+        'final_value': 150000,
+        'trades': [
+            {'timestamp': f'202{i}-01-02T09:30:00'}
+            for i in range(5)
+        ],
+        'portfolio_curve': [
+            {'total_value': 100000, 'positions_market_value': 80000},
+        ],
+    }
+
+    summary = _summary(result, strategy)
+
+    assert summary['gate_status'] == 'PASS'
+    assert summary['max_daily_trades'] == 1
+    assert summary['gate_reasons']
