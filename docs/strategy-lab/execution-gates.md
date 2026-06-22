@@ -47,6 +47,21 @@
 
 使用 `scripts/screen_etf_trend_candidates.py` 时，默认输出全部候选并按 `PASS`、`WATCHLIST`、`REJECT` 排序。可用 `--gate-status pass` 只查看值得准备聚宽脚本的结果，其他 `--gate-*` 参数用于显式调整研究门槛。
 
+示例：
+
+```powershell
+python scripts\screen_etf_trend_candidates.py `
+  --history data\rotation-history.csv `
+  --etf-pool 510300,510500,159915,512880,512800,512000,159928 `
+  --eval-start-date 2016-01-01 `
+  --eval-end-date 2021-12-31 `
+  --factor-family daily_core_guard `
+  --gate-status pass `
+  --sort-by drawdown
+```
+
+当前批量筛选包含 `daily_core_guard` 和 `swing_trend_guard` 两类 ETF 主线候选，可用 `--factor-family` 单独运行。前者允许日评估，但通过趋势广度和换仓去抖降低无效交易；后者用于更低换手的波段对照。两者都只在自动准入后才进入公开平台复验。
+
 失败处理：
 
 - 高收益但高回撤：保留为基线，不进候选。
