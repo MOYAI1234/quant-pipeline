@@ -447,15 +447,21 @@ def _target_weight_signals(
             shares = int(abs(delta) / price / 100) * 100
             shares = min(shares, int(current_shares // 100) * 100)
             if shares > 0:
+                amount = shares * price
                 signals.append({
                     'action': 'sell',
                     'symbol': symbol,
                     'price': price,
                     'shares': shares,
-                    'amount': shares * price,
+                    'amount': amount,
                     'reason': reason + ' 降仓',
                     'timestamp': signal_time,
                 })
+                cash += _estimated_sell_proceeds(
+                    amount,
+                    sell_commission_rate,
+                    min_commission,
+                )
             continue
 
         budget = min(delta, cash)

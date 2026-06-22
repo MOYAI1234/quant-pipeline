@@ -1,6 +1,7 @@
 from scripts.screen_etf_trend_candidates import (
     ETFTrendCandidateStrategy,
     TrendCandidateConfig,
+    _target_weight_signals,
 )
 
 
@@ -95,3 +96,35 @@ def test_target_rotation_retries_same_winner_until_target_weight_is_reached():
     assert settled_signals == []
     assert strategy.current_targets == ['510300']
     assert strategy.pending_targets is None
+
+
+def test_target_weight_signals_reuses_selected_leg_reduction_proceeds():
+    signals = _target_weight_signals(
+        {
+            '_date': '2026-01-20',
+            '510300': _bar(10.0),
+            '510500': _bar(10.0),
+        },
+        {
+            'capital': 0,
+            'total_value': 10000,
+            'positions': {
+                '510300': {'shares': 800, 'current_price': 10.0},
+                '510500': {'shares': 200, 'current_price': 10.0},
+            },
+            'trading_costs': {
+                'buy_commission_rate': 0,
+                'sell_commission_rate': 0,
+                'min_commission': 0,
+            },
+        },
+        ['510300', '510500'],
+        {'510300': 0.5, '510500': 0.5},
+        '测试再平衡',
+    )
+
+    assert [signal['action'] for signal in signals] == ['sell', 'buy']
+    assert signals[0]['symbol'] == '510300'
+    assert signals[0]['shares'] == 300
+    assert signals[1]['symbol'] == '510500'
+    assert signals[1]['shares'] == 300
