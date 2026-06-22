@@ -56,6 +56,8 @@ class ETFTrendCandidateStrategy(BaseStrategy):
         self.etf_pool = etf_pool
         self.candidate_config = candidate_config
         self.current_targets = []
+        self.pending_targets = None
+        self.pending_weights = {}
         self.days_since_rebalance = candidate_config.rebalance_interval
         self.evaluation_count = 0
         self.rebalance_count = 0
@@ -67,18 +69,29 @@ class ETFTrendCandidateStrategy(BaseStrategy):
         portfolio = portfolio or {}
         self.evaluation_count += 1
         self.days_since_rebalance += 1
+        actual_positions = _actual_position_symbols(portfolio)
 
         if not self._market_ok(data):
-            if self.current_targets:
-                self.current_targets = []
+            if actual_positions:
                 self.rebalance_count += 1
                 self.days_since_rebalance = 0
+                self.pending_targets = []
+                self.pending_weights = {}
                 self.regime_counts.update(['market_weak_clear'])
                 return _target_weight_signals(data, portfolio, [], {}, '市场趋势转弱清仓')
+            self.current_targets = []
+            self.pending_targets = None
+            self.pending_weights = {}
             self.regime_counts.update(['market_weak'])
             return []
 
-        if self.days_since_rebalance < self.candidate_config.rebalance_interval:
+        retry_pending = self.pending_targets is not None
+        if retry_pending:
+            return self._retry_pending_targets(data, portfolio)
+
+        if (
+            self.days_since_rebalance < self.candidate_config.rebalance_interval
+        ):
             self.regime_counts.update(['hold_interval'])
             return []
 
@@ -89,26 +102,62 @@ class ETFTrendCandidateStrategy(BaseStrategy):
             self.candidate_config,
         )
 
-        if selected == self.current_targets:
-            self.days_since_rebalance = 0
-            self.regime_counts.update(['unchanged'])
-            return []
-
-        self.current_targets = selected
-        self.days_since_rebalance = 0
-        self.rebalance_count += 1
-        self.selected_history.append({
-            'date': data.get('_date', ''),
-            'selected': list(selected),
-        })
-        self.regime_counts.update(['risk_on' if selected else 'cash'])
-        return _target_weight_signals(
+        signals = _target_weight_signals(
             data,
             portfolio,
             selected,
             weights,
             self.candidate_config.name,
         )
+        if not signals and _portfolio_matches_targets(
+            data,
+            portfolio,
+            selected,
+            weights,
+        ):
+            self.current_targets = selected
+            self.pending_targets = None
+            self.pending_weights = {}
+            self.days_since_rebalance = 0
+            self.regime_counts.update(['unchanged'])
+            return []
+
+        self.pending_targets = selected
+        self.pending_weights = dict(weights)
+        self.days_since_rebalance = self.candidate_config.rebalance_interval
+        self.rebalance_count += 1
+        self.selected_history.append({
+            'date': data.get('_date', ''),
+            'selected': list(selected),
+        })
+        self.regime_counts.update(['risk_on' if selected else 'cash'])
+        return signals
+
+    def _retry_pending_targets(self, data: dict, portfolio: dict) -> list:
+        selected = list(self.pending_targets or [])
+        weights = dict(self.pending_weights)
+        signals = _target_weight_signals(
+            data,
+            portfolio,
+            selected,
+            weights,
+            self.candidate_config.name,
+        )
+        if not signals and _portfolio_matches_targets(
+            data,
+            portfolio,
+            selected,
+            weights,
+        ):
+            self.current_targets = selected
+            self.pending_targets = None
+            self.pending_weights = {}
+            self.days_since_rebalance = 0
+            self.regime_counts.update(['unchanged'])
+            return []
+        self.days_since_rebalance = self.candidate_config.rebalance_interval
+        self.regime_counts.update(['pending_retry'])
+        return signals
 
     def calc_position_size(self, capital: float, price: float) -> int:
         if price <= 0:
@@ -430,6 +479,45 @@ def _target_weight_signals(
         cash = max(cash - amount * (1 + buy_commission_rate) - min_commission, 0)
 
     return signals
+
+
+def _actual_position_symbols(portfolio: dict) -> list[str]:
+    positions = portfolio.get('positions', {})
+    return sorted(
+        symbol
+        for symbol, position in positions.items()
+        if position.get('shares', 0) > 0
+    )
+
+
+def _portfolio_matches_targets(
+    data: dict,
+    portfolio: dict,
+    selected: list[str],
+    weights: dict[str, float],
+) -> bool:
+    positions = portfolio.get('positions', {})
+    selected_symbols = set(selected)
+    actual_symbols = set(_actual_position_symbols(portfolio))
+    if actual_symbols - selected_symbols:
+        return False
+
+    total_value = float(portfolio.get('total_value', 0) or 0)
+    if total_value <= 0:
+        return not selected_symbols and not actual_symbols
+
+    min_commission = portfolio.get('trading_costs', {}).get('min_commission', 0)
+    for symbol in selected:
+        position = positions.get(symbol, {})
+        price = _price(symbol, data, position)
+        if price <= 0:
+            return False
+        current_value = position.get('shares', 0) * price
+        target_value = total_value * weights.get(symbol, 0)
+        tolerance = max(min_commission, price * 100)
+        if abs(target_value - current_value) >= tolerance:
+            return False
+    return True
 
 
 def _estimated_sell_proceeds(

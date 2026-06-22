@@ -29,14 +29,14 @@
 | 2026-06-19 | `ETF-DUAL-MOM-002` | 本地 simulator | 2015-07-01 至 2021-12-31 | 252 日动量，TuShare 交集交易日 1585 条 | +10.32% | 27.50% | 成交额/初始资金 1814.17%，费用 544.25 | `baseline` | [策略档案](../strategy-candidates/etf-dual-momentum-v1.md) |
 | 2026-06-19 | `ETF-DUAL-MOM-002 + 15% 暂停` | 本地 simulator | 2015-07-01 至 2021-12-31 | 252 日动量，组合回撤 15% 暂停 | +10.92% | 27.57% | 成交额/初始资金 2534.82%，费用 760.44 | `baseline` | [策略档案](../strategy-candidates/etf-dual-momentum-v1.md) |
 | 2026-06-19 | `ETF-DAA-003` | 本地 simulator | 2015-07-01 至 2021-12-31 | 120 日动量，canary=510500，breadth 阈值 50% | +11.15% | 28.86% | 成交额/初始资金 4959.32%，费用 1487.80 | `watchlist` | [策略档案](../strategy-candidates/etf-defensive-asset-allocation-v1.md) |
-| 2026-06-22 | `ETF-EQ-MOM-GUARD-006` | 本地 simulator | 2017-08-03 至 2021-12-31 | 20 日间隔，单 ETF，60/120 动量，200 日市场过滤，100% 仓位 | +6.39% | 6.97% | 成交额/初始资金 442.04%，费用/初始资金 0.1326% | `public_validation` | [策略档案](../strategy-candidates/etf-equity-momentum-guard-v1.md) |
-| 2026-06-22 | `ETF-EQ-MOM-GUARD-006` | 本地 simulator | 2022-01-01 至 2026-06-19 | 20 日间隔，单 ETF，60/120 动量，200 日市场过滤，100% 仓位 | +5.89% | 12.04% | 成交额/初始资金 991.40%，费用/初始资金 0.2974% | `public_validation` | [策略档案](../strategy-candidates/etf-equity-momentum-guard-v1.md) |
+| 2026-06-22 | `ETF-EQ-MOM-GUARD-006` | 本地 simulator | 2017-08-03 至 2021-12-31 | 20 日间隔，单 ETF，60/120 动量，200 日市场过滤，100% 仓位；修复未成交/部分成交重试与换仓买入预算后复跑 | -0.82% | 23.31% | 成交额/初始资金 3040.62%，费用/初始资金 0.9122% | `watchlist` | [策略档案](../strategy-candidates/etf-equity-momentum-guard-v1.md) |
+| 2026-06-22 | `ETF-EQ-MOM-GUARD-006` | 本地 simulator | 2022-01-01 至 2026-06-19 | 20 日间隔，单 ETF，60/120 动量，200 日市场过滤，100% 仓位；修复未成交/部分成交重试与换仓买入预算后复跑 | -1.36% | 30.68% | 成交额/初始资金 2642.72%，费用/初始资金 0.7928% | `watchlist` | [策略档案](../strategy-candidates/etf-equity-momentum-guard-v1.md) |
 
 ## 待补验证
 
 | 优先级 | 策略/因子 | 平台 | 目标 |
 |---|---|---|---|
-| P0 | `ETF-EQ-MOM-GUARD-006` | 聚宽 | 复制 [etf_equity_momentum_guard_v1.py](../../examples/joinquant/etf_equity_momentum_guard_v1.py) 跑公开平台回测 |
 | P0 | ETF 目标仓位控制 | 本地 + 聚宽 | 验证降仓规则和回撤控制 |
+| P0 | ETF 趋势防守/核心池轮动新候选 | 本地 | 重新寻找通过成交状态修正后仍满足回撤门槛的 ETF 主线因子 |
 | P1 | `ETF-DUAL-MOM-002` | 聚宽 | 作为月频动量对照，而不是稳健候选 |
 | P1 | `ETF-MOM-ROT-001` | 聚宽 | 作为周频成本敏感对照 |

@@ -58,5 +58,5 @@
 
 1. 先维护 [稳健 ETF 策略研究台账](strategy-lab/README.md)，把策略矩阵、回测台账、准入门槛和未来模拟盘记录分开管理。
 2. 将 `ETF-MOM-ROT-001`、`ETF-DUAL-MOM-002`、`ETF-DAA-003` 暂作为 baseline/watchlist，用于对照动量、双动量和 DAA 风险开关，而不是直接进入模拟盘。
-3. 优先验证 `ETF-EQ-MOM-GUARD-006`，并继续研究 ETF 趋势防守、核心池轮动、目标仓位控制、绝对动量降仓等低回撤方向。
+3. 暂停推进 `ETF-EQ-MOM-GUARD-006` 的公开平台验证，继续研究 ETF 趋势防守、核心池轮动、目标仓位控制、绝对动量降仓等低回撤方向。
 4. 对接近稳健门槛的策略再准备聚宽/优矿/米筐复现脚本，并将结果回填到候选策略记录、[公开回测平台交叉验证](public-backtest-validation.md) 和 [回测验证台账](strategy-lab/backtest-ledger.md)。
