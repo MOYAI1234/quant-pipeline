@@ -355,7 +355,9 @@ def _target_weight_signals(
     trading_costs = portfolio.get('trading_costs', {})
     min_commission = trading_costs.get('min_commission', 0)
     buy_commission_rate = trading_costs.get('buy_commission_rate', 0)
+    sell_commission_rate = trading_costs.get('sell_commission_rate', 0)
 
+    cash = float(portfolio.get('capital', 0) or 0)
     for symbol, position in positions.items():
         shares = int(position.get('shares', 0) // 100) * 100
         if shares <= 0 or symbol in selected:
@@ -363,18 +365,23 @@ def _target_weight_signals(
         price = _price(symbol, data, position)
         if price <= 0:
             continue
+        amount = shares * price
         signals.append({
             'action': 'sell',
             'symbol': symbol,
             'price': price,
             'shares': shares,
-            'amount': shares * price,
+            'amount': amount,
             'reason': reason + ' 卖出',
             'timestamp': signal_time,
         })
+        cash += _estimated_sell_proceeds(
+            amount,
+            sell_commission_rate,
+            min_commission,
+        )
 
     total_value = float(portfolio.get('total_value', 0) or 0)
-    cash = float(portfolio.get('capital', 0) or 0)
     for symbol in selected:
         if symbol not in data:
             continue
@@ -423,6 +430,15 @@ def _target_weight_signals(
         cash = max(cash - amount * (1 + buy_commission_rate) - min_commission, 0)
 
     return signals
+
+
+def _estimated_sell_proceeds(
+    amount: float,
+    sell_commission_rate: float,
+    min_commission: float,
+) -> float:
+    commission = max(amount * sell_commission_rate, min_commission)
+    return max(amount - commission, 0)
 
 
 def _weights(items: list[dict], config: TrendCandidateConfig) -> dict[str, float]:

@@ -79,23 +79,29 @@ def rebalance(context):
         return
     g.last_trade_date = today
     g.days_since_rebalance += 1
+    actual_positions = current_position_symbols(context)
 
     if not market_is_healthy():
-        if g.current_targets:
+        if actual_positions:
             log.info("%s market weak, clear positions" % g.strategy_id)
             sell_all(context)
-            g.current_targets = []
             g.days_since_rebalance = 0
+        else:
+            g.current_targets = []
         return
 
-    if g.days_since_rebalance < g.min_rebalance_gap_days:
+    if (
+        g.days_since_rebalance < g.min_rebalance_gap_days
+        and actual_positions == g.current_targets
+    ):
         return
 
     ranked = rank_candidates()
     selected = [item["security"] for item in ranked[: g.max_holdings]]
     log.info("%s selected targets: %s" % (g.strategy_id, selected))
 
-    if selected == g.current_targets:
+    actual_positions = current_position_symbols(context)
+    if selected == g.current_targets and actual_positions == selected:
         g.days_since_rebalance = 0
         log.info("%s targets unchanged, skip rebalance" % g.strategy_id)
         return
@@ -206,6 +212,14 @@ def apply_targets(context, selected):
 def sell_all(context):
     for security in list(context.portfolio.positions.keys()):
         order_target_value(security, 0)
+
+
+def current_position_symbols(context):
+    positions = []
+    for security, position in context.portfolio.positions.items():
+        if position.total_amount > 0:
+            positions.append(security)
+    return sorted(positions)
 
 
 def history_frame(security, count):
