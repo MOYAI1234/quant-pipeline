@@ -55,9 +55,27 @@ def test_summarize_public_backtest_rebases_date_ranges(tmp_path):
 
     assert summary['start_date'] == '2026-01-02'
     assert summary['end_date'] == '2026-01-04'
-    assert summary['total_return'] == pytest.approx(1.20 / 1.10 - 1)
-    assert summary['benchmark_return'] == pytest.approx(1.12 / 1.08 - 1)
+    assert summary['total_return'] == pytest.approx(0.20)
+    assert summary['benchmark_return'] == pytest.approx(0.12)
     assert summary['max_drawdown'] == pytest.approx(1 - 1.05 / 1.10)
+    assert summary['active_trade_days'] == 2
+
+
+def test_summarize_public_backtest_rebased_drawdown_includes_first_row(tmp_path):
+    csv_path = tmp_path / 'joinquant.csv'
+    _write_joinquant_csv(csv_path)
+
+    summary = summarize_public_backtest(
+        csv_path,
+        start_date='2026-01-03',
+        end_date='2026-01-04',
+        initial_capital=10000,
+    )
+
+    assert summary['total_return'] == pytest.approx(1.20 / 1.10 - 1)
+    assert summary['max_drawdown'] == pytest.approx(1 - 1.05 / 1.10)
+    assert summary['max_drawdown_start'] == '2026-01-02'
+    assert summary['max_drawdown_end'] == '2026-01-03'
 
 
 def test_public_backtest_summary_cli_outputs_json(tmp_path):

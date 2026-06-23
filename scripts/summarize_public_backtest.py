@@ -33,8 +33,9 @@ def summarize_public_backtest(
     end_date: str | None = None,
     initial_capital: float = 100000.0,
 ) -> dict:
+    all_rows = _read_joinquant_rows(csv_path)
     rows = [
-        row for row in _read_joinquant_rows(csv_path)
+        row for row in all_rows
         if _in_range(row.date, start_date, end_date)
     ]
     if not rows:
@@ -42,8 +43,10 @@ def summarize_public_backtest(
 
     first = rows[0]
     last = rows[-1]
-    strategy_base = 1.0 + first.strategy_return if start_date else 1.0
-    benchmark_base = 1.0 + first.benchmark_return if start_date else 1.0
+    base_row = _previous_row(all_rows, first.date) if start_date else None
+    strategy_base = 1.0 + base_row.strategy_return if base_row else 1.0
+    benchmark_base = 1.0 + base_row.benchmark_return if base_row else 1.0
+    base_date = base_row.date if base_row else first.date
     trade_days = len(rows)
     calendar_days = _calendar_days(first.date, last.date)
     total_return = _period_return(last.strategy_return, strategy_base)
@@ -52,6 +55,7 @@ def summarize_public_backtest(
     max_drawdown, drawdown_start, drawdown_end = _drawdown_stats(
         rows,
         strategy_base=strategy_base,
+        base_date=base_date,
     )
     total_buy_amount = sum(row.buy_amount for row in rows)
     total_sell_amount = sum(abs(row.sell_amount) for row in rows)
@@ -160,6 +164,18 @@ def _in_range(
     return True
 
 
+def _previous_row(
+    rows: list[PublicBacktestRow],
+    date_value: str,
+) -> PublicBacktestRow | None:
+    previous = None
+    for row in rows:
+        if row.date >= date_value:
+            return previous
+        previous = row
+    return previous
+
+
 def _annualized_return(total_return: float, calendar_days: int) -> float:
     if calendar_days <= 0 or total_return <= -1.0:
         return math.nan
@@ -198,11 +214,10 @@ def _drawdown_stats(
     rows: list[PublicBacktestRow],
     *,
     strategy_base: float,
+    base_date: str,
 ) -> tuple[float, str, str]:
-    peak_value = 1.0 if strategy_base == 1.0 else (
-        1.0 + rows[0].strategy_return
-    )
-    peak_date = rows[0].date
+    peak_value = strategy_base
+    peak_date = base_date
     max_drawdown = 0.0
     max_start = rows[0].date
     max_end = rows[0].date
