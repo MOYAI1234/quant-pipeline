@@ -106,17 +106,19 @@ def rebalance(context):
         return
 
     if g.days_since_rebalance < g.min_rebalance_gap_days:
+        retry_exposure = adaptive_target_exposure(market_strength, breadth)
+        g.current_target_exposure = retry_exposure
         if target_positions_complete(
             context,
             g.current_targets,
-            g.current_target_exposure,
+            retry_exposure,
         ):
             return
         log.info(
             "%s retry targets=%s exposure=%.2f"
-            % (g.strategy_id, g.current_targets, g.current_target_exposure)
+            % (g.strategy_id, g.current_targets, retry_exposure)
         )
-        apply_targets(context, g.current_targets, g.current_target_exposure)
+        apply_targets(context, g.current_targets, retry_exposure)
         return
 
     ranked = rank_candidates()
