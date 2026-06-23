@@ -40,6 +40,8 @@ class TrendCandidateConfig:
     target_exposure: float
     exposure_mode: str
     min_switch_score_gap: float
+    factor_mode: str = 'momentum'
+    recovery_threshold: float = 0.0
 
     @property
     def required_prices(self) -> int:
@@ -109,6 +111,16 @@ class ETFTrendCandidateStrategy(BaseStrategy):
                 )
                 return signals
             self.current_targets = []
+            if self.pending_targets == []:
+                self._record_decision(
+                    data,
+                    portfolio,
+                    'pending_settled',
+                    [],
+                    {},
+                    0,
+                    [],
+                )
             self.pending_targets = None
             self.pending_weights = {}
             self.regime_counts.update(['market_weak'])
@@ -373,26 +385,38 @@ class ETFTrendCandidateStrategy(BaseStrategy):
         fast_momentum = latest / fast_base - 1.0
         slow_momentum = latest / slow_base - 1.0
         recent_drawdown = latest / recent_high - 1.0
+        recovery_position = _recovery_position(prices[-config.drawdown_window:])
         if fast_momentum <= 0 or slow_momentum <= 0:
             return None, 'non_positive_momentum'
         if config.require_own_trend and latest < trend_ma:
             return None, 'below_own_trend'
         if recent_drawdown <= -config.max_recent_drawdown:
             return None, 'recent_drawdown_too_deep'
+        if (
+            config.recovery_threshold > 0
+            and recovery_position < config.recovery_threshold
+        ):
+            return None, 'insufficient_recovery'
 
         volatility = _std(_returns(prices[-config.vol_window - 1:]))
         if volatility <= 0:
             return None, 'invalid_volatility'
 
-        score = fast_momentum * 0.45 + slow_momentum * 0.45
-        score += recent_drawdown * 0.20
-        score -= volatility * 2.0
+        score = _factor_score(
+            config,
+            fast_momentum,
+            slow_momentum,
+            recent_drawdown,
+            recovery_position,
+            volatility,
+        )
         return {
             'symbol': symbol,
             'score': score,
             'fast_momentum': fast_momentum,
             'slow_momentum': slow_momentum,
             'recent_drawdown': recent_drawdown,
+            'recovery_position': recovery_position,
             'volatility': volatility,
         }, ''
 
@@ -422,6 +446,7 @@ def main() -> int:
             'daily_core_guard',
             'swing_trend_guard',
             'adaptive_exposure_guard',
+            'recovery_trend_guard',
         ],
         default='all',
         help='只运行指定 ETF 因子族，默认运行全部',
@@ -541,6 +566,25 @@ def _candidate_configs(
             'exposure_modes': ['trend_strength'],
             'min_switch_score_gaps': [0.01],
         },
+        {
+            'family': 'recovery_trend_guard',
+            'rebalance_intervals': [5, 10],
+            'max_holdings': [1],
+            'fast_windows': [20, 40],
+            'slow_windows': [90, 120],
+            'trend_windows': [120],
+            'market_trend_windows': [160, 200],
+            'breadth_windows': [80],
+            'breadth_thresholds': [0.50, 0.60],
+            'max_recent_drawdowns': [0.12],
+            'require_own_trends': [True],
+            'weight_modes': ['equal'],
+            'target_exposures': [0.80],
+            'exposure_modes': ['trend_strength'],
+            'min_switch_score_gaps': [0.01, 0.02],
+            'factor_modes': ['recovery'],
+            'recovery_thresholds': [0.60],
+        },
     ]
     for profile in profiles:
         if factor_family != 'all' and profile['family'] != factor_family:
@@ -569,6 +613,8 @@ def _profile_candidate_configs(
         target_exposure,
         exposure_mode,
         min_switch_score_gap,
+        factor_mode,
+        recovery_threshold,
     ) in itertools.product(
         profile['rebalance_intervals'],
         profile['max_holdings'],
@@ -584,6 +630,8 @@ def _profile_candidate_configs(
         profile['target_exposures'],
         profile['exposure_modes'],
         profile['min_switch_score_gaps'],
+        profile.get('factor_modes', ['momentum']),
+        profile.get('recovery_thresholds', [0.0]),
     ):
         if slow_window <= fast_window:
             continue
@@ -595,7 +643,8 @@ def _profile_candidate_configs(
             f"{breadth_threshold:.0%} ownTrend={require_own_trend} "
             f"weight={weight_mode} exposure={target_exposure} "
             f"exposureMode={exposure_mode} "
-            f"switchGap={min_switch_score_gap}"
+            f"switchGap={min_switch_score_gap} "
+            f"factor={factor_mode} recovery={recovery_threshold}"
         )
         configs.append(TrendCandidateConfig(
             name=name,
@@ -620,6 +669,8 @@ def _profile_candidate_configs(
             target_exposure=target_exposure,
             exposure_mode=exposure_mode,
             min_switch_score_gap=min_switch_score_gap,
+            factor_mode=factor_mode,
+            recovery_threshold=recovery_threshold,
         ))
     return configs
 
@@ -1282,6 +1333,38 @@ def _stabilized_selection(
 def _average_score(items) -> float:
     values = [item['score'] for item in items]
     return sum(values) / len(values) if values else float('-inf')
+
+
+def _factor_score(
+    config: TrendCandidateConfig,
+    fast_momentum: float,
+    slow_momentum: float,
+    recent_drawdown: float,
+    recovery_position: float,
+    volatility: float,
+) -> float:
+    if config.factor_mode == 'momentum':
+        score = fast_momentum * 0.45 + slow_momentum * 0.45
+        score += recent_drawdown * 0.20
+        score -= volatility * 2.0
+        return score
+    if config.factor_mode == 'recovery':
+        score = fast_momentum * 0.30 + slow_momentum * 0.45
+        score += recent_drawdown * 0.25
+        score += (recovery_position - 0.50) * 0.12
+        score -= volatility * 2.50
+        return score
+    raise ValueError(f'unknown factor_mode: {config.factor_mode}')
+
+
+def _recovery_position(prices: list[float]) -> float:
+    if not prices:
+        return 0.0
+    recent_high = max(prices)
+    recent_low = min(prices)
+    if recent_high <= recent_low:
+        return 1.0
+    return (prices[-1] - recent_low) / (recent_high - recent_low)
 
 
 def _trend_breadth(
