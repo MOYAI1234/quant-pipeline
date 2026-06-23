@@ -51,6 +51,7 @@
 
 - `--results-output path.json|path.csv`：输出当前过滤条件下的候选明细，但不受 `--top` 展示数量限制。
 - `--summary-output path.json|path.csv`：输出全部已评估候选的准入状态、因子族分布、失败原因和拒绝原因聚合。即使屏幕只过滤 `PASS`，总览仍会保留完整失败归因，方便判断下一轮该换因子、调门槛还是修数据。
+- `--decision-log-output path.json|path.csv`：输出当前过滤条件下的候选调仓决策日志，包含日期、决策类型、目标 ETF、目标仓位、市场趋势强度、趋势广度、实际持仓、下单信号和前三名候选，用于和聚宽日志逐日对齐。
 
 示例：
 
@@ -64,7 +65,8 @@ python scripts\screen_etf_trend_candidates.py `
   --gate-status pass `
   --sort-by drawdown `
   --results-output data\screening-results.csv `
-  --summary-output data\screening-summary.json
+  --summary-output data\screening-summary.json `
+  --decision-log-output data\screening-decisions.csv
 ```
 
 当前批量筛选包含 `daily_core_guard`、`swing_trend_guard` 和 `adaptive_exposure_guard` 三类 ETF 主线候选，可用 `--factor-family` 单独运行。`daily_core_guard` 允许日评估，但通过趋势广度和换仓去抖降低无效交易；`swing_trend_guard` 用于更低换手的波段对照；`adaptive_exposure_guard` 在趋势波段框架上加入市场趋势强度和 ETF 广度分层仓位，用于验证不引入债券、黄金时的降仓风控效果。它们都只在自动准入后才进入公开平台复验。

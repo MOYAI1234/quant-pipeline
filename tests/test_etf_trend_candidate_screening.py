@@ -9,6 +9,7 @@ from scripts.screen_etf_trend_candidates import (
     _stabilized_selection,
     _target_weight_signals,
     _target_exposure,
+    _write_decision_log,
     _summary,
     _write_candidate_results,
     _write_screening_summary,
@@ -152,6 +153,8 @@ def test_pending_retry_recomputes_adaptive_exposure_before_buying_more():
     assert retry_signals[0]['action'] == 'buy'
     assert retry_signals[0]['shares'] == 300
     assert strategy.pending_weights == {'510300': 0.5}
+    assert strategy.decision_history[-1]['decision'] == 'pending_retry'
+    assert strategy.decision_history[-1]['target_exposure'] == 0.5
 
 
 def test_pending_retry_recomputes_adaptive_exposure_when_market_improves():
@@ -192,6 +195,8 @@ def test_pending_retry_recomputes_adaptive_exposure_when_market_improves():
     assert retry_signals[0]['action'] == 'buy'
     assert retry_signals[0]['shares'] == 900
     assert strategy.pending_weights == {'510300': 1.0}
+    assert strategy.decision_history[-1]['decision'] == 'pending_retry'
+    assert strategy.decision_history[-1]['target_exposure'] == 1.0
 
 
 def test_static_pending_retry_preserves_capped_weights():
@@ -361,6 +366,40 @@ def test_target_weight_signals_reuses_selected_leg_reduction_proceeds():
     assert signals[1]['shares'] == 300
 
 
+def test_decision_history_records_rebalance_context():
+    config = TrendCandidateConfig(
+        **{
+            **_config(use_market_filter=True).__dict__,
+            'target_exposure': 1.0,
+            'exposure_mode': 'trend_strength',
+            'use_breadth_filter': True,
+            'breadth_threshold': 0.5,
+            'breadth_window': 2,
+            'market_trend_window': 2,
+        }
+    )
+    strategy = ETFTrendCandidateStrategy(['510300'], config)
+
+    signals = strategy.generate_signal({
+        '_date': '2026-01-05',
+        '510300': _bar(10.0, [8.0, 8.0, 10.0]),
+    }, {
+        'capital': 10000,
+        'total_value': 10000,
+        'positions': {},
+    })
+
+    assert signals
+    decision = strategy.decision_history[-1]
+    assert decision['date'] == '2026-01-05'
+    assert decision['decision'] == 'rebalance'
+    assert decision['selected'] == ['510300']
+    assert decision['target_exposure'] == 1.0
+    assert decision['weights'] == {'510300': 1.0}
+    assert decision['signals'][0]['action'] == 'buy'
+    assert decision['top_candidates'][0]['symbol'] == '510300'
+
+
 def test_summary_includes_automatic_gate_decision():
     strategy = ETFTrendCandidateStrategy(['510300'], _config())
     result = {
@@ -387,6 +426,7 @@ def test_summary_includes_automatic_gate_decision():
     assert summary['family'] == 'test'
     assert summary['max_daily_trades'] == 1
     assert summary['gate_reasons']
+    assert summary['decision_history'] == []
 
 
 def test_screening_summary_aggregates_statuses_and_failure_reasons():
@@ -463,6 +503,49 @@ def test_candidate_results_can_be_written_as_json_and_csv(tmp_path):
     assert rows[0]['name'] == 'alpha'
     assert rows[0]['gate_reasons'] == 'annual_return 1.00% < 6.00%'
     assert json.loads(rows[0]['rejection_reasons']) == {'breadth_weak': 7}
+
+
+def test_decision_log_can_be_written_as_json_and_csv(tmp_path):
+    results = [
+        {
+            **_candidate_result(
+                'alpha',
+                'adaptive_exposure_guard',
+                'WATCHLIST',
+                0.04,
+                0.18,
+                ['max_drawdown 18.00% > 15.00%'],
+                {},
+            ),
+            'decision_history': [
+                {
+                    'date': '2026-01-05',
+                    'decision': 'rebalance',
+                    'selected': ['510300'],
+                    'target_exposure': 0.8,
+                    'market_strength': 0.03,
+                    'breadth': 0.75,
+                    'weights': {'510300': 0.8},
+                    'actual_positions': [],
+                    'signals': [{'action': 'buy', 'symbol': '510300'}],
+                    'top_candidates': [{'symbol': '510300', 'score': 0.12}],
+                },
+            ],
+        }
+    ]
+    json_path = tmp_path / 'decisions.json'
+    csv_path = tmp_path / 'decisions.csv'
+
+    _write_decision_log(str(json_path), results)
+    _write_decision_log(str(csv_path), results)
+
+    json_rows = json.loads(json_path.read_text(encoding='utf-8'))
+    assert json_rows[0]['candidate'] == 'alpha'
+    assert json_rows[0]['selected'] == ['510300']
+    with csv_path.open(newline='', encoding='utf-8') as file:
+        csv_rows = list(csv.DictReader(file))
+    assert csv_rows[0]['candidate'] == 'alpha'
+    assert json.loads(csv_rows[0]['weights']) == {'510300': 0.8}
 
 
 def test_screening_summary_can_be_written_as_json_and_csv(tmp_path):
