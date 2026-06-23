@@ -72,11 +72,20 @@ def test_weak_market_exit_retries_until_actual_position_is_gone():
             '510300': {'shares': 500, 'current_price': 10.0},
         },
     })
+    settled_signals = strategy.generate_signal(data, {
+        'capital': 10000,
+        'total_value': 10000,
+        'positions': {},
+    })
 
     assert [signal['action'] for signal in first_signals] == ['sell']
     assert first_signals[0]['shares'] == 1000
     assert [signal['action'] for signal in retry_signals] == ['sell']
     assert retry_signals[0]['shares'] == 500
+    assert settled_signals == []
+    assert strategy.pending_targets is None
+    assert strategy.decision_history[-1]['decision'] == 'pending_settled'
+    assert strategy.decision_history[-1]['selected'] == []
 
 
 def test_target_rotation_retries_same_winner_until_target_weight_is_reached():
@@ -300,6 +309,53 @@ def test_candidate_configs_include_adaptive_exposure_profiles():
     assert {config.family for config in configs} == {'adaptive_exposure_guard'}
     assert {config.exposure_mode for config in configs} == {'trend_strength'}
     assert all(config.max_holdings == 1 for config in configs)
+
+
+def test_candidate_configs_include_recovery_trend_profiles():
+    configs = _candidate_configs('510300', 'recovery_trend_guard')
+
+    assert configs
+    assert {config.family for config in configs} == {'recovery_trend_guard'}
+    assert {config.factor_mode for config in configs} == {'recovery'}
+    assert all(config.recovery_threshold > 0 for config in configs)
+    assert all(config.max_holdings == 1 for config in configs)
+
+
+def test_recovery_trend_guard_requires_mid_range_recovery():
+    config = TrendCandidateConfig(
+        **{
+            **_config().__dict__,
+            'rebalance_interval': 1,
+            'fast_window': 1,
+            'slow_window': 3,
+            'trend_window': 2,
+            'vol_window': 3,
+            'drawdown_window': 4,
+            'factor_mode': 'recovery',
+            'recovery_threshold': 0.60,
+            'max_recent_drawdown': 0.50,
+        }
+    )
+    strategy = ETFTrendCandidateStrategy(['510300'], config)
+
+    weak_recovery_signals = strategy.generate_signal({
+        '510300': _bar(9.0, [8.0, 12.0, 8.0, 9.0]),
+    }, {
+        'capital': 10000,
+        'total_value': 10000,
+        'positions': {},
+    })
+    strong_recovery_signals = strategy.generate_signal({
+        '510300': _bar(11.0, [8.0, 12.0, 8.0, 11.0]),
+    }, {
+        'capital': 10000,
+        'total_value': 10000,
+        'positions': {},
+    })
+
+    assert weak_recovery_signals == []
+    assert strategy.rejection_reasons['insufficient_recovery'] == 1
+    assert [signal['action'] for signal in strong_recovery_signals] == ['buy']
 
 
 def test_trend_strength_exposure_steps_down_on_marginal_market():

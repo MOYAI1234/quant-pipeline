@@ -69,7 +69,7 @@ python scripts\screen_etf_trend_candidates.py `
   --decision-log-output data\screening-decisions.csv
 ```
 
-当前批量筛选包含 `daily_core_guard`、`swing_trend_guard` 和 `adaptive_exposure_guard` 三类 ETF 主线候选，可用 `--factor-family` 单独运行。`daily_core_guard` 允许日评估，但通过趋势广度和换仓去抖降低无效交易；`swing_trend_guard` 用于更低换手的波段对照；`adaptive_exposure_guard` 在趋势波段框架上加入市场趋势强度和 ETF 广度分层仓位，用于验证不引入债券、黄金时的降仓风控效果。它们都只在自动准入后才进入公开平台复验。
+当前批量筛选包含 `daily_core_guard`、`swing_trend_guard`、`adaptive_exposure_guard` 和 `recovery_trend_guard` 四类 ETF 主线候选，可用 `--factor-family` 单独运行。`daily_core_guard` 允许日评估，但通过趋势广度和换仓去抖降低无效交易；`swing_trend_guard` 用于更低换手的波段对照；`adaptive_exposure_guard` 在趋势波段框架上加入市场趋势强度和 ETF 广度分层仓位；`recovery_trend_guard` 进一步要求标的从近期回撤区间恢复到中上部后才进入候选，用于验证不抢弱反弹能否改善回撤。它们都只在自动准入后才进入公开平台复验。
 
 失败处理：
 
