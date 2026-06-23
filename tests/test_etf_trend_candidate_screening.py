@@ -8,6 +8,7 @@ from scripts.screen_etf_trend_candidates import (
     _screening_summary,
     _stabilized_selection,
     _target_weight_signals,
+    _target_exposure,
     _summary,
     _write_candidate_results,
     _write_screening_summary,
@@ -36,6 +37,7 @@ def _config(use_market_filter=False):
         use_breadth_filter=False,
         weight_mode='equal',
         target_exposure=1.0,
+        exposure_mode='static',
         min_switch_score_gap=0.0,
     )
 
@@ -134,6 +136,7 @@ def test_breadth_filter_blocks_new_buy_when_pool_trend_is_weak():
         use_breadth_filter=True,
         weight_mode='equal',
         target_exposure=1.0,
+        exposure_mode='static',
         min_switch_score_gap=0.0,
     )
     strategy = ETFTrendCandidateStrategy(['510300', '510500'], config)
@@ -176,6 +179,47 @@ def test_candidate_configs_include_daily_core_guard_profiles():
     assert all(config.min_switch_score_gap > 0 for config in configs)
     assert daily_only
     assert {config.family for config in daily_only} == {'daily_core_guard'}
+
+
+def test_candidate_configs_include_adaptive_exposure_profiles():
+    configs = _candidate_configs('510300', 'adaptive_exposure_guard')
+
+    assert configs
+    assert {config.family for config in configs} == {'adaptive_exposure_guard'}
+    assert {config.exposure_mode for config in configs} == {'trend_strength'}
+    assert all(config.max_holdings == 1 for config in configs)
+
+
+def test_trend_strength_exposure_steps_down_on_marginal_market():
+    config = _config(use_market_filter=True)
+    config = TrendCandidateConfig(
+        **{
+            **config.__dict__,
+            'target_exposure': 1.0,
+            'exposure_mode': 'trend_strength',
+            'use_breadth_filter': True,
+            'breadth_threshold': 0.5,
+            'breadth_window': 2,
+            'market_trend_window': 2,
+        }
+    )
+
+    strong_data = {
+        '510300': _bar(12.0, [10.0, 10.0, 12.0]),
+        '510500': _bar(12.0, [10.0, 10.0, 12.0]),
+    }
+    normal_data = {
+        '510300': _bar(10.5, [10.0, 10.0, 10.5]),
+        '510500': _bar(10.5, [10.0, 10.0, 10.5]),
+    }
+    marginal_data = {
+        '510300': _bar(10.1, [10.0, 10.0, 10.1]),
+        '510500': _bar(10.1, [10.0, 10.0, 10.1]),
+    }
+
+    assert _target_exposure(strong_data, ['510300', '510500'], config) == 1.0
+    assert _target_exposure(normal_data, ['510300', '510500'], config) == 0.75
+    assert _target_exposure(marginal_data, ['510300', '510500'], config) == 0.5
 
 
 def test_target_weight_signals_reuses_selected_leg_reduction_proceeds():
