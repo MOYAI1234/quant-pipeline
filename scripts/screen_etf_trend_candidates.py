@@ -206,7 +206,7 @@ class ETFTrendCandidateStrategy(BaseStrategy):
             self.etf_pool,
             self.candidate_config,
         )
-        if target_exposure >= current_exposure:
+        if math.isclose(target_exposure, current_exposure):
             return weights
 
         scale = target_exposure / current_exposure
@@ -214,7 +214,10 @@ class ETFTrendCandidateStrategy(BaseStrategy):
             symbol: min(weight * scale, self.candidate_config.max_weight_per_etf)
             for symbol, weight in weights.items()
         }
-        self.regime_counts.update(['exposure_reduced'])
+        if target_exposure < current_exposure:
+            self.regime_counts.update(['exposure_reduced'])
+        else:
+            self.regime_counts.update(['exposure_increased'])
         return adjusted
 
     def calc_position_size(self, capital: float, price: float) -> int:
