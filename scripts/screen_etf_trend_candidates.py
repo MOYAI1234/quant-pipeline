@@ -38,6 +38,7 @@ class TrendCandidateConfig:
     use_breadth_filter: bool
     weight_mode: str
     target_exposure: float
+    exposure_mode: str
     min_switch_score_gap: float
 
     @property
@@ -114,6 +115,7 @@ class ETFTrendCandidateStrategy(BaseStrategy):
             self.candidate_config.min_switch_score_gap,
         )
         ranked_by_symbol = {item['symbol']: item for item in ranked}
+        target_exposure = _target_exposure(data, self.etf_pool, self.candidate_config)
         weights = _weights(
             [
                 ranked_by_symbol[symbol]
@@ -121,7 +123,10 @@ class ETFTrendCandidateStrategy(BaseStrategy):
                 if symbol in ranked_by_symbol
             ],
             self.candidate_config,
+            target_exposure,
         )
+        if selected and target_exposure < self.candidate_config.target_exposure:
+            self.regime_counts.update(['exposure_reduced'])
 
         signals = _target_weight_signals(
             data,
@@ -156,7 +161,8 @@ class ETFTrendCandidateStrategy(BaseStrategy):
 
     def _retry_pending_targets(self, data: dict, portfolio: dict) -> list:
         selected = list(self.pending_targets or [])
-        weights = dict(self.pending_weights)
+        weights = self._retry_pending_weights(data, selected)
+        self.pending_weights = dict(weights)
         signals = _target_weight_signals(
             data,
             portfolio,
@@ -179,6 +185,40 @@ class ETFTrendCandidateStrategy(BaseStrategy):
         self.days_since_rebalance = self.candidate_config.rebalance_interval
         self.regime_counts.update(['pending_retry'])
         return signals
+
+    def _retry_pending_weights(self, data: dict, selected: list[str]) -> dict:
+        weights = {
+            symbol: weight
+            for symbol, weight in self.pending_weights.items()
+            if symbol in selected
+        }
+        if not selected or not weights:
+            return {}
+
+        current_exposure = sum(weights.values())
+        if current_exposure <= 0:
+            return weights
+        if self.candidate_config.exposure_mode == 'static':
+            return weights
+
+        target_exposure = _target_exposure(
+            data,
+            self.etf_pool,
+            self.candidate_config,
+        )
+        if math.isclose(target_exposure, current_exposure):
+            return weights
+
+        scale = target_exposure / current_exposure
+        adjusted = {
+            symbol: min(weight * scale, self.candidate_config.max_weight_per_etf)
+            for symbol, weight in weights.items()
+        }
+        if target_exposure < current_exposure:
+            self.regime_counts.update(['exposure_reduced'])
+        else:
+            self.regime_counts.update(['exposure_increased'])
+        return adjusted
 
     def calc_position_size(self, capital: float, price: float) -> int:
         if price <= 0:
@@ -277,7 +317,12 @@ def main() -> int:
     )
     parser.add_argument(
         '--factor-family',
-        choices=['all', 'daily_core_guard', 'swing_trend_guard'],
+        choices=[
+            'all',
+            'daily_core_guard',
+            'swing_trend_guard',
+            'adaptive_exposure_guard',
+        ],
         default='all',
         help='只运行指定 ETF 因子族，默认运行全部',
     )
@@ -352,6 +397,7 @@ def _candidate_configs(
             'require_own_trends': [True],
             'weight_modes': ['equal', 'inverse_vol'],
             'target_exposures': [0.50, 0.70],
+            'exposure_modes': ['static'],
             'min_switch_score_gaps': [0.01, 0.02],
         },
         {
@@ -368,6 +414,24 @@ def _candidate_configs(
             'require_own_trends': [True, False],
             'weight_modes': ['equal', 'inverse_vol'],
             'target_exposures': [0.70, 0.90],
+            'exposure_modes': ['static'],
+            'min_switch_score_gaps': [0.01],
+        },
+        {
+            'family': 'adaptive_exposure_guard',
+            'rebalance_intervals': [10, 20],
+            'max_holdings': [1],
+            'fast_windows': [40, 60],
+            'slow_windows': [120, 180],
+            'trend_windows': [120],
+            'market_trend_windows': [160, 200],
+            'breadth_windows': [120],
+            'breadth_thresholds': [0.50],
+            'max_recent_drawdowns': [0.16],
+            'require_own_trends': [True],
+            'weight_modes': ['equal'],
+            'target_exposures': [0.80, 1.00],
+            'exposure_modes': ['trend_strength'],
             'min_switch_score_gaps': [0.01],
         },
     ]
@@ -396,6 +460,7 @@ def _profile_candidate_configs(
         require_own_trend,
         weight_mode,
         target_exposure,
+        exposure_mode,
         min_switch_score_gap,
     ) in itertools.product(
         profile['rebalance_intervals'],
@@ -410,6 +475,7 @@ def _profile_candidate_configs(
         profile['require_own_trends'],
         profile['weight_modes'],
         profile['target_exposures'],
+        profile['exposure_modes'],
         profile['min_switch_score_gaps'],
     ):
         if slow_window <= fast_window:
@@ -421,6 +487,7 @@ def _profile_candidate_configs(
             f"market={market_trend_window} breadth={breadth_window}/"
             f"{breadth_threshold:.0%} ownTrend={require_own_trend} "
             f"weight={weight_mode} exposure={target_exposure} "
+            f"exposureMode={exposure_mode} "
             f"switchGap={min_switch_score_gap}"
         )
         configs.append(TrendCandidateConfig(
@@ -444,6 +511,7 @@ def _profile_candidate_configs(
             use_breadth_filter=True,
             weight_mode=weight_mode,
             target_exposure=target_exposure,
+            exposure_mode=exposure_mode,
             min_switch_score_gap=min_switch_score_gap,
         ))
     return configs
@@ -943,9 +1011,45 @@ def _estimated_sell_proceeds(
     return max(amount - commission, 0)
 
 
-def _weights(items: list[dict], config: TrendCandidateConfig) -> dict[str, float]:
+def _target_exposure(
+    data: dict,
+    symbols: list[str],
+    config: TrendCandidateConfig,
+) -> float:
+    if config.exposure_mode == 'static':
+        return config.target_exposure
+    if config.exposure_mode != 'trend_strength':
+        raise ValueError(f'unknown exposure_mode: {config.exposure_mode}')
+
+    market_strength = _market_trend_strength(
+        data.get(config.market_proxy) or {},
+        config.market_trend_window,
+    )
+    breadth = _trend_breadth(data, symbols, config.breadth_window)
+    if market_strength is None or breadth is None:
+        return config.target_exposure * 0.50
+
+    if (
+        market_strength >= 0.06
+        and breadth >= min(config.breadth_threshold + 0.25, 1.0)
+    ):
+        return config.target_exposure
+    if (
+        market_strength >= 0.02
+        and breadth >= min(config.breadth_threshold + 0.10, 1.0)
+    ):
+        return config.target_exposure * 0.75
+    return config.target_exposure * 0.50
+
+
+def _weights(
+    items: list[dict],
+    config: TrendCandidateConfig,
+    target_exposure: float | None = None,
+) -> dict[str, float]:
     if not items:
         return {}
+    exposure = config.target_exposure if target_exposure is None else target_exposure
     if config.weight_mode == 'equal':
         raw = {item['symbol']: 1 / len(items) for item in items}
     elif config.weight_mode == 'inverse_vol':
@@ -957,7 +1061,7 @@ def _weights(items: list[dict], config: TrendCandidateConfig) -> dict[str, float
     else:
         raise ValueError(f'unknown weight_mode: {config.weight_mode}')
     return {
-        symbol: min(weight * config.target_exposure, config.max_weight_per_etf)
+        symbol: min(weight * exposure, config.max_weight_per_etf)
         for symbol, weight in raw.items()
     }
 
@@ -1014,6 +1118,17 @@ def _trend_breadth(
     if valid_count == 0:
         return None
     return above_count / valid_count
+
+
+def _market_trend_strength(bar: dict, window: int) -> float | None:
+    prices = _prices(bar)
+    if len(prices) < window:
+        return None
+    latest = prices[-1]
+    trend_ma = sum(prices[-window:]) / window
+    if latest <= 0 or trend_ma <= 0:
+        return None
+    return latest / trend_ma - 1.0
 
 
 def _prices(bar: dict) -> list[float]:

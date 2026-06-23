@@ -8,6 +8,7 @@ from scripts.screen_etf_trend_candidates import (
     _screening_summary,
     _stabilized_selection,
     _target_weight_signals,
+    _target_exposure,
     _summary,
     _write_candidate_results,
     _write_screening_summary,
@@ -36,6 +37,7 @@ def _config(use_market_filter=False):
         use_breadth_filter=False,
         weight_mode='equal',
         target_exposure=1.0,
+        exposure_mode='static',
         min_switch_score_gap=0.0,
     )
 
@@ -112,6 +114,113 @@ def test_target_rotation_retries_same_winner_until_target_weight_is_reached():
     assert strategy.pending_targets is None
 
 
+def test_pending_retry_recomputes_adaptive_exposure_before_buying_more():
+    config = TrendCandidateConfig(
+        **{
+            **_config(use_market_filter=True).__dict__,
+            'target_exposure': 1.0,
+            'exposure_mode': 'trend_strength',
+            'use_breadth_filter': True,
+            'breadth_threshold': 0.5,
+            'breadth_window': 2,
+            'market_trend_window': 2,
+        }
+    )
+    strategy = ETFTrendCandidateStrategy(['510300'], config)
+
+    strong_data = {
+        '510300': _bar(10.0, [8.0, 8.0, 10.0]),
+    }
+    marginal_data = {
+        '510300': _bar(10.1, [10.0, 10.0, 10.1]),
+    }
+
+    first_signals = strategy.generate_signal(strong_data, {
+        'capital': 10000,
+        'total_value': 10000,
+        'positions': {},
+    })
+    retry_signals = strategy.generate_signal(marginal_data, {
+        'capital': 9000,
+        'total_value': 10000,
+        'positions': {
+            '510300': {'shares': 100, 'current_price': 10.1},
+        },
+    })
+
+    assert first_signals[0]['shares'] == 1000
+    assert retry_signals[0]['action'] == 'buy'
+    assert retry_signals[0]['shares'] == 300
+    assert strategy.pending_weights == {'510300': 0.5}
+
+
+def test_pending_retry_recomputes_adaptive_exposure_when_market_improves():
+    config = TrendCandidateConfig(
+        **{
+            **_config(use_market_filter=True).__dict__,
+            'target_exposure': 1.0,
+            'exposure_mode': 'trend_strength',
+            'use_breadth_filter': True,
+            'breadth_threshold': 0.5,
+            'breadth_window': 2,
+            'market_trend_window': 2,
+        }
+    )
+    strategy = ETFTrendCandidateStrategy(['510300'], config)
+
+    marginal_data = {
+        '510300': _bar(10.1, [10.0, 10.0, 10.1]),
+    }
+    strong_data = {
+        '510300': _bar(10.0, [8.0, 8.0, 10.0]),
+    }
+
+    first_signals = strategy.generate_signal(marginal_data, {
+        'capital': 10000,
+        'total_value': 10000,
+        'positions': {},
+    })
+    retry_signals = strategy.generate_signal(strong_data, {
+        'capital': 9000,
+        'total_value': 10000,
+        'positions': {
+            '510300': {'shares': 100, 'current_price': 10.0},
+        },
+    })
+
+    assert first_signals[0]['shares'] == 400
+    assert retry_signals[0]['action'] == 'buy'
+    assert retry_signals[0]['shares'] == 900
+    assert strategy.pending_weights == {'510300': 1.0}
+
+
+def test_static_pending_retry_preserves_capped_weights():
+    strategy = ETFTrendCandidateStrategy(['510300', '510500'], _config())
+    strategy.pending_targets = ['510300', '510500']
+    strategy.pending_weights = {
+        '510300': 0.50,
+        '510500': 0.09,
+    }
+
+    signals = strategy.generate_signal({
+        '510300': _bar(10.0),
+        '510500': _bar(10.0),
+    }, {
+        'capital': 10000,
+        'total_value': 10000,
+        'positions': {
+            '510300': {'shares': 100, 'current_price': 10.0},
+        },
+    })
+
+    assert strategy.pending_weights == {
+        '510300': 0.50,
+        '510500': 0.09,
+    }
+    assert [signal['symbol'] for signal in signals] == ['510300']
+    assert signals[0]['shares'] == 400
+
+
 def test_breadth_filter_blocks_new_buy_when_pool_trend_is_weak():
     config = TrendCandidateConfig(
         name='TEST-BREADTH',
@@ -134,6 +243,7 @@ def test_breadth_filter_blocks_new_buy_when_pool_trend_is_weak():
         use_breadth_filter=True,
         weight_mode='equal',
         target_exposure=1.0,
+        exposure_mode='static',
         min_switch_score_gap=0.0,
     )
     strategy = ETFTrendCandidateStrategy(['510300', '510500'], config)
@@ -176,6 +286,47 @@ def test_candidate_configs_include_daily_core_guard_profiles():
     assert all(config.min_switch_score_gap > 0 for config in configs)
     assert daily_only
     assert {config.family for config in daily_only} == {'daily_core_guard'}
+
+
+def test_candidate_configs_include_adaptive_exposure_profiles():
+    configs = _candidate_configs('510300', 'adaptive_exposure_guard')
+
+    assert configs
+    assert {config.family for config in configs} == {'adaptive_exposure_guard'}
+    assert {config.exposure_mode for config in configs} == {'trend_strength'}
+    assert all(config.max_holdings == 1 for config in configs)
+
+
+def test_trend_strength_exposure_steps_down_on_marginal_market():
+    config = _config(use_market_filter=True)
+    config = TrendCandidateConfig(
+        **{
+            **config.__dict__,
+            'target_exposure': 1.0,
+            'exposure_mode': 'trend_strength',
+            'use_breadth_filter': True,
+            'breadth_threshold': 0.5,
+            'breadth_window': 2,
+            'market_trend_window': 2,
+        }
+    )
+
+    strong_data = {
+        '510300': _bar(12.0, [10.0, 10.0, 12.0]),
+        '510500': _bar(12.0, [10.0, 10.0, 12.0]),
+    }
+    normal_data = {
+        '510300': _bar(10.5, [10.0, 10.0, 10.5]),
+        '510500': _bar(10.5, [10.0, 10.0, 10.5]),
+    }
+    marginal_data = {
+        '510300': _bar(10.1, [10.0, 10.0, 10.1]),
+        '510500': _bar(10.1, [10.0, 10.0, 10.1]),
+    }
+
+    assert _target_exposure(strong_data, ['510300', '510500'], config) == 1.0
+    assert _target_exposure(normal_data, ['510300', '510500'], config) == 0.75
+    assert _target_exposure(marginal_data, ['510300', '510500'], config) == 0.5
 
 
 def test_target_weight_signals_reuses_selected_leg_reduction_proceeds():
