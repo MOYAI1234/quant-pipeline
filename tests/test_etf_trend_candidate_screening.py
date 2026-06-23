@@ -321,6 +321,103 @@ def test_candidate_configs_include_recovery_trend_profiles():
     assert all(config.max_holdings == 1 for config in configs)
 
 
+def test_candidate_configs_include_confirmed_trend_profiles():
+    configs = _candidate_configs('510300', 'confirmed_trend_guard')
+
+    assert configs
+    assert {config.family for config in configs} == {'confirmed_trend_guard'}
+    assert {config.exposure_mode for config in configs} == {'trend_strength'}
+    assert all(config.min_market_strength > 0 for config in configs)
+    assert all(config.max_holdings == 1 for config in configs)
+
+
+def test_candidate_configs_include_drawdown_pause_profiles():
+    configs = _candidate_configs('510300', 'drawdown_pause_guard')
+
+    assert configs
+    assert {config.family for config in configs} == {'drawdown_pause_guard'}
+    assert all(config.portfolio_pause_drawdown > 0 for config in configs)
+    assert all(config.pause_after_drawdown_days > 0 for config in configs)
+    assert all(config.max_holdings == 1 for config in configs)
+
+
+def test_market_confirmation_requires_strength_above_threshold():
+    config = TrendCandidateConfig(
+        **{
+            **_config(use_market_filter=True).__dict__,
+            'rebalance_interval': 1,
+            'fast_window': 1,
+            'slow_window': 2,
+            'trend_window': 2,
+            'market_trend_window': 2,
+            'min_market_strength': 0.05,
+        }
+    )
+    strategy = ETFTrendCandidateStrategy(['510300'], config)
+
+    weak_confirmation_signals = strategy.generate_signal({
+        '510300': _bar(10.1, [10.0, 10.0, 10.1]),
+    }, {
+        'capital': 10000,
+        'total_value': 10000,
+        'positions': {},
+    })
+    strong_confirmation_signals = strategy.generate_signal({
+        '510300': _bar(12.0, [10.0, 10.0, 12.0]),
+    }, {
+        'capital': 10000,
+        'total_value': 10000,
+        'positions': {},
+    })
+
+    assert weak_confirmation_signals == []
+    assert strategy.rejection_reasons['market_confirmation_weak'] == 1
+    assert [signal['action'] for signal in strong_confirmation_signals] == ['buy']
+
+
+def test_drawdown_pause_guard_sells_and_waits_before_reentry():
+    config = TrendCandidateConfig(
+        **{
+            **_config().__dict__,
+            'rebalance_interval': 1,
+            'fast_window': 1,
+            'slow_window': 2,
+            'trend_window': 2,
+            'portfolio_pause_drawdown': 0.10,
+            'pause_after_drawdown_days': 1,
+        }
+    )
+    strategy = ETFTrendCandidateStrategy(['510300'], config)
+    strong_data = {
+        '510300': _bar(10.0, [8.0, 8.0, 10.0]),
+    }
+
+    first_signals = strategy.generate_signal(strong_data, {
+        'capital': 10000,
+        'total_value': 10000,
+        'positions': {},
+    })
+    pause_signals = strategy.generate_signal(strong_data, {
+        'capital': 0,
+        'total_value': 8800,
+        'positions': {
+            '510300': {'shares': 800, 'current_price': 10.0},
+        },
+    })
+    paused_signals = strategy.generate_signal(strong_data, {
+        'capital': 8800,
+        'total_value': 8800,
+        'positions': {},
+    })
+
+    assert first_signals[0]['action'] == 'buy'
+    assert pause_signals[0]['action'] == 'sell'
+    assert strategy.pause_count == 1
+    assert strategy.decision_history[-1]['decision'] == 'portfolio_pause_trigger'
+    assert paused_signals == []
+    assert strategy.pause_days_remaining == 0
+
+
 def test_recovery_trend_guard_requires_mid_range_recovery():
     config = TrendCandidateConfig(
         **{
@@ -482,6 +579,7 @@ def test_summary_includes_automatic_gate_decision():
     assert summary['family'] == 'test'
     assert summary['max_daily_trades'] == 1
     assert summary['gate_reasons']
+    assert summary['pause_count'] == 0
     assert summary['decision_history'] == []
 
 
