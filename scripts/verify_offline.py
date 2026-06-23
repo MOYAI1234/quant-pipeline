@@ -29,6 +29,10 @@ CHECKS = [
         'backtest-artifacts',
         [sys.executable, 'scripts/verify_backtest_artifacts.py'],
     ),
+    (
+        'public-backtest-summary-help',
+        [sys.executable, 'scripts/summarize_public_backtest.py', '--help'],
+    ),
     ('history-probe-help', [sys.executable, 'cli/commands.py', 'history', 'probe', '--help']),
     (
         'history-export-grid-help',

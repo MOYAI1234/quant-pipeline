@@ -39,6 +39,19 @@
 
 首个候选策略 `ETF-MOM-ROT-001` 已提供 [聚宽复现脚本](../examples/joinquant/etf_momentum_rotation_v1.py) 和 [运行说明](../examples/joinquant/README.md)。执行后应把样本内、样本外、参数敏感性和关键日志回填到候选策略记录，不要只保存平台截图。
 
+## 导出摘要
+
+聚宽导出的收益曲线 CSV 可以先用本地摘要脚本归一化，避免手工读取中文表头、累计收益和样本外切片口径：
+
+```powershell
+python scripts\summarize_public_backtest.py `
+  --input "C:\Users\69050\Downloads\result_1.csv" `
+  --start-date 2022-01-04 `
+  --initial-capital 100000
+```
+
+脚本会自动尝试 UTF-8、GBK 和 GB18030 编码，读取 `时间`、`基准收益`、`策略收益`、`当日买入`、`当日卖出` 等列，并输出总收益、日历年化、最大回撤、交易日期数、总成交额和年化成交额/初始资金。传入 `--start-date` 时，收益和回撤会按切片起点重新归一化，用于从完整回测导出中截取样本外表现。需要机器可读结果时可追加 `--json`。
+
 ## 网格策略附加门槛
 
 - 使用实际券商买卖费率和单笔最低佣金，不以零费用结果作为结论。

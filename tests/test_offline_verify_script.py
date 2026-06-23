@@ -27,6 +27,7 @@ def test_offline_verify_script_lists_release_checks():
     assert 'grid-backtest:' in completed.stdout
     assert 'rotation-backtest:' in completed.stdout
     assert 'backtest-artifacts:' in completed.stdout
+    assert 'public-backtest-summary-help:' in completed.stdout
     assert 'history-export-rotation-help:' in completed.stdout
 
 
