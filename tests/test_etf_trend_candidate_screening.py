@@ -1,10 +1,16 @@
+import csv
+import json
+
 from scripts.screen_etf_trend_candidates import (
     ETFTrendCandidateStrategy,
     TrendCandidateConfig,
     _candidate_configs,
+    _screening_summary,
     _stabilized_selection,
     _target_weight_signals,
     _summary,
+    _write_candidate_results,
+    _write_screening_summary,
 )
 
 
@@ -230,3 +236,146 @@ def test_summary_includes_automatic_gate_decision():
     assert summary['family'] == 'test'
     assert summary['max_daily_trades'] == 1
     assert summary['gate_reasons']
+
+
+def test_screening_summary_aggregates_statuses_and_failure_reasons():
+    results = [
+        _candidate_result(
+            'alpha',
+            'daily_core_guard',
+            'REJECT',
+            0.01,
+            0.18,
+            ['annual_return 1.00% < 6.00%', 'max_drawdown 18.00% > 15.00%'],
+            {'breadth_weak': 7},
+        ),
+        _candidate_result(
+            'beta',
+            'daily_core_guard',
+            'WATCHLIST',
+            0.055,
+            0.12,
+            ['annual_return 5.50% < 6.00%'],
+            {'market_trend_weak': 3},
+        ),
+        _candidate_result(
+            'gamma',
+            'swing_trend_guard',
+            'PASS',
+            0.08,
+            0.09,
+            [],
+            {},
+        ),
+    ]
+
+    summary = _screening_summary(results, [results[2]])
+
+    assert summary['evaluated_candidates'] == 3
+    assert summary['visible_candidates'] == 1
+    assert summary['status_counts'] == {
+        'REJECT': 1,
+        'WATCHLIST': 1,
+        'PASS': 1,
+    }
+    assert summary['family_status_counts']['daily_core_guard'] == {
+        'REJECT': 1,
+        'WATCHLIST': 1,
+    }
+    assert summary['gate_reason_counts']['annual_return 5.50% < 6.00%'] == 1
+    assert summary['rejection_reason_counts']['breadth_weak'] == 7
+    assert summary['best_by_drawdown']['name'] == 'gamma'
+    assert summary['best_by_annual']['name'] == 'gamma'
+
+
+def test_candidate_results_can_be_written_as_json_and_csv(tmp_path):
+    results = [
+        _candidate_result(
+            'alpha',
+            'daily_core_guard',
+            'REJECT',
+            0.01,
+            0.18,
+            ['annual_return 1.00% < 6.00%'],
+            {'breadth_weak': 7},
+        )
+    ]
+    json_path = tmp_path / 'candidates.json'
+    csv_path = tmp_path / 'candidates.csv'
+
+    _write_candidate_results(str(json_path), results)
+    _write_candidate_results(str(csv_path), results)
+
+    assert json.loads(json_path.read_text(encoding='utf-8'))[0]['name'] == 'alpha'
+    with csv_path.open(newline='', encoding='utf-8') as file:
+        rows = list(csv.DictReader(file))
+    assert rows[0]['name'] == 'alpha'
+    assert rows[0]['gate_reasons'] == 'annual_return 1.00% < 6.00%'
+    assert json.loads(rows[0]['rejection_reasons']) == {'breadth_weak': 7}
+
+
+def test_screening_summary_can_be_written_as_json_and_csv(tmp_path):
+    summary = _screening_summary([
+        _candidate_result(
+            'alpha',
+            'daily_core_guard',
+            'REJECT',
+            0.01,
+            0.18,
+            ['annual_return 1.00% < 6.00%'],
+            {'breadth_weak': 7},
+        )
+    ])
+    json_path = tmp_path / 'summary.json'
+    csv_path = tmp_path / 'summary.csv'
+
+    _write_screening_summary(str(json_path), summary)
+    _write_screening_summary(str(csv_path), summary)
+
+    assert json.loads(json_path.read_text(encoding='utf-8'))[
+        'evaluated_candidates'
+    ] == 1
+    with csv_path.open(newline='', encoding='utf-8') as file:
+        rows = list(csv.DictReader(file))
+    assert {
+        'section': 'total',
+        'family': 'all',
+        'key': 'evaluated_candidates',
+        'value': '1',
+    } in rows
+    assert any(
+        row['section'] == 'rejection_reason_counts'
+        and row['key'] == 'breadth_weak'
+        and row['value'] == '7'
+        for row in rows
+    )
+
+
+def _candidate_result(
+    name,
+    family,
+    gate_status,
+    annual_return,
+    max_drawdown,
+    gate_reasons,
+    rejection_reasons,
+):
+    return {
+        'name': name,
+        'family': family,
+        'annual_return': annual_return,
+        'total_return': annual_return,
+        'max_drawdown': max_drawdown,
+        'trade_count': 5,
+        'turnover_ratio': 1.2,
+        'commission_ratio': 0.001,
+        'annual_turnover': 0.3,
+        'annual_commission_ratio': 0.0003,
+        'max_daily_trades': 1,
+        'cash_day_ratio': 0.2,
+        'gate_status': gate_status,
+        'gate_reasons': list(gate_reasons),
+        'final_value': 101000,
+        'regime_counts': {'risk_on': 1},
+        'rejection_reasons': dict(rejection_reasons),
+    }
