@@ -1,5 +1,7 @@
 import argparse
+import csv
 import itertools
+import json
 import math
 import sys
 from collections import Counter
@@ -293,6 +295,14 @@ def main() -> int:
     parser.add_argument('--min-commission', type=float, default=5)
     parser.add_argument('--slippage-rate', type=float, default=0.001)
     parser.add_argument('--max-volume-participation', type=float, default=0.05)
+    parser.add_argument(
+        '--results-output',
+        help='候选明细输出路径，支持 .json 或 .csv，内容遵循当前过滤条件但不受 --top 限制',
+    )
+    parser.add_argument(
+        '--summary-output',
+        help='筛选总览输出路径，支持 .json 或 .csv，统计基于全部已评估候选',
+    )
     args = parser.parse_args()
 
     history = _filter_history(
@@ -309,31 +319,16 @@ def main() -> int:
         result = runner.run(history)
         results.append(_summary(result, runner.strategy, gate_config))
 
-    if args.max_drawdown is not None:
-        results = [
-            item for item in results
-            if item['max_drawdown'] <= args.max_drawdown
-        ]
-    if args.gate_status != 'all':
-        expected_status = args.gate_status.upper()
-        results = [
-            item for item in results
-            if item['gate_status'] == expected_status
-        ]
-    status_rank = {'PASS': 0, 'WATCHLIST': 1, 'REJECT': 2}
-    if args.sort_by == 'annual':
-        results.sort(key=lambda item: (
-            status_rank[item['gate_status']],
-            -item['annual_return'],
-            item['max_drawdown'],
-        ))
-    else:
-        results.sort(key=lambda item: (
-            status_rank[item['gate_status']],
-            item['max_drawdown'],
-            -item['annual_return'],
-        ))
-    print(_render_table(results[: args.top]))
+    _sort_results(results, args.sort_by)
+    visible_results = _visible_results(results, args)
+    summary = _screening_summary(results, visible_results)
+    if args.results_output:
+        _write_candidate_results(args.results_output, visible_results)
+        print(f'候选明细: {args.results_output}')
+    if args.summary_output:
+        _write_screening_summary(args.summary_output, summary)
+        print(f'筛选总览: {args.summary_output}')
+    print(_render_table(visible_results[: args.top]))
     return 0
 
 
@@ -552,6 +547,256 @@ def _render_table(results: list[dict]) -> str:
                 f"|  | 原因 |  |  |  |  |  |  |  | {'；'.join(item['gate_reasons'])} |"
             )
     return '\n'.join(lines)
+
+
+def _sort_results(results: list[dict], sort_by: str) -> None:
+    status_rank = {'PASS': 0, 'WATCHLIST': 1, 'REJECT': 2}
+    if sort_by == 'annual':
+        results.sort(key=lambda item: (
+            status_rank[item['gate_status']],
+            -item['annual_return'],
+            item['max_drawdown'],
+        ))
+        return
+    results.sort(key=lambda item: (
+        status_rank[item['gate_status']],
+        item['max_drawdown'],
+        -item['annual_return'],
+    ))
+
+
+def _visible_results(results: list[dict], args: argparse.Namespace) -> list[dict]:
+    visible = list(results)
+    if args.max_drawdown is not None:
+        visible = [
+            item for item in visible
+            if item['max_drawdown'] <= args.max_drawdown
+        ]
+    if args.gate_status != 'all':
+        expected_status = args.gate_status.upper()
+        visible = [
+            item for item in visible
+            if item['gate_status'] == expected_status
+        ]
+    return visible
+
+
+def _screening_summary(
+    results: list[dict],
+    visible_results: list[dict] | None = None,
+) -> dict:
+    visible_results = visible_results if visible_results is not None else results
+    gate_reason_counts = Counter()
+    rejection_reason_counts = Counter()
+    family_status_counts = {}
+    for item in results:
+        gate_reason_counts.update(item.get('gate_reasons', []))
+        rejection_reason_counts.update(item.get('rejection_reasons', {}))
+        family = item['family']
+        family_status_counts.setdefault(family, Counter())
+        family_status_counts[family].update([item['gate_status']])
+
+    return {
+        'evaluated_candidates': len(results),
+        'visible_candidates': len(visible_results),
+        'status_counts': dict(Counter(item['gate_status'] for item in results)),
+        'family_counts': dict(Counter(item['family'] for item in results)),
+        'family_status_counts': {
+            family: dict(counts)
+            for family, counts in family_status_counts.items()
+        },
+        'gate_reason_counts': dict(gate_reason_counts),
+        'rejection_reason_counts': dict(rejection_reason_counts),
+        'best_by_drawdown': _best_candidate(results, 'drawdown'),
+        'best_by_annual': _best_candidate(results, 'annual'),
+    }
+
+
+def _best_candidate(results: list[dict], metric: str) -> dict | None:
+    if not results:
+        return None
+    if metric == 'annual':
+        item = max(results, key=lambda value: value['annual_return'])
+    elif metric == 'drawdown':
+        item = min(results, key=lambda value: value['max_drawdown'])
+    else:
+        raise ValueError(f'unknown best candidate metric: {metric}')
+    return {
+        'name': item['name'],
+        'family': item['family'],
+        'gate_status': item['gate_status'],
+        'annual_return': item['annual_return'],
+        'max_drawdown': item['max_drawdown'],
+        'annual_turnover': item['annual_turnover'],
+        'annual_commission_ratio': item['annual_commission_ratio'],
+        'cash_day_ratio': item['cash_day_ratio'],
+    }
+
+
+def _write_candidate_results(path: str, results: list[dict]) -> Path:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    suffix = output_path.suffix.lower()
+    if suffix == '.json':
+        output_path.write_text(
+            json.dumps(results, ensure_ascii=False, indent=2),
+            encoding='utf-8',
+        )
+        return output_path
+    if suffix == '.csv':
+        _write_candidate_results_csv(output_path, results)
+        return output_path
+    raise ValueError('--results-output 仅支持 .json 或 .csv')
+
+
+def _write_candidate_results_csv(path: Path, results: list[dict]) -> None:
+    fieldnames = [
+        'name',
+        'family',
+        'gate_status',
+        'annual_return',
+        'total_return',
+        'max_drawdown',
+        'trade_count',
+        'turnover_ratio',
+        'commission_ratio',
+        'annual_turnover',
+        'annual_commission_ratio',
+        'max_daily_trades',
+        'cash_day_ratio',
+        'final_value',
+        'gate_reasons',
+        'regime_counts',
+        'rejection_reasons',
+    ]
+    with path.open('w', newline='', encoding='utf-8') as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        writer.writeheader()
+        for item in results:
+            writer.writerow(_candidate_csv_row(item))
+
+
+def _candidate_csv_row(item: dict) -> dict:
+    return {
+        'name': item['name'],
+        'family': item['family'],
+        'gate_status': item['gate_status'],
+        'annual_return': item['annual_return'],
+        'total_return': item['total_return'],
+        'max_drawdown': item['max_drawdown'],
+        'trade_count': item['trade_count'],
+        'turnover_ratio': item['turnover_ratio'],
+        'commission_ratio': item['commission_ratio'],
+        'annual_turnover': item['annual_turnover'],
+        'annual_commission_ratio': item['annual_commission_ratio'],
+        'max_daily_trades': item['max_daily_trades'],
+        'cash_day_ratio': item['cash_day_ratio'],
+        'final_value': item['final_value'],
+        'gate_reasons': ';'.join(item.get('gate_reasons', [])),
+        'regime_counts': json.dumps(
+            item.get('regime_counts', {}),
+            ensure_ascii=False,
+            sort_keys=True,
+        ),
+        'rejection_reasons': json.dumps(
+            item.get('rejection_reasons', {}),
+            ensure_ascii=False,
+            sort_keys=True,
+        ),
+    }
+
+
+def _write_screening_summary(path: str, summary: dict) -> Path:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    suffix = output_path.suffix.lower()
+    if suffix == '.json':
+        output_path.write_text(
+            json.dumps(summary, ensure_ascii=False, indent=2),
+            encoding='utf-8',
+        )
+        return output_path
+    if suffix == '.csv':
+        _write_screening_summary_csv(output_path, summary)
+        return output_path
+    raise ValueError('--summary-output 仅支持 .json 或 .csv')
+
+
+def _write_screening_summary_csv(path: Path, summary: dict) -> None:
+    rows = _summary_csv_rows(summary)
+    with path.open('w', newline='', encoding='utf-8') as file:
+        writer = csv.DictWriter(
+            file,
+            fieldnames=['section', 'family', 'key', 'value'],
+        )
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _summary_csv_rows(summary: dict) -> list[dict]:
+    rows = [
+        {
+            'section': 'total',
+            'family': 'all',
+            'key': 'evaluated_candidates',
+            'value': summary['evaluated_candidates'],
+        },
+        {
+            'section': 'total',
+            'family': 'all',
+            'key': 'visible_candidates',
+            'value': summary['visible_candidates'],
+        },
+    ]
+    for section in ['status_counts', 'family_counts']:
+        for key, value in summary.get(section, {}).items():
+            rows.append({
+                'section': section,
+                'family': 'all',
+                'key': key,
+                'value': value,
+            })
+    for family, status_counts in summary.get('family_status_counts', {}).items():
+        for status, value in status_counts.items():
+            rows.append({
+                'section': 'family_status_counts',
+                'family': family,
+                'key': status,
+                'value': value,
+            })
+    for section in ['gate_reason_counts', 'rejection_reason_counts']:
+        for key, value in summary.get(section, {}).items():
+            rows.append({
+                'section': section,
+                'family': 'all',
+                'key': key,
+                'value': value,
+            })
+    for section in ['best_by_drawdown', 'best_by_annual']:
+        candidate = summary.get(section)
+        if not candidate:
+            continue
+        rows.append({
+            'section': section,
+            'family': candidate['family'],
+            'key': 'name',
+            'value': candidate['name'],
+        })
+        for key in [
+            'gate_status',
+            'annual_return',
+            'max_drawdown',
+            'annual_turnover',
+            'annual_commission_ratio',
+            'cash_day_ratio',
+        ]:
+            rows.append({
+                'section': section,
+                'family': candidate['family'],
+                'key': key,
+                'value': candidate[key],
+            })
+    return rows
 
 
 def _target_weight_signals(
