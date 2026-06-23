@@ -74,6 +74,7 @@ class ETFTrendCandidateStrategy(BaseStrategy):
         self.evaluation_count = 0
         self.rebalance_count = 0
         self.selected_history = []
+        self.decision_history = []
         self.regime_counts = Counter()
         self.rejection_reasons = Counter()
 
@@ -90,7 +91,23 @@ class ETFTrendCandidateStrategy(BaseStrategy):
                 self.pending_targets = []
                 self.pending_weights = {}
                 self.regime_counts.update(['market_weak_clear'])
-                return _target_weight_signals(data, portfolio, [], {}, '市场趋势转弱清仓')
+                signals = _target_weight_signals(
+                    data,
+                    portfolio,
+                    [],
+                    {},
+                    '市场趋势转弱清仓',
+                )
+                self._record_decision(
+                    data,
+                    portfolio,
+                    'market_weak_clear',
+                    [],
+                    {},
+                    0,
+                    signals,
+                )
+                return signals
             self.current_targets = []
             self.pending_targets = None
             self.pending_weights = {}
@@ -141,6 +158,16 @@ class ETFTrendCandidateStrategy(BaseStrategy):
             selected,
             weights,
         ):
+            self._record_decision(
+                data,
+                portfolio,
+                'unchanged',
+                selected,
+                weights,
+                target_exposure,
+                signals,
+                ranked,
+            )
             self.current_targets = selected
             self.pending_targets = None
             self.pending_weights = {}
@@ -157,6 +184,16 @@ class ETFTrendCandidateStrategy(BaseStrategy):
             'selected': list(selected),
         })
         self.regime_counts.update(['risk_on' if selected else 'cash'])
+        self._record_decision(
+            data,
+            portfolio,
+            'rebalance',
+            selected,
+            weights,
+            target_exposure,
+            signals,
+            ranked,
+        )
         return signals
 
     def _retry_pending_targets(self, data: dict, portfolio: dict) -> list:
@@ -176,6 +213,15 @@ class ETFTrendCandidateStrategy(BaseStrategy):
             selected,
             weights,
         ):
+            self._record_decision(
+                data,
+                portfolio,
+                'pending_settled',
+                selected,
+                weights,
+                sum(weights.values()),
+                signals,
+            )
             self.current_targets = selected
             self.pending_targets = None
             self.pending_weights = {}
@@ -184,6 +230,15 @@ class ETFTrendCandidateStrategy(BaseStrategy):
             return []
         self.days_since_rebalance = self.candidate_config.rebalance_interval
         self.regime_counts.update(['pending_retry'])
+        self._record_decision(
+            data,
+            portfolio,
+            'pending_retry',
+            selected,
+            weights,
+            sum(weights.values()),
+            signals,
+        )
         return signals
 
     def _retry_pending_weights(self, data: dict, selected: list[str]) -> dict:
@@ -219,6 +274,51 @@ class ETFTrendCandidateStrategy(BaseStrategy):
         else:
             self.regime_counts.update(['exposure_increased'])
         return adjusted
+
+    def _record_decision(
+        self,
+        data: dict,
+        portfolio: dict,
+        decision: str,
+        selected: list[str],
+        weights: dict[str, float],
+        target_exposure: float,
+        signals: list[dict],
+        ranked: list[dict] | None = None,
+    ) -> None:
+        self.decision_history.append({
+            'date': data.get('_date', ''),
+            'decision': decision,
+            'selected': list(selected),
+            'weights': dict(weights),
+            'target_exposure': target_exposure,
+            'market_strength': _market_trend_strength(
+                data.get(self.candidate_config.market_proxy) or {},
+                self.candidate_config.market_trend_window,
+            ),
+            'breadth': _trend_breadth(
+                data,
+                self.etf_pool,
+                self.candidate_config.breadth_window,
+            ),
+            'actual_positions': _actual_position_symbols(portfolio),
+            'signals': [
+                {
+                    'action': signal['action'],
+                    'symbol': signal['symbol'],
+                    'shares': signal['shares'],
+                    'amount': signal['amount'],
+                }
+                for signal in signals
+            ],
+            'top_candidates': [
+                {
+                    'symbol': item['symbol'],
+                    'score': item['score'],
+                }
+                for item in (ranked or [])[:3]
+            ],
+        })
 
     def calc_position_size(self, capital: float, price: float) -> int:
         if price <= 0:
@@ -348,6 +448,10 @@ def main() -> int:
         '--summary-output',
         help='筛选总览输出路径，支持 .json 或 .csv，统计基于全部已评估候选',
     )
+    parser.add_argument(
+        '--decision-log-output',
+        help='候选调仓决策日志输出路径，支持 .json 或 .csv，内容遵循当前过滤条件',
+    )
     args = parser.parse_args()
 
     history = _filter_history(
@@ -373,6 +477,9 @@ def main() -> int:
     if args.summary_output:
         _write_screening_summary(args.summary_output, summary)
         print(f'筛选总览: {args.summary_output}')
+    if args.decision_log_output:
+        _write_decision_log(args.decision_log_output, visible_results)
+        print(f'决策日志: {args.decision_log_output}')
     print(_render_table(visible_results[: args.top]))
     return 0
 
@@ -585,6 +692,7 @@ def _summary(
         'final_value': result['final_value'],
         'regime_counts': dict(strategy.regime_counts),
         'rejection_reasons': dict(strategy.rejection_reasons),
+        'decision_history': list(strategy.decision_history),
     }
 
 
@@ -788,6 +896,81 @@ def _write_screening_summary(path: str, summary: dict) -> Path:
         _write_screening_summary_csv(output_path, summary)
         return output_path
     raise ValueError('--summary-output 仅支持 .json 或 .csv')
+
+
+def _write_decision_log(path: str, results: list[dict]) -> Path:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    rows = _decision_log_rows(results)
+    suffix = output_path.suffix.lower()
+    if suffix == '.json':
+        output_path.write_text(
+            json.dumps(rows, ensure_ascii=False, indent=2),
+            encoding='utf-8',
+        )
+        return output_path
+    if suffix == '.csv':
+        _write_decision_log_csv(output_path, rows)
+        return output_path
+    raise ValueError('--decision-log-output 仅支持 .json 或 .csv')
+
+
+def _decision_log_rows(results: list[dict]) -> list[dict]:
+    rows = []
+    for item in results:
+        for decision in item.get('decision_history', []):
+            rows.append({
+                'candidate': item['name'],
+                'family': item['family'],
+                'gate_status': item['gate_status'],
+                'date': decision.get('date', ''),
+                'decision': decision.get('decision', ''),
+                'selected': decision.get('selected', []),
+                'target_exposure': decision.get('target_exposure'),
+                'market_strength': decision.get('market_strength'),
+                'breadth': decision.get('breadth'),
+                'weights': decision.get('weights', {}),
+                'actual_positions': decision.get('actual_positions', []),
+                'signals': decision.get('signals', []),
+                'top_candidates': decision.get('top_candidates', []),
+            })
+    return rows
+
+
+def _write_decision_log_csv(path: Path, rows: list[dict]) -> None:
+    fieldnames = [
+        'candidate',
+        'family',
+        'gate_status',
+        'date',
+        'decision',
+        'selected',
+        'target_exposure',
+        'market_strength',
+        'breadth',
+        'weights',
+        'actual_positions',
+        'signals',
+        'top_candidates',
+    ]
+    with path.open('w', newline='', encoding='utf-8') as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({
+                **row,
+                'selected': json.dumps(row['selected'], ensure_ascii=False),
+                'weights': json.dumps(row['weights'], ensure_ascii=False),
+                'actual_positions': json.dumps(
+                    row['actual_positions'],
+                    ensure_ascii=False,
+                ),
+                'signals': json.dumps(row['signals'], ensure_ascii=False),
+                'top_candidates': json.dumps(
+                    row['top_candidates'],
+                    ensure_ascii=False,
+                ),
+            })
 
 
 def _write_screening_summary_csv(path: Path, summary: dict) -> None:
