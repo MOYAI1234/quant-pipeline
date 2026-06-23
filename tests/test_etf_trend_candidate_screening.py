@@ -154,6 +154,33 @@ def test_pending_retry_recomputes_adaptive_exposure_before_buying_more():
     assert strategy.pending_weights == {'510300': 0.5}
 
 
+def test_static_pending_retry_preserves_capped_weights():
+    strategy = ETFTrendCandidateStrategy(['510300', '510500'], _config())
+    strategy.pending_targets = ['510300', '510500']
+    strategy.pending_weights = {
+        '510300': 0.50,
+        '510500': 0.09,
+    }
+
+    signals = strategy.generate_signal({
+        '510300': _bar(10.0),
+        '510500': _bar(10.0),
+    }, {
+        'capital': 10000,
+        'total_value': 10000,
+        'positions': {
+            '510300': {'shares': 100, 'current_price': 10.0},
+        },
+    })
+
+    assert strategy.pending_weights == {
+        '510300': 0.50,
+        '510500': 0.09,
+    }
+    assert [signal['symbol'] for signal in signals] == ['510300']
+    assert signals[0]['shares'] == 400
+
+
 def test_breadth_filter_blocks_new_buy_when_pool_trend_is_weak():
     config = TrendCandidateConfig(
         name='TEST-BREADTH',
