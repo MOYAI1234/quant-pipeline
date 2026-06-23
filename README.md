@@ -408,6 +408,7 @@ python -m compileall -q .
 - `QuantPipeline.run_once()` 单轮策略执行、订单状态流转、监控更新，以及启动/停止状态恢复保存
 - 日报/周报中输出数据源健康状态和告警事件摘要
 - `AlertManager` 结构化事件、JSONL 输出、亏损/持仓告警触发和历史记录裁剪
+- 聚宽等公开平台收益曲线 CSV 摘要脚本的编码兼容、样本外切片归一化和 CLI JSON 输出
 
 更多测试分层和验收口径见 [docs/testing.md](docs/testing.md)。
 
