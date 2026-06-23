@@ -161,7 +161,8 @@ class ETFTrendCandidateStrategy(BaseStrategy):
 
     def _retry_pending_targets(self, data: dict, portfolio: dict) -> list:
         selected = list(self.pending_targets or [])
-        weights = dict(self.pending_weights)
+        weights = self._retry_pending_weights(data, selected)
+        self.pending_weights = dict(weights)
         signals = _target_weight_signals(
             data,
             portfolio,
@@ -184,6 +185,33 @@ class ETFTrendCandidateStrategy(BaseStrategy):
         self.days_since_rebalance = self.candidate_config.rebalance_interval
         self.regime_counts.update(['pending_retry'])
         return signals
+
+    def _retry_pending_weights(self, data: dict, selected: list[str]) -> dict:
+        weights = {
+            symbol: weight
+            for symbol, weight in self.pending_weights.items()
+            if symbol in selected
+        }
+        if not selected or not weights:
+            return {}
+
+        current_exposure = sum(weights.values())
+        if current_exposure <= 0:
+            return weights
+
+        target_exposure = _target_exposure(
+            data,
+            self.etf_pool,
+            self.candidate_config,
+        )
+        scale = target_exposure / current_exposure
+        adjusted = {
+            symbol: min(weight * scale, self.candidate_config.max_weight_per_etf)
+            for symbol, weight in weights.items()
+        }
+        if target_exposure < current_exposure:
+            self.regime_counts.update(['exposure_reduced'])
+        return adjusted
 
     def calc_position_size(self, capital: float, price: float) -> int:
         if price <= 0:

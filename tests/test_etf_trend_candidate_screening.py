@@ -114,6 +114,46 @@ def test_target_rotation_retries_same_winner_until_target_weight_is_reached():
     assert strategy.pending_targets is None
 
 
+def test_pending_retry_recomputes_adaptive_exposure_before_buying_more():
+    config = TrendCandidateConfig(
+        **{
+            **_config(use_market_filter=True).__dict__,
+            'target_exposure': 1.0,
+            'exposure_mode': 'trend_strength',
+            'use_breadth_filter': True,
+            'breadth_threshold': 0.5,
+            'breadth_window': 2,
+            'market_trend_window': 2,
+        }
+    )
+    strategy = ETFTrendCandidateStrategy(['510300'], config)
+
+    strong_data = {
+        '510300': _bar(10.0, [8.0, 8.0, 10.0]),
+    }
+    marginal_data = {
+        '510300': _bar(10.1, [10.0, 10.0, 10.1]),
+    }
+
+    first_signals = strategy.generate_signal(strong_data, {
+        'capital': 10000,
+        'total_value': 10000,
+        'positions': {},
+    })
+    retry_signals = strategy.generate_signal(marginal_data, {
+        'capital': 9000,
+        'total_value': 10000,
+        'positions': {
+            '510300': {'shares': 100, 'current_price': 10.1},
+        },
+    })
+
+    assert first_signals[0]['shares'] == 1000
+    assert retry_signals[0]['action'] == 'buy'
+    assert retry_signals[0]['shares'] == 300
+    assert strategy.pending_weights == {'510300': 0.5}
+
+
 def test_breadth_filter_blocks_new_buy_when_pool_trend_is_weak():
     config = TrendCandidateConfig(
         name='TEST-BREADTH',
