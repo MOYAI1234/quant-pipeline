@@ -1,0 +1,30 @@
+name: DeepSeek V4 Pro Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  code-review:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    steps:
+      - name: DeepSeek V4 Pro Review
+        uses: AleksandrFurmenkovOfficial/ai-code-review@v1.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          owner: ${{ github.repository_owner }}
+          repo: ${{ github.event.repository.name }}
+          pr_number: ${{ github.event.number }}
+
+          ai_provider: 'deepseek'
+          deepseek_api_key: ${{ secrets.DEEPSEEK_API_KEY }}
+          deepseek_model: 'deepseek-v4-pro'
+
+          exclude_paths: 'node_modules/,dist/,build/,coverage/'
+          exclude_extensions: '.lock,.min.js,.min.css,.map'
+          fail_action_if_review_failed: 'false'
