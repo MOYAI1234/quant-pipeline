@@ -6,6 +6,7 @@
 
 | 策略 ID | 脚本 | 状态 | 说明 |
 |---|---|---|---|
+| `ETF-COMMERCIAL-SPACE-CORE-GUARD-PLAY` | [etf_commercial_space_core_guard_play.py](etf_commercial_space_core_guard_play.py) | 试玩 / 待聚宽复验 | 商用航天 159206 daily_core_guard：事件驱动主题只在趋势确认后 50% 仓位参与，弱势保持现金 |
 | `ETF-ADAPT-EXP-007` | [etf_adaptive_exposure_guard_v1.py](etf_adaptive_exposure_guard_v1.py) | rejected 诊断归档 | ETF 自适应目标仓位：聚宽复验收益和回撤均未达稳健准入，仅用于复盘本地/聚宽差异 |
 | `ETF-EQ-MOM-GUARD-006` | [etf_equity_momentum_guard_v1.py](etf_equity_momentum_guard_v1.py) | 已撤回，保留复现材料 | 权益 ETF 动量防守：修复成交状态后本地结果失效，暂不优先跑聚宽 |
 | `ETF-MOM-ROT-001` | [etf_momentum_rotation_v1.py](etf_momentum_rotation_v1.py) | baseline 对照 | ETF 动量质量轮动 v1，当前作为高回撤/成本敏感对照组 |
@@ -22,6 +23,16 @@
    - 基准：沪深 300，脚本内设置为 `000300.XSHG`
 4. 跑完后记录总收益、年化、最大回撤、夏普、成交次数、换手、期末持仓和关键调仓日志。
 5. 如果仍需复现观察项或失败案例，将结果回填到对应策略候选记录和 [稳健 ETF 策略研究台账](../../docs/strategy-lab/backtest-ledger.md)。
+
+## 试玩脚本
+
+### `ETF-COMMERCIAL-SPACE-CORE-GUARD-PLAY`
+
+- 主线：只跟踪 159206 永赢国证商用卫星通信产业 ETF，用于验证 2026-06-29 商用航天事件窗口假设。
+- 评估：每日开盘评估，但常规调仓至少间隔 5 个交易日；同一交易日只运行一次。
+- 仓位：沪深300趋势和 159206 自身趋势都确认时，目标仓位 50%；否则保持现金。
+- 本地筛选参考：2024-01-01 至 2026-06-26，年化约 8.99%，最大回撤约 12.37%，纯现金日约 70.83%。该结果只是本地 sanity，需要聚宽复验。
+- 建议先跑：`2024-01-01` 至最近可用交易日，初始资金 `100000`；如果聚宽提示 159206 历史不足或代码不可用，记录平台问题，不要直接替换标的。
 
 ## 观察项脚本
 
