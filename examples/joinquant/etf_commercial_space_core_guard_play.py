@@ -184,7 +184,9 @@ def candidate_factor(security, already_held=False):
         security,
         allow_high_limit=already_held,
     )
-    if not tradable:
+    # Keep an existing holding through transient current_data gaps, but do not
+    # treat missing data as tradable for new buys or order placement.
+    if not tradable and not (already_held and reason == "not_in_current_data"):
         return None, reason
 
     min_history_days = max(
