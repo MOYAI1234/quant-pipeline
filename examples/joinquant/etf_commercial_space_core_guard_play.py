@@ -53,7 +53,7 @@ def initialize(context):
     g.last_trade_date = None
     g.debug = True
     g.debug_count = 0
-    g.debug_limit = 20
+    g.debug_limit = 8
 
     set_order_cost(
         OrderCost(
@@ -99,7 +99,7 @@ def rebalance(context):
     ):
         return
 
-    ranked = rank_candidates()
+    ranked = rank_candidates(context)
     selected = [item["security"] for item in ranked[: g.max_holdings]]
 
     log.info(
@@ -164,11 +164,12 @@ def trend_breadth():
     return float(above_count) / float(valid_count)
 
 
-def rank_candidates():
+def rank_candidates(context):
     candidates = []
     rejections = []
+    held_symbols = set(current_position_symbols(context))
     for security in g.etf_pool:
-        item, reason = candidate_factor(security)
+        item, reason = candidate_factor(security, security in held_symbols)
         if item is None:
             rejections.append((security, reason))
         else:
@@ -178,8 +179,11 @@ def rank_candidates():
     return ranked
 
 
-def candidate_factor(security):
-    tradable, reason = can_trade_detail(security)
+def candidate_factor(security, already_held=False):
+    tradable, reason = can_trade_detail(
+        security,
+        allow_high_limit=already_held,
+    )
     if not tradable:
         return None, reason
 
@@ -250,7 +254,9 @@ def apply_targets(context, selected, target_exposure):
     if not selected or target_exposure <= 0:
         return
 
-    target_value = context.portfolio.total_value * target_exposure
+    target_value = (
+        context.portfolio.total_value * target_exposure / float(len(selected))
+    )
     for security in selected:
         if can_trade(security):
             order_target_value(security, target_value)
@@ -326,16 +332,18 @@ def can_trade(security):
     return tradable
 
 
-def can_trade_detail(security):
+def can_trade_detail(security, allow_high_limit=False):
     current_data = get_current_data()
     if security not in current_data:
-        return True, "current_data_missing_assume_tradable"
+        return False, "not_in_current_data"
     data = current_data[security]
     if data.paused:
         return False, "paused"
     if data.last_price is None or data.last_price <= 0:
         return False, "invalid_last_price"
     if data.high_limit is not None and data.last_price >= data.high_limit:
+        if allow_high_limit:
+            return True, "held_at_high_limit"
         return False, "at_high_limit"
     if data.low_limit is not None and data.last_price <= data.low_limit:
         return False, "at_low_limit"
