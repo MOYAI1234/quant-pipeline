@@ -1,51 +1,52 @@
 # 测试与验收指南
 
-本文档说明 `quant-pipeline` 当前 mock/simulator 阶段的测试入口、覆盖范围和交付验收口径。
+本文档说明 `quant-pipeline` 当前 mock/simulator 阶段的测试入口、覆盖范围和交付验收口径。需要 Python 3.10 或更高版本，所有命令都应在仓库根目录运行。
 
 ## 基础命令
 
-完整测试：
+安装开发依赖：
 
-```powershell
-python -m pytest -q
+```shell
+python -m pip install -r requirements-dev.txt
 ```
 
-语法检查：
+静态检查与完整测试：
 
-```powershell
-python -m compileall -q .
+```shell
+ruff check .
+python -m pytest -q
 ```
 
 CLI smoke：
 
-```powershell
-python cli\commands.py --help
-python cli\commands.py diagnose
-python cli\commands.py health
-python cli\commands.py config show
-python cli\commands.py config init --help
-python cli\commands.py config validate
-python cli\commands.py report --type daily
-python cli\commands.py backtest --strategy grid
-python cli\commands.py backtest --strategy rotation
-python cli\commands.py history probe --help
-python cli\commands.py history export-grid --help
-python cli\commands.py history export-rotation --help
+```shell
+python cli/commands.py --help
+python cli/commands.py diagnose
+python cli/commands.py health
+python cli/commands.py config show
+python cli/commands.py config init --help
+python cli/commands.py config validate
+python cli/commands.py report --type daily
+python cli/commands.py backtest --strategy grid
+python cli/commands.py backtest --strategy rotation
+python cli/commands.py history probe --help
+python cli/commands.py history export-grid --help
+python cli/commands.py history export-rotation --help
 ```
 
-当前离线基线：`pytest` 应通过 407 个测试，并跳过 2 个显式启用的 AKShare / TuShare live test。
+测试数量会随实现演进，最新结果以 CI 和本地 `pytest` 输出为准。AKShare / TuShare live test 默认跳过，只有显式配置后才访问网络。
 
 研究/模拟版可随时运行一键离线验收，确认当前工作树仍满足交付基线：
 
-```powershell
-python scripts\verify_offline.py
+```shell
+python scripts/verify_offline.py
 ```
 
 完整回测产物验收会同时检查 grid / rotation 的报告、CSV schema、组合一致性和确定性：
 
-```powershell
-python scripts\verify_backtest_artifacts.py
-python scripts\verify_backtest_artifacts.py --output-dir data\backtest-acceptance
+```shell
+python scripts/verify_backtest_artifacts.py
+python scripts/verify_backtest_artifacts.py --output-dir data/backtest-acceptance
 ```
 
 ## 分层测试
@@ -54,8 +55,8 @@ python scripts\verify_backtest_artifacts.py --output-dir data\backtest-acceptanc
 
 相关测试：
 
-```powershell
-python -m pytest tests\test_adapters.py tests\test_data_manager_contracts.py tests\test_data_cache.py tests\test_cli_health.py -q
+```shell
+python -m pytest tests/test_adapters.py tests/test_data_manager_contracts.py tests/test_data_cache.py tests/test_cli_health.py -q
 ```
 
 验收重点：
@@ -73,8 +74,8 @@ python -m pytest tests\test_adapters.py tests\test_data_manager_contracts.py tes
 
 相关测试：
 
-```powershell
-python -m pytest tests\test_simulator.py tests\test_e2e_grid.py tests\test_rotation_strategy.py tests\test_risk_manager.py -q
+```shell
+python -m pytest tests/test_simulator.py tests/test_e2e_grid.py tests/test_rotation_strategy.py tests/test_risk_manager.py -q
 ```
 
 验收重点：
@@ -89,8 +90,8 @@ python -m pytest tests\test_simulator.py tests\test_e2e_grid.py tests\test_rotat
 
 相关测试：
 
-```powershell
-python -m pytest tests\test_backtest_runner.py tests\test_backtest_history_adapter.py tests\test_cli_history_probe.py tests\test_trading_calendar.py tests\test_akshare_history_provider_example.py tests\test_tushare_history_provider_example.py -q
+```shell
+python -m pytest tests/test_backtest_runner.py tests/test_backtest_history_adapter.py tests/test_cli_history_probe.py tests/test_trading_calendar.py tests/test_akshare_history_provider_example.py tests/test_tushare_history_provider_example.py -q
 ```
 
 验收重点：
@@ -111,8 +112,8 @@ python -m pytest tests\test_backtest_runner.py tests\test_backtest_history_adapt
 
 相关测试：
 
-```powershell
-python -m pytest tests\test_state_persistence.py tests\test_pipeline_run_once.py tests\test_cli_state.py -q
+```shell
+python -m pytest tests/test_state_persistence.py tests/test_pipeline_run_once.py tests/test_cli_state.py -q
 ```
 
 验收重点：
@@ -125,8 +126,8 @@ python -m pytest tests\test_state_persistence.py tests\test_pipeline_run_once.py
 
 相关测试：
 
-```powershell
-python -m pytest tests\test_report_health.py tests\test_alerts.py tests\test_cli_alerts.py tests\test_cli_config.py tests\test_cli_diagnose.py -q
+```shell
+python -m pytest tests/test_report_health.py tests/test_alerts.py tests/test_cli_alerts.py tests/test_cli_config.py tests/test_cli_diagnose.py -q
 ```
 
 验收重点：
@@ -141,47 +142,47 @@ python -m pytest tests\test_report_health.py tests\test_alerts.py tests\test_cli
 
 grid：
 
-```powershell
-python cli\commands.py backtest --strategy grid
-python cli\commands.py backtest --strategy grid --equity-output data\grid-equity.csv
-python cli\commands.py backtest --strategy grid --portfolio-output data\grid-portfolio.csv
-python cli\commands.py backtest --strategy grid --trades-output data\grid-trades.csv
-python cli\commands.py backtest --strategy grid --positions-output data\grid-positions.csv
-python cli\commands.py backtest --strategy grid --rejections-output data\grid-rejections.csv
+```shell
+python cli/commands.py backtest --strategy grid
+python cli/commands.py backtest --strategy grid --equity-output data/grid-equity.csv
+python cli/commands.py backtest --strategy grid --portfolio-output data/grid-portfolio.csv
+python cli/commands.py backtest --strategy grid --trades-output data/grid-trades.csv
+python cli/commands.py backtest --strategy grid --positions-output data/grid-positions.csv
+python cli/commands.py backtest --strategy grid --rejections-output data/grid-rejections.csv
 ```
 
 rotation：
 
-```powershell
-python cli\commands.py backtest --strategy rotation
-python cli\commands.py backtest --strategy rotation --equity-output data\rotation-equity.csv
-python cli\commands.py backtest --strategy rotation --portfolio-output data\rotation-portfolio.csv
-python cli\commands.py backtest --strategy rotation --trades-output data\rotation-trades.csv
-python cli\commands.py backtest --strategy rotation --positions-output data\rotation-positions.csv
-python cli\commands.py backtest --strategy rotation --rejections-output data\rotation-rejections.csv
+```shell
+python cli/commands.py backtest --strategy rotation
+python cli/commands.py backtest --strategy rotation --equity-output data/rotation-equity.csv
+python cli/commands.py backtest --strategy rotation --portfolio-output data/rotation-portfolio.csv
+python cli/commands.py backtest --strategy rotation --trades-output data/rotation-trades.csv
+python cli/commands.py backtest --strategy rotation --positions-output data/rotation-positions.csv
+python cli/commands.py backtest --strategy rotation --rejections-output data/rotation-rejections.csv
 ```
 
 ## 历史数据转换验收
 
 本地 JSON 到 grid CSV：
 
-```powershell
-python cli\commands.py history export-grid --input-json path\to\grid-history.json --output data\grid-history.csv
-python cli\commands.py backtest --strategy grid --history data\grid-history.csv
+```shell
+python cli/commands.py history export-grid --input-json path/to/grid-history.json --output data/grid-history.csv
+python cli/commands.py backtest --strategy grid --history data/grid-history.csv
 ```
 
 本地 JSON 到 rotation CSV：
 
-```powershell
-python cli\commands.py history export-rotation --input-json path\to\rotation-histories.json --lookback 3 --output data\rotation-history.csv
-python cli\commands.py backtest --strategy rotation --history data\rotation-history.csv
+```shell
+python cli/commands.py history export-rotation --input-json path/to/rotation-histories.json --lookback 3 --output data/rotation-history.csv
+python cli/commands.py backtest --strategy rotation --history data/rotation-history.csv
 ```
 
 未提供 `--input-json` 时，`history export-*` 会调用 `DataManager.get_etf_history()`，并且必须同时指定 `--start-date` 和 `--end-date`：
 
-```powershell
-python cli\commands.py history export-grid --config path\to\config.json --symbol 510300 --start-date 2026-01-01 --end-date 2026-01-31 --output data\grid-history.csv
-python cli\commands.py history export-rotation --config path\to\config.json --etf-pool 510300,159915 --start-date 2026-01-01 --end-date 2026-01-31 --lookback 3 --output data\rotation-history.csv
+```shell
+python cli/commands.py history export-grid --config path/to/config.json --symbol 510300 --start-date 2026-01-01 --end-date 2026-01-31 --output data/grid-history.csv
+python cli/commands.py history export-rotation --config path/to/config.json --etf-pool 510300,159915 --start-date 2026-01-01 --end-date 2026-01-31 --lookback 3 --output data/rotation-history.csv
 ```
 
 当前默认 adapter 是 mock/空历史；真实历史数据必须通过配置文件显式设置 `data.mx_data.mode=real` 和 `data.mx_data.history_command`，不代表仓库内置真实行情服务或凭据。

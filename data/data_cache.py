@@ -1,5 +1,5 @@
 import time
-from typing import Any, Optional
+from typing import Any
 
 _SENTINEL = object()  # 用于区分"缓存不存在"和"缓存值为 None"
 

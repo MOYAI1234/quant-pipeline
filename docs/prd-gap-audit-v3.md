@@ -3,7 +3,7 @@
 首次审计：2026-06-01
 最近更新：2026-06-20
 代码基线：`a5f271c` (`master`)
-PRD 来源：`D:\claudecode\docs\misc\quant-assistant-prd-v3.md`
+PRD 来源：工作区外部需求文档（不随本仓库分发）。
 
 ## 结论
 
@@ -15,16 +15,16 @@ PRD 来源：`D:\claudecode\docs\misc\quant-assistant-prd-v3.md`
 
 ## 当前验证结果
 
-已在 `D:\claudecode\quant-pipeline` 执行：
+已在仓库根目录执行：
 
-```powershell
+```shell
 python scripts\verify_offline.py
 ```
 
 结果：
 
 - `compileall` 通过
-- 离线 `pytest` 通过，`407 passed, 2 skipped`
+- 离线 `pytest` 通过；测试数量以 CI 和命令输出为准
 - CLI help 可用
 - CLI daily report 可生成包含数据源健康状态和缓存策略的空组合报告
 - CLI health 可输出数据源健康状态

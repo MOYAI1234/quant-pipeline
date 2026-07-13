@@ -1,5 +1,3 @@
-import pytest
-
 from strategy.grid_strategy import GridStrategy
 from execution.simulator import Simulator
 from risk.risk_manager import RiskManager

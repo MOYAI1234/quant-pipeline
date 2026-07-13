@@ -2,8 +2,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 from research.etf_momentum_rotation import (
     MomentumRotationConfig,
     evaluate_snapshot,

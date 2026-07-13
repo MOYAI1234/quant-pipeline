@@ -45,7 +45,7 @@
 
 ```powershell
 python scripts\summarize_public_backtest.py `
-  --input "C:\Users\69050\Downloads\result_1.csv" `
+  --input "<path-to-export.csv>" `
   --start-date 2022-01-04 `
   --initial-capital 100000
 ```
