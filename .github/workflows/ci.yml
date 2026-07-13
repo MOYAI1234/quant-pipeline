@@ -8,11 +8,10 @@ on:
 permissions:
   contents: read
 
-# Windows hosted runners use an English legacy code page by default. The CLI
-# intentionally emits Chinese text, and pytest launches many CLI subprocesses.
+# Force Python and its subprocesses into UTF-8 mode. The CLI intentionally
+# emits Chinese text, while Windows hosted runners default to a legacy code page.
 env:
   PYTHONUTF8: '1'
-  PYTHONIOENCODING: utf-8
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
