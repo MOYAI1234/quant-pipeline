@@ -69,7 +69,7 @@ python scripts\screen_etf_trend_candidates.py `
   --decision-log-output data\screening-decisions.csv
 ```
 
-当前批量筛选包含 `daily_core_guard`、`swing_trend_guard`、`adaptive_exposure_guard` 和 `recovery_trend_guard` 四类 ETF 主线候选，可用 `--factor-family` 单独运行。`daily_core_guard` 允许日评估，但通过趋势广度和换仓去抖降低无效交易；`swing_trend_guard` 用于更低换手的波段对照；`adaptive_exposure_guard` 在趋势波段框架上加入市场趋势强度和 ETF 广度分层仓位；`recovery_trend_guard` 进一步要求标的从近期回撤区间恢复到中上部后才进入候选，用于验证不抢弱反弹能否改善回撤。它们都只在自动准入后才进入公开平台复验。
+当前批量筛选包含 `daily_core_guard`、`swing_trend_guard`、`adaptive_exposure_guard`、`recovery_trend_guard`、`confirmed_trend_guard` 和 `drawdown_pause_guard` 六类 ETF 主线候选，可用 `--factor-family` 单独运行。`daily_core_guard` 允许日评估，但通过趋势广度和换仓去抖降低无效交易；`swing_trend_guard` 用于更低换手的波段对照；`adaptive_exposure_guard` 在趋势波段框架上加入市场趋势强度和 ETF 广度分层仓位；`recovery_trend_guard` 进一步要求标的从近期回撤区间恢复到中上部后才进入候选；`confirmed_trend_guard` 追加市场趋势强度二次确认；`drawdown_pause_guard` 在组合层回撤达到阈值后清仓并暂停固定评估日数，用于验证不引入债券/黄金时的风控边界。它们都只在自动准入后才进入公开平台复验。
 
 失败处理：
 
@@ -127,4 +127,6 @@ python scripts\screen_etf_trend_candidates.py `
 | `ETF-DUAL-MOM-002` | 阶段 1 基线 | 否 | 低换手但最大回撤约 27.50% |
 | `ETF-DAA-003` | 阶段 1 观察 | 否 | 风险开关未明显降低回撤 |
 | `ETF-EQ-MOM-GUARD-006` | 阶段 1 观察 | 否 | 修复成交状态后原候选不再满足回撤和收益门槛 |
-| ETF 核心池轮动/目标仓位控制 | 阶段 0 | 否 | 待登记和验证 |
+| `confirmed_trend_guard` | 阶段 1 失败 | 否 | 完整区间最大回撤仍约 19.12% |
+| `drawdown_pause_guard` | 阶段 1 观察 | 否 | 完整区间回撤合格但年化约 5.07%，尚未达到公开平台复验门槛 |
+| ETF 核心池轮动/目标仓位控制 | 阶段 0 | 否 | 待进一步登记和验证 |

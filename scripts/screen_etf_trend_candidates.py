@@ -42,6 +42,9 @@ class TrendCandidateConfig:
     min_switch_score_gap: float
     factor_mode: str = 'momentum'
     recovery_threshold: float = 0.0
+    min_market_strength: float = 0.0
+    portfolio_pause_drawdown: float = 0.0
+    pause_after_drawdown_days: int = 0
 
     @property
     def required_prices(self) -> int:
@@ -79,12 +82,23 @@ class ETFTrendCandidateStrategy(BaseStrategy):
         self.decision_history = []
         self.regime_counts = Counter()
         self.rejection_reasons = Counter()
+        self.peak_value = None
+        self.pause_days_remaining = 0
+        self.pause_count = 0
 
     def generate_signal(self, data: dict, portfolio: dict = None) -> list:
         portfolio = portfolio or {}
         self.evaluation_count += 1
         self.days_since_rebalance += 1
         actual_positions = _actual_position_symbols(portfolio)
+
+        pause_signals = self._drawdown_pause_signals(
+            data,
+            portfolio,
+            actual_positions,
+        )
+        if pause_signals is not None:
+            return pause_signals
 
         if not self._market_ok(data):
             if actual_positions:
@@ -205,6 +219,78 @@ class ETFTrendCandidateStrategy(BaseStrategy):
             target_exposure,
             signals,
             ranked,
+        )
+        return signals
+
+    def _drawdown_pause_signals(
+        self,
+        data: dict,
+        portfolio: dict,
+        actual_positions: list[str],
+    ) -> list | None:
+        config = self.candidate_config
+        total_value = float(portfolio.get('total_value') or 0)
+        if total_value <= 0 or config.portfolio_pause_drawdown <= 0:
+            return None
+
+        if self.peak_value is None or total_value > self.peak_value:
+            self.peak_value = total_value
+
+        if self.pause_days_remaining > 0:
+            self.pause_days_remaining -= 1
+            self.current_targets = []
+            self.pending_targets = None
+            self.pending_weights = {}
+            self.regime_counts.update(['portfolio_pause'])
+            if actual_positions:
+                signals = _target_weight_signals(
+                    data,
+                    portfolio,
+                    [],
+                    {},
+                    '组合回撤暂停中清仓',
+                )
+                self._record_decision(
+                    data,
+                    portfolio,
+                    'portfolio_pause_clear',
+                    [],
+                    {},
+                    0,
+                    signals,
+                )
+                return signals
+            return []
+
+        if not actual_positions or not self.peak_value:
+            return None
+
+        drawdown = (self.peak_value - total_value) / self.peak_value
+        if drawdown < config.portfolio_pause_drawdown:
+            return None
+
+        self.pause_count += 1
+        self.pause_days_remaining = config.pause_after_drawdown_days
+        self.current_targets = []
+        self.pending_targets = []
+        self.pending_weights = {}
+        self.days_since_rebalance = 0
+        self.regime_counts.update(['portfolio_pause_trigger'])
+        signals = _target_weight_signals(
+            data,
+            portfolio,
+            [],
+            {},
+            '组合回撤暂停触发',
+        )
+        self._record_decision(
+            data,
+            portfolio,
+            'portfolio_pause_trigger',
+            [],
+            {},
+            0,
+            signals,
         )
         return signals
 
@@ -349,6 +435,13 @@ class ETFTrendCandidateStrategy(BaseStrategy):
             if prices[-1] < sum(prices[-window:]) / window:
                 self.rejection_reasons.update(['market_trend_weak'])
                 return False
+            market_strength = _market_trend_strength(bar, window)
+            if (
+                market_strength is None
+                or market_strength < config.min_market_strength
+            ):
+                self.rejection_reasons.update(['market_confirmation_weak'])
+                return False
         if config.use_breadth_filter:
             breadth = _trend_breadth(data, self.etf_pool, config.breadth_window)
             if breadth is None:
@@ -447,6 +540,8 @@ def main() -> int:
             'swing_trend_guard',
             'adaptive_exposure_guard',
             'recovery_trend_guard',
+            'confirmed_trend_guard',
+            'drawdown_pause_guard',
         ],
         default='all',
         help='只运行指定 ETF 因子族，默认运行全部',
@@ -585,6 +680,43 @@ def _candidate_configs(
             'factor_modes': ['recovery'],
             'recovery_thresholds': [0.60],
         },
+        {
+            'family': 'confirmed_trend_guard',
+            'rebalance_intervals': [10, 20],
+            'max_holdings': [1],
+            'fast_windows': [40, 60],
+            'slow_windows': [120, 180],
+            'trend_windows': [120],
+            'market_trend_windows': [160, 200],
+            'breadth_windows': [120],
+            'breadth_thresholds': [0.50, 0.60],
+            'max_recent_drawdowns': [0.16],
+            'require_own_trends': [True],
+            'weight_modes': ['equal'],
+            'target_exposures': [0.80, 1.00],
+            'exposure_modes': ['trend_strength'],
+            'min_switch_score_gaps': [0.01],
+            'min_market_strengths': [0.02, 0.04],
+        },
+        {
+            'family': 'drawdown_pause_guard',
+            'rebalance_intervals': [10, 20],
+            'max_holdings': [1],
+            'fast_windows': [40, 60],
+            'slow_windows': [120, 180],
+            'trend_windows': [120],
+            'market_trend_windows': [160],
+            'breadth_windows': [120],
+            'breadth_thresholds': [0.50],
+            'max_recent_drawdowns': [0.16],
+            'require_own_trends': [True],
+            'weight_modes': ['equal'],
+            'target_exposures': [0.80, 1.00],
+            'exposure_modes': ['trend_strength'],
+            'min_switch_score_gaps': [0.01],
+            'portfolio_pause_drawdowns': [0.08, 0.10, 0.12],
+            'pause_after_drawdown_days': [10, 20],
+        },
     ]
     for profile in profiles:
         if factor_family != 'all' and profile['family'] != factor_family:
@@ -615,6 +747,9 @@ def _profile_candidate_configs(
         min_switch_score_gap,
         factor_mode,
         recovery_threshold,
+        min_market_strength,
+        portfolio_pause_drawdown,
+        pause_after_drawdown_days,
     ) in itertools.product(
         profile['rebalance_intervals'],
         profile['max_holdings'],
@@ -632,6 +767,9 @@ def _profile_candidate_configs(
         profile['min_switch_score_gaps'],
         profile.get('factor_modes', ['momentum']),
         profile.get('recovery_thresholds', [0.0]),
+        profile.get('min_market_strengths', [0.0]),
+        profile.get('portfolio_pause_drawdowns', [0.0]),
+        profile.get('pause_after_drawdown_days', [0]),
     ):
         if slow_window <= fast_window:
             continue
@@ -644,7 +782,9 @@ def _profile_candidate_configs(
             f"weight={weight_mode} exposure={target_exposure} "
             f"exposureMode={exposure_mode} "
             f"switchGap={min_switch_score_gap} "
-            f"factor={factor_mode} recovery={recovery_threshold}"
+            f"factor={factor_mode} recovery={recovery_threshold} "
+            f"marketConfirm={min_market_strength} "
+            f"pauseDD={portfolio_pause_drawdown} pauseDays={pause_after_drawdown_days}"
         )
         configs.append(TrendCandidateConfig(
             name=name,
@@ -671,6 +811,9 @@ def _profile_candidate_configs(
             min_switch_score_gap=min_switch_score_gap,
             factor_mode=factor_mode,
             recovery_threshold=recovery_threshold,
+            min_market_strength=min_market_strength,
+            portfolio_pause_drawdown=portfolio_pause_drawdown,
+            pause_after_drawdown_days=pause_after_drawdown_days,
         ))
     return configs
 
@@ -743,6 +886,7 @@ def _summary(
         'final_value': result['final_value'],
         'regime_counts': dict(strategy.regime_counts),
         'rejection_reasons': dict(strategy.rejection_reasons),
+        'pause_count': strategy.pause_count,
         'decision_history': list(strategy.decision_history),
     }
 
@@ -891,6 +1035,7 @@ def _write_candidate_results_csv(path: Path, results: list[dict]) -> None:
         'annual_commission_ratio',
         'max_daily_trades',
         'cash_day_ratio',
+        'pause_count',
         'final_value',
         'gate_reasons',
         'regime_counts',
@@ -918,6 +1063,7 @@ def _candidate_csv_row(item: dict) -> dict:
         'annual_commission_ratio': item['annual_commission_ratio'],
         'max_daily_trades': item['max_daily_trades'],
         'cash_day_ratio': item['cash_day_ratio'],
+        'pause_count': item.get('pause_count', 0),
         'final_value': item['final_value'],
         'gate_reasons': ';'.join(item.get('gate_reasons', [])),
         'regime_counts': json.dumps(
