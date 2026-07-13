@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 私密安全报告
+    url: https://github.com/MOYAI1234/quant-pipeline/security/advisories/new
+    about: 请通过私密渠道报告漏洞，不要创建公开 Issue。

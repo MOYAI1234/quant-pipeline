@@ -7,7 +7,7 @@ from strategy.base import BaseStrategy
 
 from research.etf_dual_momentum import (
     calculate_factor,
-    load_rotation_csv,
+    load_rotation_csv as load_rotation_csv,
     month_end_dates,
 )
 

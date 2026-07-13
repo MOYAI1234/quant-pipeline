@@ -1,0 +1,57 @@
+name: Bug 报告
+description: 报告可以稳定复现的代码、CLI 或文档问题
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: 请勿提交真实凭据、账户信息或无再分发授权的行情文件。
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: 实际发生了什么？你期望发生什么？
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 最小复现步骤
+      description: 请提供可使用 mock 或合成数据复现的命令和输入。
+      placeholder: |
+        1. python ...
+        2. ...
+    validations:
+      required: true
+
+  - type: input
+    id: commit
+    attributes:
+      label: 提交或版本
+      placeholder: git rev-parse --short HEAD
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: 环境
+      placeholder: Windows 11 / Python 3.12
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 脱敏后的日志
+      render: shell
+
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: 安全确认
+      options:
+        - label: 我已移除凭据、账户信息、私有地址和受限数据。
+          required: true

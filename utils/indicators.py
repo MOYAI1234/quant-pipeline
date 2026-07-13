@@ -1,6 +1,3 @@
-import numpy as np
-
-
 def calc_ma(prices: list, period: int) -> list:
     if len(prices) < period:
         return []

@@ -159,7 +159,6 @@ class Simulator(BaseExecutor):
     def _execute_rebalance(self, order: dict) -> bool:
         symbol = order.get('symbol', '')
         target_weight = order.get('target_weight', 0)
-        reason = order.get('reason', 'rebalance')
 
         if not symbol or target_weight <= 0:
             return False

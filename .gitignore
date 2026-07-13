@@ -37,6 +37,8 @@ coverage.xml
 cover/
 *.log
 data/state.json
+# 本地行情、回测输入和研究产物可能受数据源许可限制，不提交到仓库。
+data/history/
 config.local.json
 .env
 .venv

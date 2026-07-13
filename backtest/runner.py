@@ -9,12 +9,12 @@ from pathlib import Path
 from backtest.execution_model import (
     BacktestExecutionModel,
     _apply_slippage,
-    _build_volume_limits,
-    _consume_signal_volume,
+    _build_volume_limits as _build_volume_limits,
+    _consume_signal_volume as _consume_signal_volume,
     _signal_shares,
-    _signal_within_volume_limit,
-    _validate_slippage_rate,
-    _validate_volume_participation,
+    _signal_within_volume_limit as _signal_within_volume_limit,
+    _validate_slippage_rate as _validate_slippage_rate,
+    _validate_volume_participation as _validate_volume_participation,
 )
 from backtest.trading_calendar import TradingCalendar
 from execution.simulator import Simulator

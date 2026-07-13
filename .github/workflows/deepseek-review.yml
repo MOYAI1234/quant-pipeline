@@ -1,4 +1,4 @@
-name: DeepSeek V4 Pro Code Review
+name: Optional DeepSeek V4 Pro Code Review
 
 on:
   pull_request:
@@ -11,10 +11,15 @@ permissions:
 jobs:
   code-review:
     runs-on: ubuntu-latest
-    if: github.event.pull_request.draft == false
+    timeout-minutes: 10
+    # Fork pull requests cannot access DEEPSEEK_API_KEY. The required, secret-free
+    # CI workflow still runs for external contributors.
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - name: DeepSeek V4 Pro Review
-        uses: AleksandrFurmenkovOfficial/ai-code-review@v1.0
+        uses: AleksandrFurmenkovOfficial/ai-code-review@1d75404db7d56026c81700b5b8e5e8c613234e69 # v1.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           owner: ${{ github.repository_owner }}
