@@ -8,11 +8,9 @@
 
 import argparse
 import csv
-import json
 import os
 import sys
 import time
-from datetime import datetime, date
 from pathlib import Path
 
 import requests

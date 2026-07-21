@@ -11,11 +11,8 @@
 
 from __future__ import annotations
 
-import json
 import math
-from collections import Counter
-from dataclasses import dataclass, field
-from pathlib import Path
+from dataclasses import dataclass
 
 # --- Factor Configs ---
 
@@ -404,7 +401,6 @@ def calc_vol_surge(
         return None, 'invalid_prices'
     
     amount = bar.get("amount", 0)
-    volume = bar.get("volume", 0)
     
     # 20日动量
     mom_20d = prices[-1] / prices[-21] - 1.0 if len(prices) >= 21 else 0
