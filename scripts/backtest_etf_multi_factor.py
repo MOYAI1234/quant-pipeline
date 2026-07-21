@@ -13,13 +13,10 @@
 """
 
 import argparse
-import csv
 import json
 import math
 import sys
-from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -40,7 +37,6 @@ from research.etf_multi_factor import (
     calc_ret_skew,
     calc_vol_surge,
     evaluate_multi_factor_snapshot,
-    MultiFactorResult,
 )
 
 
@@ -93,13 +89,11 @@ def run_backtest_for_factor(
 ) -> BacktestReport:
     """用指定因子运行回测。"""
     
-    symbols_list = list(history[0]["symbols"].keys()) if history else []
     
     cash = account.initial_capital
     positions = {}        # symbol -> {shares, avg_price}
     equity_curve = []
     trades_log = []
-    last_snapshot_idx = -1
     
     trade_dates_by_signal = []  # 记录每次调仓日期
     
@@ -323,7 +317,6 @@ def _compute_performance(
     trade_count = len(trades)
     
     # 平均持仓数
-    holding_counts = []
     current_positions = {}
     # 简化: 用 trades 推断
     for t in trades:
@@ -397,14 +390,14 @@ def render_comparison_table(reports: list[BacktestReport]) -> str:
 def render_markdown_report(reports: list[BacktestReport], etf_pool: list[str], date_range: str) -> str:
     """生成完整的 Markdown 报告。"""
     lines = []
-    lines.append(f"# ETF 多因子回测报告")
-    lines.append(f"")
+    lines.append("# ETF 多因子回测报告")
+    lines.append("")
     lines.append(f"**回测区间**: {date_range}")
     lines.append(f"**ETF 池**: {', '.join(etf_pool)}")
-    lines.append(f"**初始资金**: ¥100,000")
-    lines.append(f"**手续费**: 0.03% (最低¥5)")
-    lines.append(f"**滑点**: 0.1%")
-    lines.append(f"")
+    lines.append("**初始资金**: ¥100,000")
+    lines.append("**手续费**: 0.03% (最低¥5)")
+    lines.append("**滑点**: 0.1%")
+    lines.append("")
     
     lines.append(render_comparison_table(reports))
     
