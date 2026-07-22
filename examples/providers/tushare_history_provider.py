@@ -25,6 +25,7 @@ TUSHARE_AMOUNT_UNIT_YUAN = 1000
 TUSHARE_FUND_DAILY_ROW_LIMIT = 5000
 TUSHARE_HISTORY_PAGE_DAYS = 3650
 TUSHARE_HISTORY_FIELDS = 'trade_date,open,high,low,close,vol,amount'
+VALID_ADJUSTMENTS = {'none', 'qfq'}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -34,6 +35,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--symbol', required=True, help='ETF code, e.g. 510300')
     parser.add_argument('--start-date', required=True, help='YYYY-MM-DD')
     parser.add_argument('--end-date', required=True, help='YYYY-MM-DD')
+    parser.add_argument(
+        '--adjust',
+        choices=sorted(VALID_ADJUSTMENTS),
+        default='none',
+        help='Price adjustment mode; qfq normalizes fund_adj to the latest close.',
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -41,6 +48,7 @@ def main(argv: list[str] | None = None) -> int:
             args.symbol,
             args.start_date,
             args.end_date,
+            adjustment=args.adjust,
         )
     except Exception as exc:  # pragma: no cover - exercised in real provider runs.
         print(f'TuShare history provider failed: {exc}', file=sys.stderr)
@@ -54,6 +62,8 @@ def fetch_tushare_history(
     symbol: str,
     start_date: str,
     end_date: str,
+    *,
+    adjustment: str = 'none',
 ) -> list[dict[str, Any]]:
     token = os.environ.get(TUSHARE_TOKEN_ENV)
     if not token:
@@ -68,8 +78,12 @@ def fetch_tushare_history(
             'missing optional dependency: install tushare before using this provider'
         ) from exc
 
+    if adjustment not in VALID_ADJUSTMENTS:
+        raise ValueError(f'unknown adjustment mode: {adjustment}')
+
     client = _build_tushare_client(ts, token)
     records = []
+    adjustment_records = []
     ts_code = _to_ts_code(symbol)
     for page_start, page_end in _date_windows(start_date, end_date):
         frame = client.fund_daily(
@@ -85,7 +99,54 @@ def fetch_tushare_history(
                 'reduce TUSHARE_HISTORY_PAGE_DAYS or request a narrower date range'
             )
         records.extend(page_records)
+        if adjustment == 'qfq':
+            adjustment_frame = client.fund_adj(
+                ts_code=ts_code,
+                start_date=_compact_date(page_start.isoformat()),
+                end_date=_compact_date(page_end.isoformat()),
+            )
+            adjustment_records.extend(adjustment_frame.to_dict('records'))
+    if adjustment == 'qfq':
+        records = apply_qfq_adjustment(records, adjustment_records)
     return normalize_tushare_records(records)
+
+
+def apply_qfq_adjustment(
+    records: list[dict[str, Any]],
+    adjustment_records: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if not records:
+        return []
+    factors = {
+        str(record.get('trade_date', '')).strip(): _number(
+            record.get('adj_factor'),
+            'adj_factor',
+            index,
+        )
+        for index, record in enumerate(adjustment_records, start=1)
+    }
+    missing = [
+        str(record.get('trade_date', '')).strip()
+        for record in records
+        if str(record.get('trade_date', '')).strip() not in factors
+    ]
+    if missing:
+        raise RuntimeError(
+            'TuShare fund_adj missing trade dates: ' + ', '.join(sorted(set(missing))[:5])
+        )
+    latest_date = max(str(record.get('trade_date', '')).strip() for record in records)
+    latest_factor = factors[latest_date]
+    if latest_factor <= 0:
+        raise RuntimeError('TuShare latest fund_adj factor must be positive')
+    adjusted = []
+    for record in records:
+        trade_date = str(record.get('trade_date', '')).strip()
+        ratio = factors[trade_date] / latest_factor
+        item = dict(record)
+        for field in ('open', 'high', 'low', 'close'):
+            item[field] = _number(item.get(field), field, 0) * ratio
+        adjusted.append(item)
+    return adjusted
 
 
 def _build_tushare_client(ts_module: Any, token: str) -> Any:

@@ -176,6 +176,74 @@ def test_tushare_provider_calls_fund_daily_with_token_and_fields(monkeypatch):
     }
 
 
+def test_tushare_provider_applies_latest_normalized_qfq(monkeypatch):
+    provider = _load_provider_module()
+
+    class FakeFrame:
+        def __init__(self, records):
+            self.records = records
+
+        def to_dict(self, orient):
+            assert orient == 'records'
+            return self.records
+
+    class FakeClient:
+        def fund_daily(self, **_kwargs):
+            return FakeFrame([
+                {
+                    'trade_date': '20260101',
+                    'open': 10,
+                    'high': 10,
+                    'low': 10,
+                    'close': 10,
+                    'vol': 1,
+                    'amount': 1,
+                },
+                {
+                    'trade_date': '20260102',
+                    'open': 9,
+                    'high': 9,
+                    'low': 9,
+                    'close': 9,
+                    'vol': 1,
+                    'amount': 1,
+                },
+            ])
+
+        def fund_adj(self, **_kwargs):
+            return FakeFrame([
+                {'trade_date': '20260101', 'adj_factor': 1.0},
+                {'trade_date': '20260102', 'adj_factor': 1.1},
+            ])
+
+    monkeypatch.setenv(provider.TUSHARE_TOKEN_ENV, 'local-secret')
+    monkeypatch.setitem(
+        sys.modules,
+        'tushare',
+        SimpleNamespace(pro_api=lambda _token: FakeClient()),
+    )
+
+    rows = provider.fetch_tushare_history(
+        '511010',
+        '2026-01-01',
+        '2026-01-02',
+        adjustment='qfq',
+    )
+
+    assert rows[0]['close'] == pytest.approx(10 / 1.1)
+    assert rows[1]['close'] == pytest.approx(9.0)
+
+
+def test_tushare_provider_qfq_requires_factor_for_every_bar():
+    provider = _load_provider_module()
+
+    with pytest.raises(RuntimeError, match='fund_adj missing trade dates'):
+        provider.apply_qfq_adjustment(
+            [{'trade_date': '20260101', 'open': 1, 'high': 1, 'low': 1, 'close': 1}],
+            [],
+        )
+
+
 def test_tushare_provider_applies_api_url_override(monkeypatch):
     provider = _load_provider_module()
     client = SimpleNamespace()

@@ -115,6 +115,8 @@ python -m pytest -q
 | 轮动回测 | `python cli/commands.py backtest --strategy rotation` |
 | SHARPE 60/60 ETF 轮动复验 | `python scripts/backtest_etf_sharpe_rotation.py --help` |
 | SHARPE 盘中影子信号 | `python scripts/run_sharpe_intraday_signal.py --help` |
+| 股债固定 50/50 季度再平衡复验 | `python scripts/backtest_etf_fixed_allocation.py --help` |
+| 股债固定配置盘中影子信号 | `python scripts/run_fixed_allocation_intraday_signal.py --help` |
 | 验证回测产物 | `python scripts/verify_backtest_artifacts.py` |
 
 完整参数请使用对应命令的 `--help`，详细测试分层见[测试与验收指南](docs/testing.md)。
@@ -130,6 +132,7 @@ python cli/commands.py config init
 或基于以下模板配置命令式 provider：
 
 - [本地 provider 配置模板](examples/configs/history-providers.local.example.json)
+- [基金前复权 provider 配置模板](examples/configs/history-providers-adjusted.local.example.json)
 - [AKShare 示例](examples/providers/akshare_history_provider.py)
 - [TuShare 示例](examples/providers/tushare_history_provider.py)
 - [历史行情 provider 契约](docs/history-provider-contract.md)
@@ -164,6 +167,10 @@ tests/          单元测试和集成测试
 - `backtest_etf_sharpe_rotation.py` 对应 60 日动量/60 日年化波动率、180
   交易日预热、每 5 日调仓、正分前二等权的 SHARPE 轮动；盘中适配器只输出
   provisional 模型信号，不执行订单。
+- `backtest_etf_fixed_allocation.py` 对应 510300/511010 固定 50/50 配置，首个
+  共同交易日建仓，并在 3、6、9、12 月的首个共同交易日再平衡。债券 ETF
+  分红敏感，使用 Tushare `fund_daily + fund_adj` 前复权配置；盘中缺少现货列表
+  行情时可由编排层使用同日分钟行情，不能以前一日收盘冒充盘中价。
 - 策略进入模拟盘前，应在聚宽、优矿或米筐等公开平台交叉验证。
 - 数据来源、复权、交易日历、手续费、滑点和撮合差异必须可解释。
 - 真实行情文件和受许可限制的数据不得提交到仓库。
