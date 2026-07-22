@@ -113,6 +113,8 @@ python -m pytest -q
 | 生成日报 | `python cli/commands.py report --type daily --no-state` |
 | 网格回测 | `python cli/commands.py backtest --strategy grid` |
 | 轮动回测 | `python cli/commands.py backtest --strategy rotation` |
+| SHARPE 60/60 ETF 轮动复验 | `python scripts/backtest_etf_sharpe_rotation.py --help` |
+| SHARPE 盘中影子信号 | `python scripts/run_sharpe_intraday_signal.py --help` |
 | 验证回测产物 | `python scripts/verify_backtest_artifacts.py` |
 
 完整参数请使用对应命令的 `--help`，详细测试分层见[测试与验收指南](docs/testing.md)。
@@ -159,6 +161,9 @@ tests/          单元测试和集成测试
 ## 研究与验证原则
 
 - 本地回测用于验证工程链路，不单独证明策略有效。
+- `backtest_etf_sharpe_rotation.py` 对应 60 日动量/60 日年化波动率、180
+  交易日预热、每 5 日调仓、正分前二等权的 SHARPE 轮动；盘中适配器只输出
+  provisional 模型信号，不执行订单。
 - 策略进入模拟盘前，应在聚宽、优矿或米筐等公开平台交叉验证。
 - 数据来源、复权、交易日历、手续费、滑点和撮合差异必须可解释。
 - 真实行情文件和受许可限制的数据不得提交到仓库。
