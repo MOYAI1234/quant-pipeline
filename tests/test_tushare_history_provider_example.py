@@ -367,6 +367,41 @@ def test_tushare_provider_rejects_page_at_row_limit(monkeypatch):
         )
 
 
+def test_tushare_provider_rejects_adjustment_page_at_row_limit(monkeypatch):
+    provider = _load_provider_module()
+
+    class FakeFrame:
+        def __init__(self, records):
+            self.records = records
+
+        def to_dict(self, orient):
+            assert orient == 'records'
+            return self.records
+
+    class FakeClient:
+        def fund_daily(self, **_kwargs):
+            return FakeFrame([])
+
+        def fund_adj(self, **_kwargs):
+            return FakeFrame([{}, {}])
+
+    monkeypatch.setenv(provider.TUSHARE_TOKEN_ENV, 'local-secret')
+    monkeypatch.setattr(provider, 'TUSHARE_FUND_DAILY_ROW_LIMIT', 2)
+    monkeypatch.setitem(
+        sys.modules,
+        'tushare',
+        SimpleNamespace(pro_api=lambda _token: FakeClient()),
+    )
+
+    with pytest.raises(RuntimeError, match='fund_adj page reached'):
+        provider.fetch_tushare_history(
+            '511010',
+            '2026-01-01',
+            '2026-01-02',
+            adjustment='qfq',
+        )
+
+
 def test_tushare_provider_rows_pass_data_manager_history_contract():
     provider = _load_provider_module()
     rows = provider.normalize_tushare_records([{

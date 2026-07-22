@@ -105,7 +105,13 @@ def fetch_tushare_history(
                 start_date=_compact_date(page_start.isoformat()),
                 end_date=_compact_date(page_end.isoformat()),
             )
-            adjustment_records.extend(adjustment_frame.to_dict('records'))
+            adjustment_page_records = adjustment_frame.to_dict('records')
+            if len(adjustment_page_records) >= TUSHARE_FUND_DAILY_ROW_LIMIT:
+                raise RuntimeError(
+                    'TuShare fund_adj page reached the 5000-row limit; '
+                    'reduce TUSHARE_HISTORY_PAGE_DAYS or request a narrower date range'
+                )
+            adjustment_records.extend(adjustment_page_records)
     if adjustment == 'qfq':
         records = apply_qfq_adjustment(records, adjustment_records)
     return normalize_tushare_records(records)
