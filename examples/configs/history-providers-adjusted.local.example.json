@@ -1,0 +1,60 @@
+{
+  "data": {
+    "max_realtime_age_seconds": null,
+    "max_nav_age_seconds": null,
+    "history_cache_ttl_seconds": 3600,
+    "max_timestamp_future_skew_seconds": 60,
+    "timestamp_timezone_offset": "+08:00",
+    "mx_data": {
+      "mode": "real",
+      "timeout": 30,
+      "history_command": null,
+      "history_providers": [
+        {
+          "name": "tushare-qfq",
+          "command": [
+            "python",
+            "examples/providers/tushare_history_provider.py",
+            "--symbol",
+            "{symbol}",
+            "--start-date",
+            "{start_date}",
+            "--end-date",
+            "{end_date}",
+            "--adjust",
+            "qfq"
+          ],
+          "required_env": [
+            "TUSHARE_TOKEN"
+          ]
+        }
+      ],
+      "history_retry_attempts": 2,
+      "history_retry_delay_seconds": 30
+    },
+    "mx_xuangu": {
+      "mode": "mock",
+      "timeout": 10
+    },
+    "mx_search": {
+      "mode": "mock",
+      "timeout": 10
+    }
+  },
+  "strategy": {},
+  "account": {
+    "initial_capital": 100000,
+    "commission_rate": 0.0003,
+    "buy_commission_rate": null,
+    "sell_commission_rate": null,
+    "min_commission": 0.0
+  },
+  "risk": {},
+  "monitor": {},
+  "state": {
+    "enabled": false,
+    "path": "data/state.json",
+    "restore_on_start": false,
+    "save_on_stop": false
+  }
+}
