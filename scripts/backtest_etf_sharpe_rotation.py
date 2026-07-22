@@ -119,7 +119,7 @@ def candidate_payload(
     }
 
 
-def _load_history(path: str, start_date: str, end_date: str) -> list[dict]:
+def load_history_range(path: str, start_date: str, end_date: str) -> list[dict]:
     history = load_snapshots_from_csv(path)
     return [
         item
@@ -158,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
     expected_symbols = tuple(
         symbol.strip() for symbol in args.etf_pool.split(",") if symbol.strip()
     )
-    history = _load_history(
+    history = load_history_range(
         args.history,
         args.strategy_start_date,
         args.end_date,

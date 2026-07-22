@@ -15,7 +15,7 @@ from research.etf_multi_factor import (
     evaluate_multi_factor_snapshot,
 )
 from scripts.backtest_etf_sharpe_rotation import (
-    _load_history,
+    load_history_range,
     run_sharpe_backtest,
 )
 
@@ -70,7 +70,11 @@ def generate_payload(
         slippage_rate=account.slippage_rate,
     )
     day_counter = len(history) + 1
-    due = day_counter >= warmup_days and day_counter % rebalance_step == 0
+    due = day_counter >= warmup_days and (
+        day_counter % rebalance_step == 0
+        if warmup_days > 0
+        else (day_counter - 1) % rebalance_step == 0
+    )
     selected = sorted(holdings)
     rankings: list[dict] = []
     if due:
@@ -103,7 +107,11 @@ def generate_payload(
     if due:
         target_weight = 1 / len(selected) if selected else 0
         for symbol in sorted(set(holdings) - set(selected)):
-            current_weight = holdings[symbol] * prices[symbol] / total_value
+            current_weight = (
+                holdings[symbol] * prices[symbol] / total_value
+                if total_value > 0
+                else 0
+            )
             signals.append({
                 "symbol": symbol,
                 "action": "SELL",
@@ -175,7 +183,7 @@ def main(argv: list[str] | None = None) -> int:
     symbols = tuple(
         symbol.strip() for symbol in args.etf_pool.split(",") if symbol.strip()
     )
-    history = _load_history(
+    history = load_history_range(
         args.history,
         args.strategy_start_date,
         args.official_history_date,
@@ -186,6 +194,11 @@ def main(argv: list[str] | None = None) -> int:
     missing = [symbol for symbol in symbols if symbol not in quotes]
     if missing:
         raise ValueError("quotes 缺少 ETF: " + ", ".join(missing))
+    missing_history = [
+        symbol for symbol in symbols if symbol not in history[-1].get("symbols", {})
+    ]
+    if missing_history:
+        raise ValueError("official history 缺少 ETF: " + ", ".join(missing_history))
     payload = generate_payload(
         history,
         {symbol: quotes[symbol] for symbol in symbols},
