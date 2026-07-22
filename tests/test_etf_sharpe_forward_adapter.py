@@ -71,7 +71,7 @@ def test_intraday_adapter_emits_model_actions_on_rebalance_day():
         history,
         {
             "510300": {"price": 285},
-            "510500": {"price": 163.0},
+            "510500": {"price": 250.0},
         },
         observed_at="2026-07-10T14:00:00+08:00",
         official_history_date="2026-07-09",

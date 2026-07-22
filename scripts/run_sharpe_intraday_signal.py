@@ -20,7 +20,12 @@ from scripts.backtest_etf_sharpe_rotation import (
 )
 
 
-def _portfolio_state(trades: list[dict], initial_capital: float) -> tuple[float, dict[str, float]]:
+def _portfolio_state(
+    trades: list[dict],
+    initial_capital: float,
+    *,
+    slippage_rate: float,
+) -> tuple[float, dict[str, float]]:
     cash = initial_capital
     holdings: dict[str, float] = {}
     for trade in trades:
@@ -29,7 +34,7 @@ def _portfolio_state(trades: list[dict], initial_capital: float) -> tuple[float,
             cash -= float(trade["amount"]) + float(trade["commission"])
             holdings[symbol] = holdings.get(symbol, 0) + float(trade["shares"])
         elif trade["action"] == "SELL":
-            proceeds = float(trade["amount"]) * (1 - 0.001)
+            proceeds = float(trade["amount"]) * (1 - slippage_rate)
             cash += proceeds - float(trade["commission"])
             holdings.pop(symbol, None)
     return cash, holdings
@@ -49,7 +54,7 @@ def generate_payload(
     rebalance_step: int = 5,
     warmup_days: int = 180,
 ) -> dict:
-    report, _, config = run_sharpe_backtest(
+    report, account, config = run_sharpe_backtest(
         history,
         initial_capital=initial_capital,
         momentum_window=momentum_window,
@@ -59,7 +64,11 @@ def generate_payload(
         rebalance_step=rebalance_step,
         warmup_days=warmup_days,
     )
-    cash, holdings = _portfolio_state(report.trades, initial_capital)
+    cash, holdings = _portfolio_state(
+        report.trades,
+        initial_capital,
+        slippage_rate=account.slippage_rate,
+    )
     day_counter = len(history) + 1
     due = day_counter >= warmup_days and day_counter % rebalance_step == 0
     selected = sorted(holdings)
