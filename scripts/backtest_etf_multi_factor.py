@@ -86,6 +86,7 @@ def run_backtest_for_factor(
     account: AccountConfig,
     rebalance_step: int = 5,
     is_baseline: bool = False,
+    warmup_days: int = 0,
 ) -> BacktestReport:
     """用指定因子运行回测。"""
     
@@ -99,11 +100,20 @@ def run_backtest_for_factor(
     
     for idx, snapshot in enumerate(history):
         date = snapshot["date"]
+        day_counter = idx + 1
+        should_rebalance = (
+            day_counter >= warmup_days
+            and (
+                day_counter % rebalance_step == 0
+                if warmup_days > 0
+                else idx % rebalance_step == 0
+            )
+        )
         
         # 评估
-        if idx % rebalance_step != 0:
+        if not should_rebalance:
             # 非调仓日: 只记录净值
-            if idx > 0:
+            if idx > 0 or warmup_days > 0:
                 equity_curve.append(_calc_equity_point(
                     date, cash, positions, snapshot, equity_curve, account
                 ))
