@@ -20,6 +20,6 @@ jobs:
         with:
           llm_url: https://api.deepseek.com
           llm_auth_token: ${{ secrets.CHAT_TOKEN }}
-          llm_model: deepseek-chat
+          llm_model: deepseek-v4-pro
           llm_use_anthropic: 'false'
           language: '中文'
