@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Open Code Review
     steps:
-      - uses: alibaba/open-code-review@v1.7.17
+      - uses: alibaba/open-code-review@v1.8.3
         with:
           llm_url: https://api.deepseek.com
           llm_auth_token: ${{ secrets.CHAT_TOKEN }}
