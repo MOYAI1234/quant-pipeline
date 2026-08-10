@@ -14,7 +14,6 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
 
 
 # ============================================================
@@ -340,7 +339,7 @@ def factor_rsi_mean_reversion(bars: list[dict]) -> dict:
     """RSI-MREV: RSI极值均值回归
     
     信号: RSI(14) < 35 → 做多(超卖反弹)
-          RSI(14) > 70 → 空仓(超买)
+          RSI(14) > 75 → 空仓(超买)
           中间区域 → 保持上个信号(不轻易变)
     
     理念: 短期超卖往往是好的入场点，短期超买应该离场。
@@ -401,7 +400,7 @@ def factor_rsi_mean_reversion(bars: list[dict]) -> dict:
 def factor_vol_breakout(bars: list[dict]) -> dict:
     """VOL-BREAK: 波动率扩张突破
     
-    信号: ATR(14) / ATR平滑(20) > 1.5 AND close > EMA20 → 做多
+    信号: ATR(14) / ATR平滑(20) > 1.3 AND close > EMA20 → 做多
           ATR回落 + close < EMA20 → 空仓
     
     理念: 波动率的急剧扩张往往伴随趋势启动。放量突破是可靠的入场信号。
@@ -450,9 +449,10 @@ def factor_vol_breakout(bars: list[dict]) -> dict:
             'vol_ratio': latest_atr / atr_ma20 if atr_ma20 > 0 else 0,
         }
     else:
+        # 此处仅剩: trending_up 为真 且 vol_expanding 为假
         return {
             'signal': 0,
-            'reason': 'vol_not_expanding' if not vol_expanding else 'trending_but_no_vol',
+            'reason': 'trending_but_no_vol',
             'close': latest_close,
             'atr': latest_atr,
             'atr_ma': atr_ma20,
@@ -508,7 +508,8 @@ def factor_volume_climax(bars: list[dict]) -> dict:
         }
     
     # 离场信号: 成交量回落正常
-    if latest_volume < avg_vol_20 * 0.7 and latest_close < closes[-6] if len(closes) >= 6 else latest_close:
+    # len(closes) >= 30 已在上方保证, closes[-6] 安全访问
+    if latest_volume < avg_vol_20 * 0.7 and latest_close < closes[-6]:
         return {
             'signal': 0,
             'reason': 'volume_normalizing',
@@ -611,27 +612,16 @@ def factor_gap_reversal(bars: list[dict]) -> dict:
     
     today_open = today.get('open', 0)
     today_close = today.get('close', 0)
-    today_high = today.get('high', 0)
-    today_low = today.get('low', 0)
     
     yesterday_open = yesterday.get('open', 0)
     yesterday_close = yesterday.get('close', 0)
-    yesterday_high = yesterday.get('high', 0)
-    yesterday_low = yesterday.get('low', 0)
     
     if yesterday_close <= 0 or yesterday_open <= 0:
         return {'signal': -1, 'reason': 'no_data'}
     
     # 今日跳空
     if today_open > 0 and yesterday_close > 0:
-        gap_up_pct = (today_open - yesterday_close) / yesterday_close
-        gap_down_pct = (yesterday_close - today_open) / today_open if today_open > 0 else 0
-        
         # 昨天: 跳空低开 >1% 且 收阳 (买方反击)
-        yesterday_gap = (yesterday_close - yesterday_open) / yesterday_open
-        yesterday_range = yesterday_high - yesterday_low
-        yesterday_body = abs(yesterday_close - yesterday_open)
-        
         # 跳空低开: 开盘即大跌, 但收盘涨回来
         prev_prev_close = bars[-3].get('close', yesterday_close) if len(bars) >= 3 else yesterday_close
         overnight_gap = (yesterday_open - prev_prev_close) / prev_prev_close if prev_prev_close > 0 else 0

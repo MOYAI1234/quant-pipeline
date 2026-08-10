@@ -16,8 +16,6 @@
   初始资金: 100,000 | 频率: 日 | 基准: 沪深300
 """
 
-import numpy as np
-
 STOCK_ETF    = '510300.XSHG'   # 沪深300ETF
 BOND_ETF     = '511010.XSHG'   # 国债ETF (5年期)
 STOCK_WEIGHT = 0.50            # 股票目标权重
@@ -61,6 +59,7 @@ def daily_check(context):
         order_target_value(g.bond_etf,  total * g.bond_w)
         log.info('初始建仓 %s 股票=%.0f 债券=%.0f' %
                  (today, total * g.stock_w, total * g.bond_w))
+        g.last_month = today.month  # 起始月若为季度末, 跳过当月剩余交易日的再平衡
         return
 
     # 只在季度末月份触发一次

@@ -15,7 +15,7 @@ import argparse
 import csv
 import os
 import sys
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -70,8 +70,14 @@ def main(argv: list[str] | None = None) -> int:
             fieldnames=["date", "symbol", "open", "high", "low", "close", "volume", "amount"],
         )
         writer.writeheader()
+        failed = 0
         for short_code, ts_code in ETF_POOL.items():
-            rows = fetch_ohlcv(client, ts_code, args.start_date, end_date)
+            try:
+                rows = fetch_ohlcv(client, ts_code, args.start_date, end_date)
+            except Exception as exc:  # 网络/API异常不中断其他ETF
+                print(f"{short_code} ({ts_code}): 拉取失败 - {exc}", file=sys.stderr)
+                failed += 1
+                continue
             rows.sort(key=lambda r: r["trade_date"])
             print(f"{short_code} ({ts_code}): {len(rows)} 天 "
                   f"{rows[0]['trade_date'] if rows else '-'} ~ "
@@ -87,6 +93,8 @@ def main(argv: list[str] | None = None) -> int:
                     "volume": r["vol"],
                     "amount": r["amount"],
                 })
+        if failed:
+            print(f"警告: {failed} 只 ETF 拉取失败", file=sys.stderr)
     print(f"已写入: {output_path}")
     return 0
 

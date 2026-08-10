@@ -29,7 +29,6 @@ from research.hf_volatility_factors import (
 )
 from scripts.backtest_etf_multi_factor import (
     AccountConfig,
-    load_snapshots_from_csv,
     run_backtest_for_factor,
 )
 from scripts.backtest_etf_sharpe_rotation import candidate_payload
@@ -47,7 +46,7 @@ def load_ohlcv_snapshots(path: str) -> list[dict]:
     import csv
 
     series: dict[str, dict[str, list]] = defaultdict(
-        lambda: {"dates": [], "opens": [], "highs": [], "lows": [], "closes": []}
+        lambda: {"dates": [], "opens": [], "highs": [], "lows": [], "closes": [], "volumes": [], "amounts": []}
     )
     order: list[str] = []
     with open(path, newline="", encoding="utf-8") as f:
@@ -61,6 +60,8 @@ def load_ohlcv_snapshots(path: str) -> list[dict]:
             series[sym]["highs"].append(float(row["high"]))
             series[sym]["lows"].append(float(row["low"]))
             series[sym]["closes"].append(float(row["close"]))
+            series[sym]["volumes"].append(float(row.get("volume", 0) or 0))
+            series[sym]["amounts"].append(float(row.get("amount", 0) or 0))
 
     # 按日期聚合 snapshot（日期统一为 YYYY-MM-DD ISO 格式）
     by_date: dict[str, dict] = {}
@@ -76,8 +77,8 @@ def load_ohlcv_snapshots(path: str) -> list[dict]:
                 "opens": "|".join(f"{x:.6f}" for x in s["opens"][: i + 1]),
                 "highs": "|".join(f"{x:.6f}" for x in s["highs"][: i + 1]),
                 "lows": "|".join(f"{x:.6f}" for x in s["lows"][: i + 1]),
-                "volume": 0.0,
-                "amount": 0.0,
+                "volume": s["volumes"][i],
+                "amount": s["amounts"][i],
             }
     return [by_date[d] for d in sorted(by_date)]
 

@@ -78,21 +78,21 @@ def daily_check(context):
         return
 
     # ---- 铁律 ----
+    in_position = context.portfolio.positions[g.symbol].total_amount > 0
     if latest_close < ma200:
         # 熊市: 强制空仓
-        if g.in_position:
+        if in_position:
             log.info('离场 MA200破位 close=%.3f ma200=%.3f rsi=%.1f' %
                      (latest_close, ma200, latest_rsi))
             order_target_value(g.symbol, 0)
-            g.in_position = False
         return
 
     # ---- 牛市区域 ----
     signal = None
 
-    if not g.in_position and latest_rsi < g.rsi_oversold:
+    if not in_position and latest_rsi < g.rsi_oversold:
         signal = 'buy'
-    elif g.in_position and latest_rsi > g.rsi_overbought:
+    elif in_position and latest_rsi > g.rsi_overbought:
         signal = 'sell'
 
     if signal == 'buy':
@@ -100,10 +100,8 @@ def daily_check(context):
         log.info('入场 close=%.3f ma200=%.3f rsi=%.1f 仓位=%.0f' %
                  (latest_close, ma200, latest_rsi, target))
         order_target_value(g.symbol, target)
-        g.in_position = True
 
     elif signal == 'sell':
         log.info('离场 RSI过热 close=%.3f ma200=%.3f rsi=%.1f' %
                  (latest_close, ma200, latest_rsi))
         order_target_value(g.symbol, 0)
-        g.in_position = False

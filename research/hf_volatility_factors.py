@@ -52,9 +52,9 @@ def _parkinson_vol(highs: list[float], lows: list[float]) -> float:
     if n < 2:
         return 0.0
     vals = []
-    for h, l in zip(highs, lows):
-        if h > 0 and l > 0 and h >= l:
-            r = math.log(h / l)
+    for h, lo in zip(highs, lows):
+        if h > 0 and lo > 0 and h >= lo:
+            r = math.log(h / lo)
             vals.append(r * r)
     if not vals:
         return 0.0
@@ -71,15 +71,16 @@ def _garman_klass_vol(
     hl = 0.0
     co = 0.0
     cnt = 0
-    for o, h, l, c in zip(opens, highs, lows, closes):
-        if min(o, h, l, c) <= 0 or h < l:
+    for o, h, lo, c in zip(opens, highs, lows, closes):
+        if min(o, h, lo, c) <= 0 or h < lo:
             continue
-        hl += math.log(h / l) ** 2
+        hl += math.log(h / lo) ** 2
         co += math.log(c / o) ** 2
         cnt += 1
     if cnt == 0:
         return 0.0
-    return math.sqrt(0.5 * hl / cnt - (2.0 * math.log(2.0) - 1.0) * co / cnt)
+    # 有限样本下方差可能为负（日内 OC 波动相对 HL 较大时），取 max(0,·) 防止 sqrt 崩溃
+    return math.sqrt(max(0.0, 0.5 * hl / cnt - (2.0 * math.log(2.0) - 1.0) * co / cnt))
 
 
 def _yang_zhang_vol(
@@ -108,10 +109,10 @@ def _yang_zhang_vol(
     var_hl = 0.0
     cnt = 0
     for i in range(1, n):
-        h, l, c_prev, o = highs[i], lows[i], closes[i - 1], opens[i]
-        if min(h, l, c_prev, o) <= 0 or h < l:
+        h, lo, c_prev, o = highs[i], lows[i], closes[i - 1], opens[i]
+        if min(h, lo, c_prev, o) <= 0 or h < lo:
             continue
-        var_hl += math.log(h / l) ** 2
+        var_hl += math.log(h / lo) ** 2
         cnt += 1
     if cnt < 3:
         return 0.0
@@ -146,19 +147,23 @@ def calc_hf_vol_momentum(
     opens = _to_series(bar, "opens")
     highs = _to_series(bar, "highs")
     lows = _to_series(bar, "lows")
-    use_hf = len(opens) >= config.vol_window and len(highs) >= config.vol_window
+    use_hf = (
+        len(opens) >= config.vol_window
+        and len(highs) >= config.vol_window
+        and len(lows) >= config.vol_window
+    )
 
     if use_hf:
         o = opens[-config.vol_window:]
         h = highs[-config.vol_window:]
-        l = lows[-config.vol_window:]
+        lo = lows[-config.vol_window:]
         c = closes[-config.vol_window:]
         if config.estimator == "parkinson":
-            vol = _parkinson_vol(h, l)
+            vol = _parkinson_vol(h, lo)
         elif config.estimator == "yz":
-            vol = _yang_zhang_vol(o, h, l, c)
+            vol = _yang_zhang_vol(o, h, lo, c)
         else:
-            vol = _garman_klass_vol(o, h, l, c)
+            vol = _garman_klass_vol(o, h, lo, c)
     else:
         # 退化: close 日收益波动率（与 SHARPE 一致，供对照）
         win = closes[-config.vol_window - 1:]

@@ -15,8 +15,6 @@
   初始资金: 100,000 | 频率: 日 | 基准: 沪深300
 """
 
-import numpy as np
-
 SYMBOL             = '510300.XSHG'
 PERIOD_STRONG      = 20        # 强势判断窗口
 THRESHOLD_STRONG   = 0.65      # 近20日阳线占比 > 此值 → 做多
@@ -65,7 +63,6 @@ def daily_check(context):
         return
 
     closes = df['close'].values
-    latest_close = closes[-1]
 
     # 近20日阳线占比
     up_days_20 = sum(1 for i in range(-g.period_strong, 0) if closes[i] > closes[i-1])

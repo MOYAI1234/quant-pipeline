@@ -154,7 +154,9 @@ def _compute_performance(
         dd = (p["total_value"] - peak) / peak if peak > 0 else 0
         max_dd = min(max_dd, dd)
 
-    daily_returns = [p["period_return"] for p in equity_curve if p["period_return"] != 0]
+    # 零收益日是有效观测点，不过滤；仅跳过缺失值
+    daily_returns = [p["period_return"] for p in equity_curve
+                     if p["period_return"] is not None and not math.isnan(p["period_return"])]
 
     sharpe = 0
     if daily_returns and len(daily_returns) > 1:
@@ -373,6 +375,10 @@ def main(argv: list[str] | None = None) -> int:
 
     results.append(bench_summary)
     candidates = [r for r in results if r.get("gate_status") != "BENCHMARK"]
+    if not candidates:
+        print("错误: 无有效回测候选（检查 --factors 是否为空或全部失败）")
+        _write_json(args.results_output, results)
+        return 1
     summary = {
         "evaluated_candidates": len(candidates),
         "best_by_drawdown": min(candidates, key=lambda r: r["max_drawdown"]),

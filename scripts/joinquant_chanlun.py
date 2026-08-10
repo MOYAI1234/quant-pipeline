@@ -71,7 +71,7 @@ def daily_check(context):
     latest_close = closes[-1]
 
     # ---- MACD ----
-    macd, signal, hist = talib.MACD(closes, MACD_FAST, MACD_SLOW, MACD_SIGNAL)
+    macd_line, macd_signal, hist = talib.MACD(closes, MACD_FAST, MACD_SLOW, MACD_SIGNAL)
     if len(hist) < 5 or np.isnan(hist[-1]):
         return
 
@@ -112,6 +112,8 @@ def daily_check(context):
 
     # ---- 买卖信号 ----
     signal = None
+    bearish_div = False
+    bullish_div = False
 
     # 买入: 底分型出现 + MACD底背离, 且不在持仓中
     if not g.in_position and is_bottom_fx and bearish_div:

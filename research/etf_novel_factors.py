@@ -163,11 +163,14 @@ class Combined52WHIDConfig:
 
 def _to_prices(bar: dict) -> list[float] | None:
     prices = bar.get("prices", [])
-    if isinstance(prices, str):
-        prices = [float(p) for p in prices.split("|") if p]
-    if not prices:
+    try:
+        if isinstance(prices, str):
+            prices = [float(p) for p in prices.split("|") if p]
+        if not prices:
+            return None
+        prices = [float(p) for p in prices]
+    except (ValueError, TypeError):
         return None
-    prices = [float(p) for p in prices]
     if any(p <= 0 or not math.isfinite(p) for p in prices):
         return None
     return prices
@@ -353,13 +356,12 @@ def calc_info_discreteness(
     pct_pos = pos_days / n_days
     pct_neg = neg_days / n_days
 
-    sign_pret = 1.0 if momentum >= 0 else -1.0
+    sign_pret = 0.0 if momentum == 0 else (1.0 if momentum > 0 else -1.0)
     id_value = sign_pret * (pct_neg - pct_pos)  # ∈ [-1, 1]
 
     factor_value = momentum * (1.0 - id_value)
 
-    daily_returns_all = [b / a - 1.0 for a, b in zip(win, win[1:]) if a > 0]
-    vol = _annualized_volatility(daily_returns_all) if len(daily_returns_all) >= 5 else 0.0
+    vol = _annualized_volatility(daily_returns) if len(daily_returns) >= 5 else 0.0
 
     return {
         "symbol": symbol,

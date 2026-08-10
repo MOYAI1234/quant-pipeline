@@ -13,7 +13,7 @@ import csv
 import json
 import math
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -130,6 +130,13 @@ def run_timing_backtest(
             proceeds = shares * sell_price
             commission = max(proceeds * config.commission_rate, config.min_commission)
             cash += proceeds - commission
+            # profit 需扣除双边佣金：买入 amount 不含佣金、proceeds 未扣卖出佣金，
+            # 但 cash 已按含佣金口径扣减，因此这里用现金差口径计算实际盈亏
+            buy_trade = trades[-1] if trades and trades[-1]['action'] == 'BUY' else None
+            buy_total_cost = 0
+            if buy_trade is not None:
+                buy_total_cost = buy_trade['amount'] + buy_trade.get('commission', 0)
+            profit = (proceeds - commission - buy_total_cost) if buy_trade else 0
             trades.append({
                 'date': date,
                 'action': 'SELL',
@@ -137,7 +144,7 @@ def run_timing_backtest(
                 'shares': shares,
                 'amount': proceeds,
                 'commission': commission,
-                'profit': proceeds - trades[-1]['amount'] if trades and trades[-1]['action'] == 'BUY' else 0,
+                'profit': profit,
             })
             shares = 0
             position = 'FLAT'
@@ -207,7 +214,6 @@ def _compute_timing_performance(
     calmar = annual_return / abs(max_dd) if max_dd != 0 else 0
     
     # 统计胜率 (按完整交易回合)
-    buy_trades = [t for t in trades if t['action'] == 'BUY']
     sell_trades = [t for t in trades if t['action'] == 'SELL']
     profitable_trades = sum(1 for t in sell_trades if t.get('profit', 0) > 0)
     win_rate = profitable_trades / len(sell_trades) if sell_trades else 0
@@ -286,11 +292,11 @@ def render_comparison_table(reports: list[TimingBacktestReport]) -> str:
 def render_full_report(reports: list[TimingBacktestReport], symbol: str, date_range: str) -> str:
     lines = []
     lines.append(f"# {symbol} 单ETF择时因子回测报告")
-    lines.append(f"")
+    lines.append("")
     lines.append(f"回测区间: {date_range}")
     lines.append(f"标的: {symbol} (沪深300ETF)")
-    lines.append(f"初始资金: ¥100,000 | 手续费: 万三 | 滑点: 0.1%")
-    lines.append(f"")
+    lines.append("初始资金: ¥100,000 | 手续费: 万三 | 滑点: 0.1%")
+    lines.append("")
     
     lines.append(render_comparison_table(reports))
     
@@ -341,6 +347,9 @@ def main():
     print(f"加载数据: {args.history}")
     bars = load_ohlcv_csv(args.history)
     print(f"共 {len(bars)} 根K线")
+    if not bars:
+        print("错误: CSV 为空或无有效K线数据")
+        sys.exit(1)
     
     date_range = f"{bars[0]['date']} ~ {bars[-1]['date']}"
     print(f"日期范围: {date_range}")

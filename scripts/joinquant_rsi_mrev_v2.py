@@ -106,7 +106,7 @@ def daily_check(context):
         if not g.in_position and latest_rsi > g.rsi_bull_entry:
             signal = 'buy'
             g.mode = 'BULL'
-        elif g.in_position and (latest_rsi > g.rsi_bull_exit or latest_close < ema60):
+        elif g.in_position and latest_rsi > g.rsi_bull_exit:
             signal = 'sell'
             g.mode = 'FLAT'
     else:
@@ -114,7 +114,8 @@ def daily_check(context):
         if not g.in_position and latest_rsi < g.rsi_bear_entry:
             signal = 'buy'
             g.mode = 'BEAR'
-        elif g.in_position and latest_rsi > g.rsi_bear_exit:
+        # 趋势破坏保护: 市场转熊且持仓中, 无论 RSI 是否到位都离场
+        elif g.in_position and (latest_rsi > g.rsi_bear_exit or latest_close < ema60):
             signal = 'sell'
             g.mode = 'FLAT'
 

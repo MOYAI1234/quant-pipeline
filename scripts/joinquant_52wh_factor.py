@@ -162,12 +162,15 @@ def compute_52wh_scores(context, etf_list):
                 skip_paused=True,
                 fq='pre',
             )
+            if df is None:
+                log.debug(f'{symbol} 数据获取失败: get_price 返回 None')
+                continue
             df = df.dropna()
         except Exception as e:
             log.debug(f'{symbol} 数据获取失败: {e}')
             continue
 
-        if df is None or len(df) < g.high_window + 1:
+        if len(df) < g.high_window + 1:
             log.debug(
                 f'{symbol} 数据不足: {len(df) if df is not None else 0}/'
                 f'{g.high_window + 1} (上市时间可能不足252个交易日)'
