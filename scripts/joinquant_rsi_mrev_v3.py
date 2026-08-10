@@ -43,7 +43,6 @@ def initialize(context):
     g.rsi_oversold   = RSI_OVERSOLD
     g.rsi_overbought = RSI_OVERBOUGHT
     g.min_history    = MIN_HISTORY
-    g.in_position    = False
     g.ready          = False
     g.day_counter    = 0
 

@@ -226,7 +226,8 @@ def _compute_timing_performance(
     profitable_trades = sum(1 for t in sell_trades if t.get('profit', 0) > 0)
     win_rate = profitable_trades / len(sell_trades) if sell_trades else 0
     
-    trade_count = len(trades)
+    # 统计交易回合数（一个 BUY+SELL 对算一次完整交易）
+    trade_count = len(sell_trades)
     
     # 持仓/空仓天数
     long_days = sum(1 for p in equity_curve if p['positions_value'] > 100)

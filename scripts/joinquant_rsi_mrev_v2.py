@@ -57,7 +57,6 @@ def initialize(context):
     g.rsi_bear_entry  = RSI_BEAR_ENTRY
     g.rsi_bear_exit   = RSI_BEAR_EXIT
     g.min_history     = MIN_HISTORY
-    g.in_position     = False
     g.mode            = 'FLAT'   # FLAT / BULL / BEAR
     g.ready           = False
     g.day_counter     = 0
@@ -97,27 +96,33 @@ def daily_check(context):
 
     # ---- 判断市场状态 ----
     is_bull_market = latest_close > ema60
+    in_position = context.portfolio.positions[g.symbol].total_amount > 0
 
     # ---- 信号 ----
     signal = None  # None=不动, 'buy', 'sell'
 
     if is_bull_market:
         # 牛市: 顺势做多
-        if not g.in_position and latest_rsi > g.rsi_bull_entry:
+        if not in_position and latest_rsi > g.rsi_bull_entry:
             signal = 'buy'
             g.mode = 'BULL'
-        elif g.in_position and latest_rsi > g.rsi_bull_exit:
+        elif in_position and latest_rsi > g.rsi_bull_exit:
             signal = 'sell'
             g.mode = 'FLAT'
     else:
         # 熊市/震荡: 均值回归
-        if not g.in_position and latest_rsi < g.rsi_bear_entry:
+        if not in_position and latest_rsi < g.rsi_bear_entry:
             signal = 'buy'
             g.mode = 'BEAR'
-        # 趋势破坏保护: 市场转熊且持仓中, 无论 RSI 是否到位都离场
-        elif g.in_position and (latest_rsi > g.rsi_bear_exit or latest_close < ema60):
-            signal = 'sell'
-            g.mode = 'FLAT'
+        elif in_position:
+            if g.mode == 'BULL':
+                # 趋势破坏保护: 牛市建仓后市场转熊(close 跌破 EMA60) → 强制离场
+                signal = 'sell'
+                g.mode = 'FLAT'
+            elif latest_rsi > g.rsi_bear_exit:
+                # 熊市超卖反弹到位
+                signal = 'sell'
+                g.mode = 'FLAT'
 
     # ---- 执行 ----
     if signal == 'buy':
@@ -125,10 +130,8 @@ def daily_check(context):
         log.info('入场 mode=%s close=%.3f ema60=%.3f rsi=%.1f 仓位=%.0f' %
                  (g.mode, latest_close, ema60, latest_rsi, target))
         order_target_value(g.symbol, target)
-        g.in_position = True
 
     elif signal == 'sell':
         log.info('离场 mode=%s close=%.3f ema60=%.3f rsi=%.1f' %
                  (g.mode, latest_close, ema60, latest_rsi))
         order_target_value(g.symbol, 0)
-        g.in_position = False

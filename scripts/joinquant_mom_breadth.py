@@ -19,6 +19,7 @@ SYMBOL             = '510300.XSHG'
 PERIOD_STRONG      = 20        # 强势判断窗口
 THRESHOLD_STRONG   = 0.65      # 近20日阳线占比 > 此值 → 做多
 PERIOD_WEAK        = 10        # 弱势判断窗口
+THRESHOLD_STRONG_10D = 0.50    # 近10日阳线占比 > 此值 → 配合强势确认
 THRESHOLD_WEAK     = 0.30      # 近10日阳线占比 < 此值 → 平仓
 MIN_HISTORY        = 40
 COMMISSION_RATE    = 0.0003
@@ -40,7 +41,6 @@ def initialize(context):
     g.period_weak  = PERIOD_WEAK
     g.th_weak      = THRESHOLD_WEAK
     g.min_history  = MIN_HISTORY
-    g.in_position  = False
     g.ready        = False
     g.day_counter  = 0
 
@@ -78,7 +78,7 @@ def daily_check(context):
     signal = None
     in_position = context.portfolio.positions[g.symbol].total_amount > 0
 
-    if not in_position and up_ratio_20 > g.th_strong and up_ratio_10 > 0.5:
+    if not in_position and up_ratio_20 > g.th_strong and up_ratio_10 > THRESHOLD_STRONG_10D:
         signal = 'buy'
     elif in_position and up_ratio_10 < g.th_weak and mom_5d < 0:
         signal = 'sell'

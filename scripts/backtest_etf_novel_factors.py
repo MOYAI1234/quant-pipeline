@@ -238,6 +238,8 @@ def calc_mom60(
 ) -> tuple[dict | None, str | None]:
     """纯动量反事实对照（factor = momentum，无任何缩放）。窗口由 config.momentum_window 决定。"""
     prices = bar.get("prices", [])
+    if prices is None:
+        return None, 'invalid_prices'
     if isinstance(prices, str):
         prices = [float(p) for p in prices.split("|") if p]
     need = config.momentum_window + 1

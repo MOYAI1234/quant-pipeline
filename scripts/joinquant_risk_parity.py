@@ -82,6 +82,14 @@ def daily_check(context):
              (stock_before, stock_before/total*100 if total>0 else 0,
               bond_before, bond_before/total*100 if total>0 else 0))
 
+    # 偏差阈值: 仅当实际权重偏离目标超过阈值时才调仓, 避免小额无意义交易产生佣金/滑点
+    REBALANCE_TOLERANCE = 0.02
+    stock_weight = stock_before / total if total > 0 else 0
+    if abs(stock_weight - g.stock_w) < REBALANCE_TOLERANCE:
+        log.info('权重偏差 %.2f%% < 阈值 %.2f%%, 跳过本次调仓' %
+                 (abs(stock_weight - g.stock_w) * 100, REBALANCE_TOLERANCE * 100))
+        return
+
     order_target_value(g.stock_etf, stock_target)
     order_target_value(g.bond_etf,  bond_target)
 

@@ -63,7 +63,6 @@ def initialize(context):
     g.rsi_panic       = RSI_PANIC
     g.mom_panic       = MOM_PANIC
     g.min_history     = MIN_HISTORY
-    g.in_position     = False
     g.ready           = False
     g.day_counter     = 0
 

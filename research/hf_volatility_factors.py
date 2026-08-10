@@ -119,7 +119,8 @@ def _yang_zhang_vol(
         cnt += 1
     if cnt < 3:
         return 0.0
-    var_hl = var_hl / cnt
+    # Parkinson 方差 = mean(ln(H/L)²) / (4·ln2)；缺缩放会高估约 2.77 倍
+    var_hl = var_hl / cnt / (4.0 * math.log(2.0))
 
     k = 0.34 / (1.34 + (len(oo) + 1) / (len(oo) - 1)) if len(oo) > 1 else 0.34
     # Yang-Zhang: sigma^2 = var_oo + k*var_oc + (1-k)*var_hl（zhang 变体）
@@ -169,9 +170,15 @@ def calc_hf_vol_momentum(
             vol = _garman_klass_vol(o, h, lo, c)
     else:
         # 退化: close 日收益波动率（与 SHARPE 一致，供对照）
+        # 注意: 用日度波动率与高频估计器保持一致口径（高频分支未年化）
         win = closes[-config.vol_window - 1:]
         rets = [b / a - 1.0 for a, b in zip(win, win[1:]) if a > 0]
-        vol = _annualized_volatility(rets) if len(rets) >= 5 else 0.0
+        if len(rets) >= 5:
+            mean_ret = sum(rets) / len(rets)
+            var = sum((r - mean_ret) ** 2 for r in rets) / (len(rets) - 1)
+            vol = math.sqrt(max(0.0, var))
+        else:
+            vol = 0.0
 
     momentum = closes[-1] / closes[-config.momentum_window - 1] - 1.0
     if not math.isfinite(momentum):

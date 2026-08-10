@@ -148,9 +148,9 @@ def main(argv: list[str] | None = None) -> int:
 
     # 三种高频估计器 + SHARPE 对照 + 纯动量
     specs = [
-        ("PK", HfVolConfig(estimator="parkinson")),
-        ("GK", HfVolConfig(estimator="gk")),
-        ("YZ", HfVolConfig(estimator="yz")),
+        ("PK", HfVolConfig(estimator="parkinson", max_holdings=args.max_holdings)),
+        ("GK", HfVolConfig(estimator="gk", max_holdings=args.max_holdings)),
+        ("YZ", HfVolConfig(estimator="yz", max_holdings=args.max_holdings)),
     ]
     for name, cfg in specs:
         full = run_backtest_for_factor(
@@ -178,6 +178,10 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(cand, ensure_ascii=False))
 
     candidates = [r for r in results if r.get("gate_status") != "BENCHMARK"]
+    if not candidates:
+        print("错误: 无有效回测候选（检查 --etf-pool 与数据是否匹配）")
+        _write_json(args.results_output, results)
+        return 1
     summary = {
         "evaluated_candidates": len(candidates),
         "best_by_drawdown": min(candidates, key=lambda r: r["max_drawdown"]),
