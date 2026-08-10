@@ -64,19 +64,24 @@ def load_ohlcv_snapshots(path: str) -> list[dict]:
             series[sym]["amounts"].append(float(row.get("amount", 0) or 0))
 
     # 按日期聚合 snapshot（日期统一为 YYYY-MM-DD ISO 格式）
+    # 用增量累积序列避免每日期 O(n) 重新切片+join（整体 O(n²)→O(n)）
     by_date: dict[str, dict] = {}
     for sym in order:
         s = series[sym]
+        acc = {"prices": [], "opens": [], "highs": [], "lows": []}
         for i, d in enumerate(s["dates"]):
             iso = f"{d[:4]}-{d[4:6]}-{d[6:8]}"
             snapshot = by_date.setdefault(iso, {"date": iso, "symbols": {}})
-            closes_so_far = s["closes"][: i + 1]
+            acc["prices"].append(f"{s['closes'][i]:.6f}")
+            acc["opens"].append(f"{s['opens'][i]:.6f}")
+            acc["highs"].append(f"{s['highs'][i]:.6f}")
+            acc["lows"].append(f"{s['lows'][i]:.6f}")
             snapshot["symbols"][sym] = {
                 "close": s["closes"][i],
-                "prices": "|".join(f"{x:.6f}" for x in closes_so_far),
-                "opens": "|".join(f"{x:.6f}" for x in s["opens"][: i + 1]),
-                "highs": "|".join(f"{x:.6f}" for x in s["highs"][: i + 1]),
-                "lows": "|".join(f"{x:.6f}" for x in s["lows"][: i + 1]),
+                "prices": "|".join(acc["prices"]),
+                "opens": "|".join(acc["opens"]),
+                "highs": "|".join(acc["highs"]),
+                "lows": "|".join(acc["lows"]),
                 "volume": s["volumes"][i],
                 "amount": s["amounts"][i],
             }

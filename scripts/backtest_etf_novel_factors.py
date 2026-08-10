@@ -70,6 +70,11 @@ def run_equal_weight_benchmark(
     first = True
 
     valid_pool = [s for s in etf_pool if s in history[0].get("symbols", {})]
+    if not valid_pool:
+        raise ValueError(
+            f"run_equal_weight_benchmark: etf_pool 中没有任何标的出现在 history[0] "
+            f"(symbols={list(history[0].get('symbols', {}))})"
+        )
 
     for snapshot in history:
         date = snapshot["date"]
@@ -217,16 +222,6 @@ def slice_report(
     )
 
 
-def load_history_range(path: str, start_date: str, end_date: str) -> list[dict]:
-    history = load_snapshots_from_csv(path)
-    return [
-        item
-        for item in history
-        if (not start_date or item["date"] >= start_date)
-        and (not end_date or item["date"] <= end_date)
-    ]
-
-
 def _write_json(path: str, payload: object) -> None:
     output = Path(path)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -241,16 +236,17 @@ def calc_mom60(
     bar: dict,
     config,
 ) -> tuple[dict | None, str | None]:
-    """纯 60 日动量反事实对照（factor = momentum_60d，无任何缩放）。"""
+    """纯动量反事实对照（factor = momentum，无任何缩放）。窗口由 config.momentum_window 决定。"""
     prices = bar.get("prices", [])
     if isinstance(prices, str):
         prices = [float(p) for p in prices.split("|") if p]
-    if len(prices) < 61:
-        return None, f'insufficient_prices len={len(prices)} need=61'
+    need = config.momentum_window + 1
+    if len(prices) < need:
+        return None, f'insufficient_prices len={len(prices)} need={need}'
     prices = [float(p) for p in prices]
     if any(p <= 0 for p in prices):
         return None, 'invalid_prices'
-    momentum = prices[-1] / prices[-61] - 1.0
+    momentum = prices[-1] / prices[-need] - 1.0
     if not math.isfinite(momentum):
         return None, 'nan_momentum'
     return {
@@ -318,8 +314,13 @@ def main(argv: list[str] | None = None) -> int:
     if missing:
         raise ValueError("回测历史缺少 ETF: " + ", ".join(missing))
 
-    # 评估区间内的历史（用于基准）
-    eval_history = load_history_range(args.history, args.strategy_start_date, args.end_date)
+    # 评估区间内的历史（用于基准）——直接对已加载的 all_history 做日期过滤，避免重复读 CSV
+    eval_history = [
+        item
+        for item in all_history
+        if (not args.strategy_start_date or item["date"] >= args.strategy_start_date)
+        and (not args.end_date or item["date"] <= args.end_date)
+    ]
     if not eval_history:
         raise ValueError("评估区间没有历史数据")
 

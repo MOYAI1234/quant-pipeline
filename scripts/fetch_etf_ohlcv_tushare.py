@@ -38,6 +38,8 @@ def make_client():
     if not token or not api_url:
         raise RuntimeError("需要 TUSHARE_TOKEN 与 TUSHARE_API_URL 环境变量")
     client = ts.pro_api(token)
+    # 覆盖镜像 API 地址。tushare 无公开配置项, 只能写私有属性 _DataApi__http_url;
+    # 依赖其 name-mangling 后的内部实现, tushare 大版本升级时需重新验证该字段是否仍有效。
     client._DataApi__http_url = api_url.rstrip("/") + "/"
     return client
 

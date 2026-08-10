@@ -90,7 +90,9 @@ def run_timing_backtest(
         bar = bars[i]
         date = bar['date']
         price = bar['close']
-        hist_bars = bars[:i+1]  # 包含当天在内的所有历史
+        # 因子函数取尾部窗口(bars[-N:]), 必须只看到"截至当天"的历史, 避免未来函数;
+        # 因此不能直接传全量 bars 引用, 切片是语义必需的
+        hist_bars = bars[:i+1]
         
         # 计算因子信号
         result = factor_fn(hist_bars)
@@ -107,22 +109,28 @@ def run_timing_backtest(
         if signal == 1 and position == 'FLAT':
             # 入场做多
             buy_price = price * (1 + config.slippage_rate)
-            max_shares = int(cash / (buy_price * (1 + config.commission_rate)) / 100) * 100
-            if max_shares > 0:
+            # 保守估算股数: 按整手向下取整, 并扣除最坏情况佣金(min_commission)
+            max_shares = int(cash / buy_price / 100) * 100
+            while max_shares > 0:
                 cost = max_shares * buy_price
                 commission = max(cost * config.commission_rate, config.min_commission)
                 if cost + commission <= cash:
-                    cash -= (cost + commission)
-                    shares = max_shares
-                    position = 'LONG'
-                    trades.append({
-                        'date': date,
-                        'action': 'BUY',
-                        'price': buy_price,
-                        'shares': shares,
-                        'amount': cost,
-                        'commission': commission,
-                    })
+                    break
+                max_shares -= 100
+            if max_shares > 0:
+                cost = max_shares * buy_price
+                commission = max(cost * config.commission_rate, config.min_commission)
+                cash -= (cost + commission)
+                shares = max_shares
+                position = 'LONG'
+                trades.append({
+                    'date': date,
+                    'action': 'BUY',
+                    'price': buy_price,
+                    'shares': shares,
+                    'amount': cost,
+                    'commission': commission,
+                })
         
         elif signal == 0 and position == 'LONG':
             # 平仓

@@ -166,9 +166,10 @@ def _to_prices(bar: dict) -> list[float] | None:
     try:
         if isinstance(prices, str):
             prices = [float(p) for p in prices.split("|") if p]
+        else:
+            prices = list(prices)
         if not prices:
             return None
-        prices = [float(p) for p in prices]
     except (ValueError, TypeError):
         return None
     if any(p <= 0 or not math.isfinite(p) for p in prices):
@@ -356,7 +357,7 @@ def calc_info_discreteness(
     pct_pos = pos_days / n_days
     pct_neg = neg_days / n_days
 
-    sign_pret = 0.0 if momentum == 0 else (1.0 if momentum > 0 else -1.0)
+    sign_pret = 0.0 if abs(momentum) < 1e-12 else (1.0 if momentum > 0 else -1.0)
     id_value = sign_pret * (pct_neg - pct_pos)  # ∈ [-1, 1]
 
     factor_value = momentum * (1.0 - id_value)
@@ -500,7 +501,7 @@ def calc_52wh_idmom(
     n_days = len(daily_returns)
     pct_pos = pos_days / n_days
     pct_neg = neg_days / n_days
-    sign_pret = 1.0 if momentum >= 0 else -1.0
+    sign_pret = 0.0 if abs(momentum) < 1e-12 else (1.0 if momentum > 0 else -1.0)
     id_value = sign_pret * (pct_neg - pct_pos)
 
     quality = 1.0 - id_value
@@ -537,8 +538,6 @@ def _hurst_exponent(prices: list[float], max_lag: int = 40) -> float | None:
         while start + lag < n:
             segment = prices[start:start + lag + 1]
             seg_len = len(segment)
-            if seg_len < lag + 1:
-                break
             mean = sum(segment) / seg_len
             devs = [p - mean for p in segment]
             cumsum = []

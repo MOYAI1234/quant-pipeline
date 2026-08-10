@@ -117,6 +117,7 @@ def daily_check(context):
 
     # ---- 信号判断 ----
     signal = None  # None = 保持, 'buy' = 入场, 'sell' = 离场
+    in_position = context.portfolio.positions[g.symbol].total_amount > 0
 
     if latest_rsi < g.rsi_oversold:
         # 恐慌保护: RSI极低 + 还在加速跌 → 等一等
@@ -125,12 +126,12 @@ def daily_check(context):
                 'RSI=%.1f 恐慌加速中(5日动量%.2f%%), 暂不入场' %
                 (latest_rsi, mom_5d * 100)
             )
-        elif not g.in_position:
+        elif not in_position:
             signal = 'buy'
         # else: 已持仓, 超卖区域继续持
 
     elif latest_rsi > g.rsi_overbought:
-        if g.in_position:
+        if in_position:
             signal = 'sell'
 
     # ---- 执行 ----
@@ -139,9 +140,7 @@ def daily_check(context):
         log.info('入场 RSI=%.1f 5日动量=%.2f%% 目标仓位=%.0f' %
                  (latest_rsi, mom_5d * 100, target_value))
         order_target_value(g.symbol, target_value)
-        g.in_position = True
 
     elif signal == 'sell':
         log.info('离场 RSI=%.1f' % latest_rsi)
         order_target_value(g.symbol, 0)
-        g.in_position = False

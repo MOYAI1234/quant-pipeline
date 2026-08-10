@@ -171,19 +171,17 @@ def compute_52wh_scores(context, etf_list):
             continue
 
         if len(df) < g.high_window + 1:
-            log.debug(
+            log.warn(
                 f'{symbol} 数据不足: {len(df) if df is not None else 0}/'
                 f'{g.high_window + 1} (上市时间可能不足252个交易日)'
             )
             continue
 
         closes = df['close'].values
-        if len(closes) < g.high_window + 1:
-            continue
         # 宽松校验: 只要求有效价格(>0 且有限)足够多, 允许个别停牌导致的 NaN 已被 dropna 剔除
         valid = [p for p in closes if p > 0 and np.isfinite(p)]
         if len(valid) < g.high_window + 1:
-            log.debug(f'{symbol} 有效价格不足: {len(valid)}/{g.high_window + 1}')
+            log.warn(f'{symbol} 有效价格不足: {len(valid)}/{g.high_window + 1}')
             continue
         closes = np.asarray(valid)
 

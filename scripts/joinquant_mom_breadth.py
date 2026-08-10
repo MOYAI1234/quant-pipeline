@@ -76,10 +76,11 @@ def daily_check(context):
     mom_5d = closes[-1] / closes[-6] - 1.0 if len(closes) >= 6 else 0
 
     signal = None
+    in_position = context.portfolio.positions[g.symbol].total_amount > 0
 
-    if not g.in_position and up_ratio_20 > g.th_strong and up_ratio_10 > 0.5:
+    if not in_position and up_ratio_20 > g.th_strong and up_ratio_10 > 0.5:
         signal = 'buy'
-    elif g.in_position and up_ratio_10 < g.th_weak and mom_5d < 0:
+    elif in_position and up_ratio_10 < g.th_weak and mom_5d < 0:
         signal = 'sell'
 
     if signal == 'buy':
@@ -87,9 +88,7 @@ def daily_check(context):
         log.info('入场 up20=%.0f%% up10=%.0f%% mom5=%.2f%% 仓位=%.0f' %
                  (up_ratio_20 * 100, up_ratio_10 * 100, mom_5d * 100, target))
         order_target_value(g.symbol, target)
-        g.in_position = True
 
     elif signal == 'sell':
         log.info('离场 up10=%.0f%% mom5=%.2f%%' % (up_ratio_10 * 100, mom_5d * 100))
         order_target_value(g.symbol, 0)
-        g.in_position = False

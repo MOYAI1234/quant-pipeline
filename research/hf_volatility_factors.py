@@ -32,7 +32,6 @@ class HfVolConfig:
     estimator: str = "gk"          # parkinson / gk / yz
     min_history_days: int = 61
     max_holdings: int = 2
-    min_avg_amount: float | None = None
 
     @property
     def required_prices(self) -> int:
@@ -41,9 +40,13 @@ class HfVolConfig:
 
 def _to_series(bar: dict, key: str) -> list[float]:
     raw = bar.get(key, [])
-    if isinstance(raw, str):
-        raw = [float(p) for p in raw.split("|") if p]
-    return [float(p) for p in raw]
+    try:
+        if isinstance(raw, str):
+            raw = [float(p) for p in raw.split("|") if p]
+        return [float(p) for p in raw]
+    except (ValueError, TypeError):
+        # 数据源可能引入非数值段(如 "NA"、格式异常), 跳过无效值
+        return []
 
 
 def _parkinson_vol(highs: list[float], lows: list[float]) -> float:

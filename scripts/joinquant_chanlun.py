@@ -85,6 +85,10 @@ def daily_check(context):
                  closes[-2] > closes[-3] and closes[-2] > closes[-1])
 
     # ---- 背离检测 ----
+    # 默认无背离；条件块满足时才置真（必须先初始化，避免 UnboundLocalError）
+    bearish_div = False
+    bullish_div = False
+
     # 底背离: 价格新低 + MACD柱不新低
     recent_lows = lows[-g.lookback:]
     price_low_idx = np.argmin(recent_lows)
@@ -112,8 +116,6 @@ def daily_check(context):
 
     # ---- 买卖信号 ----
     signal = None
-    bearish_div = False
-    bullish_div = False
 
     # 买入: 底分型出现 + MACD底背离, 且不在持仓中
     if not g.in_position and is_bottom_fx and bearish_div:
