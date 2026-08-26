@@ -18,8 +18,8 @@ jobs:
     steps:
       - uses: alibaba/open-code-review@v1.7.17
         with:
-          llm_url: https://api.deepseek.com
+          llm_url: https://token-plan-cn.xiaomimimo.com/v1
           llm_auth_token: ${{ secrets.CHAT_TOKEN }}
-          llm_model: deepseek-v4-pro
+          llm_model: mimo-v2.5-pro
           llm_use_anthropic: 'false'
           language: '中文'
